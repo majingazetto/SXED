@@ -42,7 +42,7 @@ MAINLOOP        ; CHECK CLOCK / COLON UPDATE
                 LD      A, (JIFFY)
                 LD      HL, BLNKCNT
                 SUB     (HL)
-                CP      20              ; ~1/3 SECOND (20 TICKS AT 50/60HZ)
+                CP      BLNKTCK         ; 0.3 S AT 50 HZ, 0.25 S AT 60 HZ
                 JR      C, MAINLOOP
 
                 ; TOGGLE CURSOR BLINK PHASE
@@ -413,3 +413,42 @@ KANARST         PUSH    HL
                 POP     HL
                 RET
 
+
+; --- CURSHP                    ----------------------------------------
+
+
+; - CURSHP -----------------------------
+; - THE SHAPE DRWCUR MUST USE NOW. THE CURSOR IS AN XOR, SO IT HAS TO BE
+; - ERASED WITH THE SHAPE IT WAS DRAWN WITH: WHEN IT GOES UP (BLNKPH = 0,
+; - EVERY CALLER FLIPS BLNKPH AFTER DRWCUR) THE SHAPE IS DERIVED FROM THE
+; - MODE AND LATCHED IN CURSHD; WHEN IT COMES DOWN THE LATCH IS RETURNED,
+; - WHATEVER THE MODE HAS BECOME IN BETWEEN.
+; - VI: NORMAL AND VISUAL BLOCK, INSERT BAR, REPLACE UNDERLINE.
+; - OTHER PROFILES: INSERT UNDERLINE, OVERWRITE BLOCK.
+; - IN:  NONE (USES BLNKPH, KMAPID, VIMODE, INSMODE)
+; - OUT: A = CURBLK, CURBAR OR CURUND
+; - CLOBBERS: F
+; -
+
+CURSHP          LD      A, (BLNKPH)
+                OR      A
+                LD      A, (CURSHD)
+                RET     NZ              ; COMING DOWN: THE SHAPE IT WENT UP WITH
+                LD      A, (KMAPID)
+                CP      KMVI
+                JR      NZ, .CUA
+                LD      A, (VIMODE)
+                OR      A               ; VIMNORM: BLOCK (A = CURBLK)
+                JR      Z, .LATCH
+                LD      A, (INSMODE)
+                OR      A               ; OVR_MODE = 0: R, REPLACE
+                LD      A, CURBAR
+                JR      NZ, .LATCH
+                LD      A, CURUND
+                JR      .LATCH
+.CUA            LD      A, (INSMODE)
+                OR      A               ; OVR_MODE = 0: OVERWRITE, BLOCK
+                JR      Z, .LATCH       ; A = 0 = CURBLK
+                LD      A, CURUND
+.LATCH          LD      (CURSHD), A
+                RET

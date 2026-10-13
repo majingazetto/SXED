@@ -408,7 +408,7 @@ DRWMENU         ; 1. BLANK STATBUF, THEN LAY THE MENU TITLES OVER IT. THE
 
 
 ; - DRWCUR -----------------------------
-; - TOGGLE CURSOR COLOR NIBBLES AT (CURX, CURY)
+; - TOGGLE THE CURSOR AT (CURX, CURY), IN THE SHAPE CURSHP GIVES
 ; - IN:  NONE (USES CURX, CURY)
 ; - OUT: NONE
 ; - CLOBBERS: NONE
@@ -435,8 +435,8 @@ DRWCUR          PUSH    AF
                 LD      A, (CURY)
                 INC     A
                 LD      H, A            ; H = SCREEN ROW (1..22)
-                LD      B, 1
-                CALL    PATINV
+                CALL    CURSHP
+                CALL    CURINV
 
                 CALL    TXTBANK
 

@@ -4164,6 +4164,59 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'filter': 'S2-16',
         'expect': ['S2-16/no-title-bar'],
     },
+    {
+        'name': 'cur-cua-ovr-under',
+        'why': 'STD overwrite draws the underline, the insert shape: the two '
+               'modes look the same',
+        'file': 'INPUT.Z8A',
+        'old': """                JR      Z, .LATCH       ; A = 0 = CURBLK
+                LD      A, CURUND""",
+        'new': """                LD      A, CURUND       ; MUTATION: BOTH MODES UNDERLINE
+                LD      A, CURUND""",
+        'filter': 'H43',
+        'expect': ['H43/std/ovr'],
+    },
+    {
+        'name': 'cur-vi-ins-block',
+        'why': 'VI insert keeps the normal-mode block instead of the bar',
+        'file': 'INPUT.Z8A',
+        'old': """                LD      A, CURBAR
+                JR      NZ, .LATCH""",
+        'new': """                LD      A, CURBLK       ; MUTATION: NO BAR
+                JR      NZ, .LATCH""",
+        'filter': 'H43',
+        'expect': ['H43/vi/insert'],
+    },
+    {
+        'name': 's2-cur-bar-mask',
+        'target': 'S2ED',
+        'why': 'CURINV draws the bar as the whole previous column',
+        'file': 'RENDER.Z8A',
+        'old': """                LD      E, #11          ; RIGHT PIXEL OF EITHER HALF...""",
+        'new': """                LD      E, #FF          ; MUTATION: BAR AS A BLOCK""",
+        'filter': 'S2-50',
+        'expect': ['S2-50/vi/insert'],
+    },
+    {
+        'name': 's2-cur-under-top',
+        'target': 'S2ED',
+        'why': 'CURINV draws the underline on the top scanlines',
+        'file': 'RENDER.Z8A',
+        'old': """                LD      D, 8 - CURUNDH""",
+        'new': """                LD      D, 0            ; MUTATION: UNDERLINE AT THE TOP""",
+        'filter': 'S2-50',
+        'expect': ['S2-50/std/ins', 'S2-50/vi/replace'],
+    },
+    {
+        'name': 's61-cur-under-dy',
+        'target': 'S61ED',
+        'why': 'the underline is not moved down: a 2-scanline bar on top',
+        'file': 'S61/UI.Z8A',
+        'old': """                LD      DE, CELLH - CURUNDH""",
+        'new': """                LD      DE, 0           ; MUTATION: NOT MOVED DOWN""",
+        'filter': 'S62-12',
+        'expect': ['S62-12/std/ins', 'S62-12/vi/replace'],
+    },
 ]
 
 

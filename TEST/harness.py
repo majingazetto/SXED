@@ -50,7 +50,7 @@ DEFAULT_VARS = [
     ('TABWIDTH', 1), ('AUTOALGN', 1), ('KMAPID', 1), ('MKUPMD', 1),
     ('SAVEEOL', 1), ('CLKPH', 1), ('CLKHZ', 1), ('SCRRDY', 1),
     ('SHOWCLK', 1), ('CLKMIN', 1), ('KMAPID', 1), ('VIMODE', 1), ('INSMODE', 1),
-    ('FNTOK', 1), ('FNTROMD', 1), ('BLNKPH', 1), ('BLNKCNT', 1),
+    ('FNTOK', 1), ('FNTROMD', 1), ('BLNKPH', 1), ('BLNKCNT', 1), ('CURSHD', 1),
     ('SAVSCRMD', 1), ('SAVL40', 1), ('SAVLLEN', 1),
     ('SAVFORC', 1), ('SAVBAKC', 1), ('SAVBDRC', 1), ('SAVRG8', 1),
     ('RG8SAV', 1),

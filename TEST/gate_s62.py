@@ -13,7 +13,7 @@ import os
 
 import screen62
 from cases import Case, ShippedDiskCase, crlf, numbered
-from gate import H36BrowseSaveAs, asciiz
+from gate import H36BrowseSaveAs, H43CursorShape, asciiz
 from harness import MACH_128K, MACH_2MB
 from keys import Timeline
 from result import Check
@@ -513,9 +513,37 @@ class S6211SaveAsAfterOpen(H36BrowseSaveAs):
     TAG = 'S62-11'
 
 
+# --- S62-12  THE CURSOR SHAPE FOLLOWS THE MODE ----------------------------
+
+
+class S6212CursorShape(H43CursorShape):
+    name = 'S62-12-cursor-shape'
+    machine = MACH_128K
+    cfg = S62_CFG
+    TAG = 'S62-12'
+    VRAM = 'screen'
+
+    def cell_shape(self, ctx, run, label):
+        dump = run.blob(label, 'screen')
+        fnt = font(ctx)
+        if dump is None or fnt is None:
+            return None
+        r = run.var(label, 'CURY') or 0
+        got = screen62.cell_bytes(dump, screen62.TXORG_X
+                                  + screen62.CELLW * self.COL, 8 * (r + 1))
+        x = screen62.TXORG_X + screen62.CELLW * self.COL
+        prev = screen62.cell_bytes(dump, x - screen62.CELLW, 8 * (r + 1))
+        pwant = screen62.expected_cell(fnt, ord(self.LINE[self.COL - 1]))
+        forms = screen62.cursor_forms(screen62.expected_cell(fnt, 32))
+        if got == forms[1]:             # cell untouched: the bar, or nothing
+            return 1 if prev == screen62.bar_prev(pwant) else None
+        return forms.index(got) if got in forms and prev == pwant else None
+
+
 CASES = [S621Render(), S622Edit(), S623Scroll(), S624HScroll(),
          S625Windows(), S626Browse(), S627DatForeign(), S628LoadProgress(),
-         S629BrowseBusy(), S6210ShippedDisk(), S6211SaveAsAfterOpen()]
+         S629BrowseBusy(), S6210ShippedDisk(), S6211SaveAsAfterOpen(),
+         S6212CursorShape()]
 
 
 def run(ctx, cases=None):

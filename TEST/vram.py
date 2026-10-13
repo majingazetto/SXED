@@ -91,8 +91,19 @@ def render_text(buf, rows=24, cols=80, font=None, first_line=TEXT_FIRST_LINE):
                                  first_line=first_line))
             ch = table.get(key)
             if ch is None:
-                inv_key = tuple(tuple(not p for p in r) for r in key)
-                ch = table.get(inv_key, '?')
+                # the cursor cell, in whichever shape it was drawn: block
+                # (all of it inverted) or underline (its CURUNDH = 3 bottom
+                # scanlines); the bar is the last column of the cell LEFT of
+                # the cursor, so that cell reads with its column 5 inverted
+                for undo in (lambda y, x: True, lambda y, x: y >= 5,
+                             lambda y, x: x == CELLW - 1):
+                    alt = tuple(tuple(p ^ undo(y, x) for x, p in enumerate(r))
+                                for y, r in enumerate(key))
+                    ch = table.get(alt)
+                    if ch is not None:
+                        break
+                else:
+                    ch = '?'
             line.append(ch)
         out.append(''.join(line).rstrip())
     return out
