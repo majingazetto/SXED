@@ -362,6 +362,15 @@ KMVI            EQU     3               ; VI MODAL
 VIMNORM         EQU     0               ; VI NORMAL MODE
 VIMINS          EQU     1               ; VI INSERT MODE
 
+                ; CURSOR SHAPES (CURSHP). VI: NORMAL/VISUAL BLOCK, INSERT BAR,
+                ; REPLACE UNDERLINE. OTHER PROFILES: INSERT UNDERLINE,
+                ; OVERWRITE BLOCK. EACH TARGET DRAWS THEM IN ITS OWN DRWCUR
+CURBLK          EQU     0               ; WHOLE CELL
+CURBAR          EQU     1               ; 1 PX: LAST PIXEL OF THE PREVIOUS CHARACTER
+CURUND          EQU     2               ; BOTTOM CURUNDH SCANLINES
+CURUNDH         EQU     3               ; UNDERLINE HEIGHT (2 WAS LOST IN TEXT)
+BLNKTCK         EQU     15              ; CURSOR BLINK HALF-PERIOD IN JIFFY TICKS
+
 
 ; --- MARKUP MODES              ----------------------------------------
 

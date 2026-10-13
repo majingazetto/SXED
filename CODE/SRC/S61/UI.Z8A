@@ -751,7 +751,7 @@ BLTSTR          LD      A, (HL)
 
 
 ; - DRWCUR -----------------------------
-; - TOGGLE CURSOR XOR OVERLAY AT (CURX, CURY)
+; - TOGGLE CURSOR XOR OVERLAY AT (CURX, CURY), IN THE SHAPE CURSHP GIVES
 ; - IN:  NONE (USES CURX, CURY)
 ; - OUT: NONE
 ; - CLOBBERS: NONE
@@ -797,6 +797,27 @@ DRWCUR          PUSH    AF
                 LD      (VDP_NX), HL
                 LD      HL, CELLH       ; NY = 8
                 LD      (VDP_NY), HL
+
+                ; SHAPE: THE BAR IS ONE PIXEL WIDE ON THE LAST PIXEL OF THE
+                ; PREVIOUS CHARACTER, AS VIM DRAWS IT; THE UNDERLINE MOVES DY
+                ; DOWN AND SHRINKS NY
+                CALL    CURSHP
+                CP      CURBAR
+                JR      NZ, .NOTBAR
+                LD      HL, 1
+                LD      (VDP_NX), HL
+                LD      HL, (VDP_DX)
+                DEC     HL
+                LD      (VDP_DX), HL
+.NOTBAR         CP      CURUND
+                JR      NZ, .SHAPED
+                LD      HL, CURUNDH
+                LD      (VDP_NY), HL
+                LD      HL, (VDP_DY)
+                LD      DE, CELLH - CURUNDH
+                ADD     HL, DE
+                LD      (VDP_DY), HL
+.SHAPED
 
                 LD      A, COL_FG       ; CLR = 1 (INVERSE VIDEO)
                 LD      (VDP_CLR), A

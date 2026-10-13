@@ -568,6 +568,73 @@ PATINV          LD      A, B
 
 
 
+; --- CURINV                    ----------------------------------------
+
+
+; - CURINV -----------------------------
+; - INVERT THE CURSOR SHAPE OF ONE TEXT COLUMN AND PUSH ITS CELL TO VRAM.
+; - PATINV'S ONE-COLUMN CASE, CUT DOWN: BLOCK IS THE COLUMN'S FOUR PIXELS
+; - ON ALL EIGHT SCANLINES, BAR THE LAST PIXEL OF THE PREVIOUS COLUMN (THE
+; - BOUNDARY, AS VIM DRAWS IT), UNDERLINE ITS FOUR PIXELS
+; - ON THE BOTTOM CURUNDH SCANLINES. PATINV ITSELF STAYS THE SELECTION'S.
+; - IN:  H = SCREEN ROW (0..23), C = COLUMN (0..63), A = SHAPE (CURSHP)
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL
+; - NOTE: CALLER MUST HAVE VIDSEG BANKED AT PAGE 2
+; -
+
+CURINV          LD      B, 8            ; B = SCANLINES
+                LD      D, 0            ; D = FIRST SCANLINE
+                LD      E, #FF          ; E = SHAPE MASK
+                CP      CURBAR
+                JR      NZ, .NOBAR
+                LD      E, #11          ; RIGHT PIXEL OF EITHER HALF...
+                DEC     C               ; ...OF THE PREVIOUS COLUMN
+.NOBAR          CP      CURUND
+                JR      NZ, .SHAPED
+                LD      B, CURUNDH
+                LD      D, 8 - CURUNDH
+.SHAPED         LD      A, C
+                AND     1
+                LD      A, #F0          ; EVEN COLUMN: HIGH NIBBLE
+                JR      Z, .HALF
+                LD      A, #0F          ; ODD COLUMN: LOW NIBBLE
+.HALF           AND     E
+                LD      E, A            ; E = XOR MASK
+
+                LD      A, C
+                SRL     A
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A            ; A = CELL * 8 (<= 248)
+                LD      L, A            ; HL = ROW * ROWLEN + CELL * 8
+                PUSH    HL              ; OFFSET, FOR THE DUMP
+                LD      A, D
+                PUSH    DE
+                LD      DE, PATSHAD
+                ADD     HL, DE
+                LD      E, A
+                LD      D, 0
+                ADD     HL, DE          ; HL = FIRST SCANLINE IN THE SHADOW
+                POP     DE              ; E = XOR MASK
+.XLP            LD      A, (HL)
+                XOR     E
+                LD      (HL), A
+                INC     HL
+                DJNZ    .XLP
+
+                POP     DE              ; DE = OFFSET
+                LD      HL, PATSHAD
+                ADD     HL, DE
+                PUSH    HL              ; SOURCE: THE WHOLE CELL
+                LD      HL, PGBASE
+                ADD     HL, DE
+                EX      DE, HL          ; DE = VRAM DESTINATION
+                POP     HL
+                LD      BC, 8
+                JP      VDPDUMP
+
+
 ; --- RENDIFF                   ----------------------------------------
 
 

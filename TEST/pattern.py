@@ -142,8 +142,18 @@ def mismatched_rows(dump, font, lines, topline, cursor=None):
     return bad
 
 
-def invert_column(pattern_row, col):
+# Cursor shapes, as CURSHP latches them in CURSHD: (mask, scanlines).
+# 0 block, 1 bar (the RIGHT pixel of the PREVIOUS column: the boundary, as
+# vim draws it), 2 underline (CURUNDH = 3).
+CUR_SHAPES = {0: (0xFF, range(8)), 1: (0x11, range(8)), 2: (0xFF, range(5, 8))}
+
+
+def invert_column(pattern_row, col, shape=0):
     """A row of patterns with one text column's 4 pixel columns inverted.
+
+    `shape` is a cursor shape (CUR_SHAPES): the default, 0, is the whole
+    column -- the selection, and the block cursor.  1 is the bar, 2 the
+    underline: CURINV's cut-down forms of the same XOR.
 
     This is PATINV: a text column owns the high or the low nibble of its
     cell's 8 pattern bytes, and inverting it is what gives a one-column cursor
@@ -153,11 +163,20 @@ def invert_column(pattern_row, col):
     characters wide and made consecutive selection deltas cancel out.
     """
     out = bytearray(pattern_row)
+    if shape == 1:
+        col -= 1                    # the bar sits on the previous column
     cell, half = divmod(col, 2)
-    mask = 0xF0 if half == 0 else 0x0F
-    for y in range(8):
+    smask, lines = CUR_SHAPES[shape]
+    mask = (0xF0 if half == 0 else 0x0F) & smask
+    for y in lines:
         out[cell * 8 + y] ^= mask
     return bytes(out)
+
+
+def cursor_forms(pattern_row, col):
+    """The row with the cursor drawn in each shape, for checks that only need
+    to tolerate the cursor at a blink phase, not to say which shape it is."""
+    return [invert_column(pattern_row, col, s) for s in sorted(CUR_SHAPES)]
 
 
 def inverted_columns(got_row, plain_row):

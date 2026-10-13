@@ -73,6 +73,20 @@ def inverted(rows):
     return [bytes(b ^ 0x55 for b in row) for row in rows]
 
 
+def cursor_forms(rows):
+    """The cursor cell in each shape CURSHP can latch, indexed by shape:
+    block (the whole cell XOR COL_FG), bar (the cell untouched: the bar is
+    the last pixel of the PREVIOUS cell, see bar_prev) and underline (its
+    bottom CURUNDH = 3 scanlines)."""
+    under = rows[:5] + inverted(rows[5:])
+    return [inverted(rows), list(rows), under]
+
+
+def bar_prev(rows):
+    """The cell left of the cursor with the bar on its last pixel (x 7)."""
+    return [row[:1] + bytes([row[1] ^ 0x01]) for row in rows]
+
+
 def visible_text(lines, top, left):
     """The 24 x 62 characters the text area should show."""
     out = []
@@ -99,7 +113,9 @@ def text_mismatches(screen, font, lines, top=0, left=0, cursor=None):
             want = expected_cell(font, ord(ch) & 0xFF)
             if got == want:
                 continue
-            if cursor == (r, c) and got == inverted(want):
+            if cursor == (r, c) and got in cursor_forms(want):
+                continue
+            if cursor == (r, c + 1) and got == bar_prev(want):
                 continue
             bad.append((r, c))
     return bad

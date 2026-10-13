@@ -8026,6 +8026,98 @@ class Z1CtrlStop(Case):
         return checks
 
 
+# --- H43  THE CURSOR SHAPE FOLLOWS THE MODE ------------------------------
+
+
+class H43CursorShape(Case):
+    name = 'H43-cursor-shape'
+    desc = ('the cursor is a block, a bar or an underline as the mode asks: '
+            'STD insert underline, overwrite block; VI normal block, insert '
+            'bar, replace underline -- read back from VRAM on a space cell')
+    origin = ('2026-10-13, v0.3: one shape per mode, as other editors do. The '
+              'cursor is an XOR, so CURSHP latches the shape it went up with '
+              'in CURSHD and the erase reuses it whatever the mode became.')
+    variants = ('std', 'vi')
+    TAG = 'H43'
+    LINE = 'ABC DEF'
+    COL = 3                             # the space: a clean cell is background
+    # label -> shape (CURBLK 0, CURBAR 1, CURUND 2)
+    WANT = {'std': (('ins', 2), ('ovr', 0)),
+            'vi': (('normal', 0), ('insert', 1), ('replace', 2))}
+    VRAM = True
+
+    def fixture(self, ctx, variant=None):
+        return crlf([self.LINE])
+
+    def config(self, ctx, variant=None):
+        cfg = Case.config(self, ctx, variant)
+        return cfg.replace('PROFILE=STD', 'PROFILE=VI') if variant == 'vi' else cfg
+
+    def timeline(self, ctx, variant=None):
+        # Every sample follows a keystroke with a short tail: .DRAWCUR draws
+        # the cursor and sets BLNKPH = 1, and the blink would only take it
+        # down 20 JIFFY ticks later (the S2-3 lesson).
+        t = Timeline()
+        t.snap('boot')
+        t.press('RIGHT', repeat=self.COL - 1)
+        t.press('RIGHT', tail=0.05)
+        if variant == 'std':
+            t.snap('ins', vram=self.VRAM)
+            t.press('INS', tail=0.05)
+            t.snap('ovr', vram=self.VRAM)
+            return t
+        t.snap('normal', vram=self.VRAM)
+        t.press('I', tail=0.05)                 # i: insert
+        t.snap('insert', vram=self.VRAM)
+        t.press('ESC')                          # back to normal: CURX - 1
+        t.press('RIGHT')
+        t.press('R', mods=['SHIFT'], tail=0.05) # R: replace
+        t.snap('replace', vram=self.VRAM)
+        return t
+
+    def cell_shape(self, ctx, run, label):
+        """Which shape the cursor cell shows: 0/1/2, or None for neither."""
+        buf = run.blob(label, 'vram')
+        if buf is None:
+            return None
+        x0, y0, w, h = vram.cell_rect(self.COL, run.var(label, 'CURY') or 0)
+        # x = -1 is the last pixel of the cell to the left: where the bar
+        # goes, on the boundary, as vim draws it.  The cell left of the
+        # space holds 'C', whose last column is the blank letter spacing.
+        ink = [[vram.pixel(buf, x0 + x, y0 + y,
+                           first_line=vram.TEXT_FIRST_LINE) == vram.COL_FG
+                for x in range(-1, w)] for y in range(h)]
+        # CURUNDH = 3
+        forms = {0: lambda y, x: x >= 0, 1: lambda y, x: x == -1,
+                 2: lambda y, x: x >= 0 and y >= 5}
+        for shape, f in forms.items():
+            if all(ink[y][x + 1] == f(y, x)
+                   for y in range(h) for x in range(-1, w)):
+                return shape
+        return None
+
+    def verify(self, ctx, runs):
+        checks = []
+        names = {0: 'block', 1: 'bar', 2: 'underline', None: 'no cursor shape'}
+        for variant, run in sorted(runs.items()):
+            for label, want in self.WANT[variant]:
+                tag = '%s/%s/%s' % (self.TAG, variant, label)
+                up = run.var(label, 'BLNKPH') == 1
+                pos = run.var(label, 'CURX') == self.COL
+                latch = run.var(label, 'CURSHD')
+                got = self.cell_shape(ctx, run, label)
+                ok = up and pos and latch == want and got == want
+                checks.append(Check(tag, ok,
+                                    'cursor up at column %d, a %s on screen'
+                                    % (self.COL, names[want]) if ok else
+                                    'BLNKPH %s, CURX %s, CURSHD %s, screen '
+                                    'shows %s (want %s)'
+                                    % (run.var(label, 'BLNKPH'),
+                                       run.var(label, 'CURX'), latch,
+                                       names.get(got, got), names[want])))
+        return checks
+
+
 CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G6Hooks(),
          G7Selection(), G8Config(), G9Directory(), G10Autoalign(), G11Paste(),
          G12ScreenRestore(), G13FeatureResidency(), H1Help(), H2HelpQuestion(), H3HelpFile(), H4FileSwitch(), H5Verbose(), H6DatMissing(), H7AboutDialog(),
@@ -8037,7 +8129,7 @@ CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G
          H28TextWidth(), H29HomePath(), H30NewDocument(), H31EditOpen(),
          H32SaveNoName(), H33LongPath(), H34BrowseOpen(),
          H35BrowseMany(), H36BrowseSaveAs(), H37Settings(), H38DiskError(), H39DatForeign(),
-         H40LoadProgress(), H41BrowseBusy(), H42IoBlocks(),
+         H40LoadProgress(), H41BrowseBusy(), H42IoBlocks(), H43CursorShape(),
          R1FreeListCompact(), R2LinewrtOom(), R3UndoCompactIX(), R4UndoLongLine(),
          K1WqSaveFailed(), K2LoadDiskError(), K3SaveCloseError(),
          P1ReflowBoundary(), P2DeleteLastRow0(), P3ReplaceAllUndo(),

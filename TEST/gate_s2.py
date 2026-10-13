@@ -18,7 +18,8 @@ is also the video shadow, so on the default machine there is nothing spare
 
 import os
 import pattern
-from gate import BRW_BYTES, H30NewDocument, H36BrowseSaveAs, asciiz
+from gate import (BRW_BYTES, H30NewDocument, H36BrowseSaveAs,
+                  H43CursorShape, asciiz)
 from cases import (Case, DEFAULT_CFG, HomePathCase, LongPathCase,
                    ShippedDiskCase, crlf, io_fixture, numbered)
 from harness import MACH_MSX1, Session
@@ -76,7 +77,8 @@ def restored(after, before, currow, curcol):
             if arow[sl] == brow[sl]:
                 continue
             if row == currow and curcol // 2 == cell:
-                if arow[sl] == pattern.invert_column(brow, curcol)[sl]:
+                if arow[sl] in [f[sl] for f in
+                                pattern.cursor_forms(brow, curcol)]:
                     continue        # cursor blink phase
             bad.append((row, cell))
     return bad
@@ -277,7 +279,7 @@ class S23Cursor(S2Case):
         curx = run.var('s0', 'CURX')
         row = pattern.TXRFIRST + (run.var('s0', 'CURY') or 0)
         plain = pattern.compose_text(font(ctx), self.LINES[0])
-        inverted = pattern.invert_column(plain, pattern.scol(curx))
+        # each sample against the shape the cursor was drawn with (CURSHD)
 
         wrong, phases = [], []
         for label in ['s%d' % i for i in range(self.SAMPLES)] + ['drawn']:
@@ -288,7 +290,9 @@ class S23Cursor(S2Case):
             got = pattern.row_of(pat, row)
             ph = run.var(label, 'BLNKPH')
             phases.append(ph)
-            want = inverted if ph == 1 else plain
+            want = (pattern.invert_column(plain, pattern.scol(curx),
+                                          run.var(label, 'CURSHD') or 0)
+                    if ph == 1 else plain)
             cols = pattern.differing_columns(got, want)
             if cols:
                 wrong.append('%s (BLNKPH=%s): columns %s' % (label, ph, cols))
@@ -1091,8 +1095,8 @@ class S211About(S2Case):
                 if not (patdiff or coldiff):
                     continue
                 if row == currow and curcol // 2 == cell and not coldiff:
-                    inv = pattern.invert_column(bpat, curcol)
-                    if dpat[sl] in (bpat[sl], inv[sl]):
+                    forms = pattern.cursor_forms(bpat, curcol)
+                    if dpat[sl] in [bpat[sl]] + [f[sl] for f in forms]:
                         continue            # cursor up or down at the snap
                 bad.append((row, cell))
         checks.append(Check('S2-11/outside-untouched', not bad,
@@ -1477,9 +1481,9 @@ class S215Quit(S2Case):
                     if a == b:
                         continue
                     if row == currow and curcol // 2 == cell:
-                        inv = pattern.invert_column(pattern.row_of(boot, row),
-                                                    curcol)
-                        if a == inv[sl]:
+                        forms = pattern.cursor_forms(
+                            pattern.row_of(boot, row), curcol)
+                        if a in [f[sl] for f in forms]:
                             continue        # cursor blink phase
                     bad.append((row, cell))
             res = run.var('after_esc', 'WINRES')
@@ -4420,6 +4424,32 @@ class S248ShadowRoundTrip(S2Case):
         return checks
 
 
+# --- S2-50  THE CURSOR SHAPE FOLLOWS THE MODE -----------------------------
+
+
+class S250CursorShape(H43CursorShape):
+    name = 'S2-50-cursor-shape'
+    desc = H43CursorShape.desc.replace('VRAM', 'the pattern table')
+    origin = H43CursorShape.origin + ' On S2ED CURINV cuts PATINV down.'
+    machine = MACH_MSX1
+    cfg = S2_CFG
+    TAG = 'S2-50'
+    VRAM = 'pat'
+
+    def cell_shape(self, ctx, run, label):
+        dump = run.blob(label, 'pat')
+        if dump is None:
+            return None
+        row = pattern.TXRFIRST + (run.var(label, 'CURY') or 0)
+        plain = pattern.compose_text(font(ctx), self.LINE)
+        got = pattern.row_of(dump, row)
+        for shape in sorted(pattern.CUR_SHAPES):
+            if got == pattern.invert_column(plain, pattern.scol(self.COL),
+                                            shape):
+                return shape
+        return None
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
          S210Theme(), S211About(), S212DialogUndo(),
@@ -4436,7 +4466,7 @@ CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S240ColDigits(), S241BrowseCaret(),
          S242ScrollNoDup(), S243ClockHz(), S244MenuStrips(),
          S245SettingsValues(), S246ViVisualWalk(), S247RightMargin(),
-         S248ShadowRoundTrip(), S249Overwrite()]
+         S248ShadowRoundTrip(), S249Overwrite(), S250CursorShape()]
 
 
 def run(ctx, cases=None):

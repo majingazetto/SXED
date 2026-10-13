@@ -136,6 +136,7 @@ CLKBUF          DEFS    6               ; "HH:MM", 0
 RNDHOLD         DEFB    0               ; FF = DEFER ALL PAINTING
 BLNKPH          DEFB    0               ; CURSOR BLINK PHASE (POLLED FROM JIFFY)
 BLNKCNT         DEFB    0               ; BLINK TICK COUNTER
+CURSHD          DEFB    0               ; SHAPE THE VISIBLE CURSOR WAS DRAWN WITH
 
 KMAPID          DEFB    0               ; 0=STD, 1=TED, 2=EMACS, 3=VI
 KMAPPTR         DEFW    0               ; POINTER TO ACTIVE KEYMAP TABLE
