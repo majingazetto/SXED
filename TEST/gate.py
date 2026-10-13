@@ -8190,30 +8190,35 @@ class H43CursorShape(Case):
         cfg = Case.config(self, ctx, variant)
         return cfg.replace('PROFILE=STD', 'PROFILE=VI') if variant == 'vi' else cfg
 
+    # Every sample is taken TAIL after the key-up.  .DRAWCUR draws the cursor
+    # at the key-down and the blink takes it down BLNKTCK ticks later -- 0.3 s
+    # at 50 Hz since v0.3, 0.25 s at 60 Hz.  A 0.05 s tail after the 0.25 s
+    # hold sampled at ~0.30 s, right on that edge: S2-50/vi/replace fell on
+    # the wrong side every run.  0.45 s lands at ~0.70 s, the middle of the
+    # second up phase (0.6-0.9 s at 50 Hz, 0.5-0.75 s at 60 Hz).
+    TAIL = 0.45
+
     def timeline(self, ctx, variant=None):
-        # Every sample follows a keystroke with a short tail: .DRAWCUR draws
-        # the cursor and sets BLNKPH = 1, and the blink would only take it
-        # down 20 JIFFY ticks later (the S2-3 lesson).
         t = Timeline()
         t.snap('boot')
         t.press('RIGHT', repeat=self.COL - 1)
-        t.press('RIGHT', tail=0.05)
+        t.press('RIGHT', tail=self.TAIL)
         if variant == 'std':
             t.snap('ins', vram=self.VRAM)
-            t.press('INS', tail=0.05)
+            t.press('INS', tail=self.TAIL)
             t.snap('ovr', vram=self.VRAM)
             return t
         t.snap('normal', vram=self.VRAM)
-        t.press('I', tail=0.05)                 # i: insert
+        t.press('I', tail=self.TAIL)                 # i: insert
         t.snap('insert', vram=self.VRAM)
         t.press('ESC')                          # back to normal: CURX - 1
         t.press('RIGHT')
         t.press('R', mods=['SHIFT'])            # R: replace
-        # A chord ends MODLEAD + HOLD after its key-down, too close to the
-        # 0.3 s blink: LEFT + RIGHT brings the cursor back to the column
-        # with it guaranteed up (the S2-3 way)
+        # A chord ends MODLEAD + HOLD after its key-down, so its own key-down
+        # is not the one TAIL is measured from: LEFT + RIGHT redraws the
+        # cursor on the column with a plain key (the S2-3 way)
         t.press('LEFT')
-        t.press('RIGHT', tail=0.05)
+        t.press('RIGHT', tail=self.TAIL)
         t.snap('replace', vram=self.VRAM)
         return t
 
