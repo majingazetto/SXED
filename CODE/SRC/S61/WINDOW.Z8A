@@ -693,7 +693,9 @@ WINSID          LD      HL, (WINH)
 ; - WINBTS -----------------------------
 ; - SAME, WITH EXPLICIT STYLE FOR OPTION SELECTION:
 ; - STYLE 0 (NORMAL):   COL_HI BORDER, COL_UI BODY, BOLD TEXT IN TOR
-; - STYLE 1 (SELECTED): COL_HI BORDER, COL_HI BODY, BOLD TEXT IN TIMP
+; - STYLE 1 (SELECTED): COL_HI BORDER, COL_HI BODY, BOLD TEXT IN TXOR:
+; -   %01 INK ^ %11 BODY = %10, COL_UI ON COL_HI, AS THE BROWSER'S FOCUS.
+; -   TIMP GAVE COL_FG ON COL_HI: WHITE ON YELLOW IN DARK, UNREADABLE
 ; - IN:  A  = STYLE (0 = NORMAL, 1 = SELECTED)
 ; -      HL, DE, BC AS ABOVE
 ; - OUT: NONE
@@ -756,7 +758,7 @@ WINBTS          LD      (WINBST), A
                 LD      HL, VDPCMBLK
                 CALL    HMMV
 
-                ; 3. BUTTON TEXT IN BOLD: TOR NORMAL, TIMP SELECTED
+                ; 3. BUTTON TEXT IN BOLD: TOR NORMAL, TXOR SELECTED
                 POP     BC
                 POP     DE
                 LD      HL, (WINX)
@@ -777,7 +779,7 @@ WINBTS          LD      (WINBST), A
                 LD      A, 1            ; BOLD (VARIANT 1)
                 JP      WINSTR3
 .TXTSEL         LD      A, 1            ; BOLD (VARIANT 1)
-                JP      WINSTR
+                JP      WINSTRX         ; COL_UI INK ON THE COL_HI BODY
 
 
 ; --- WINDOW MANAGEMENT         ----------------------------------------

@@ -1603,6 +1603,22 @@ class H19QuitDialog(Case):
             'LEFT selects YES (YES body=%s, NO body=%s)'
             % (body(v_yes, self.YESPX), body(v_yes, self.NOPX))))
 
+        # The focused button's text is COL_UI ink on the COL_HI body (TXOR),
+        # the browser's focus colours.  TIMP put COL_FG there: white on
+        # yellow in DARK, unreadable (2026-10-13).  Bodies are 56 x 12 at
+        # WINY + 44 = 118, x 192 (YES) and 264 (NO).
+        def focus_inks(buf, x0):
+            if buf is None:
+                return None
+            return {body(buf, (x, y))
+                    for x in range(x0, x0 + 56) for y in range(118, 130)}
+        inks = (focus_inks(v_no, 264), focus_inks(v_yes, 192))
+        ok = all(i == {vram.COL_HI, vram.COL_UI} for i in inks)
+        checks.append(Check('H19/focus-text', ok,
+                            'focused button text is COL_UI on COL_HI'
+                            if ok else 'colours inside the focused body: %s'
+                            % (inks,)))
+
         cursor = [(run.var('boot', 'CURX') or 0, run.var('boot', 'CURY') or 0)]
         d_esc = vram.diff(v_boot, v_esc, ignore_cells=cursor)
         checks.append(Check('H19/cancel-esc',
