@@ -19,7 +19,8 @@ is also the video shadow, so on the default machine there is nothing spare
 import os
 import pattern
 from gate import (BRW_BYTES, H30NewDocument, H36BrowseSaveAs,
-                  H43CursorShape, asciiz)
+                  H43CursorShape, H44SelScroll, H45SelAllPage,
+                  asciiz)
 from cases import (Case, DEFAULT_CFG, HomePathCase, LongPathCase,
                    ShippedDiskCase, crlf, io_fixture, numbered)
 from harness import MACH_MSX1, Session
@@ -4450,6 +4451,71 @@ class S250CursorShape(H43CursorShape):
         return None
 
 
+# --- S2-51  A SELECTION SCROLLS WITH ITS OVERLAY --------------------------
+
+
+class S251SelScroll(H44SelScroll):
+    name = 'S2-51-sel-scroll'
+    machine = MACH_MSX1
+    cfg = S2_CFG
+    TAG = 'S2-51'
+    ROWS = 22
+    VRAM = 'patcol'
+
+    def screen_diff(self, ctx, a, b):
+        currow = pattern.TXRFIRST + (a.var('end', 'CURY') or 0)
+        curcol = pattern.scol(a.var('end', 'CURX') or 0)
+        return restored(a.blob('end', 'patcol'), b.blob('end', 'patcol'),
+                        currow, curcol)
+
+
+# --- S2-52  SELECT ALL AND PAGE MOVES, SCREEN AS COMPUTED -----------------
+
+
+class S252SelAllPage(H45SelAllPage):
+    name = 'S2-52-selall-page'
+    machine = MACH_MSX1
+    cfg = S2_CFG
+    TAG = 'S2-52'
+    VRAM = 'pat'
+    ROWS = 22
+
+    def painted(self, ctx, run, label):
+        """Rows whose pattern differs from the document with the selection
+        (anchor 0,0 to the cursor, exclusive) inverted.  The cursor column
+        and the one left of it (the VI bar) are forgiven on the cursor row.
+        This is what catches a page drawn plain under a recorded overlay."""
+        dump = run.blob(label, 'pat')
+        if dump is None:
+            return ['no dump']
+        top, cury = run.var(label, 'TOPLINE'), run.var(label, 'CURY')
+        cur = (run.var(label, 'DOCLINE'), run.var(label, 'CURX'))
+        sel = {}
+        if run.var(label, 'SELACT'):
+            (sl, sx), (el, ex) = ((0, 0), cur) if (0, 0) <= cur else (cur, (0, 0))
+            for ln in range(sl, el + 1):
+                xa = sx if ln == sl else 0
+                xb = ex if ln == el else len(self.LINES[ln]) + 1
+                xb = min(xb, pattern.TEXTCOLS)
+                if xb > xa:
+                    sel[ln] = range(xa, xb)
+        fnt = font(ctx)
+        bad = []
+        for row in range(pattern.TXRFIRST, pattern.TXRLAST + 1):
+            ln = top + row - pattern.TXRFIRST
+            exp = pattern.compose_text(
+                fnt, self.LINES[ln] if ln < len(self.LINES) else '')
+            for col in sel.get(ln, []):
+                exp = pattern.invert_column(exp, pattern.scol(col))
+            dif = pattern.differing_columns(pattern.row_of(dump, row), exp)
+            if row == pattern.TXRFIRST + cury:
+                cc = pattern.scol(cur[1])
+                dif = [c for c in dif if c not in (cc, cc - 1)]
+            if dif:
+                bad.append((row, dif[:4]))
+        return bad
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
          S210Theme(), S211About(), S212DialogUndo(),
@@ -4466,7 +4532,8 @@ CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S240ColDigits(), S241BrowseCaret(),
          S242ScrollNoDup(), S243ClockHz(), S244MenuStrips(),
          S245SettingsValues(), S246ViVisualWalk(), S247RightMargin(),
-         S248ShadowRoundTrip(), S249Overwrite(), S250CursorShape()]
+         S248ShadowRoundTrip(), S249Overwrite(), S250CursorShape(),
+         S251SelScroll(), S252SelAllPage()]
 
 
 def run(ctx, cases=None):

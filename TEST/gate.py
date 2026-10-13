@@ -3396,9 +3396,10 @@ class E3SelScroll(Case):
     name = 'E3-sel-scroll'
     desc = 'extending selection across viewport edge scrolls cleanly without residue'
     origin = ('SELDIFF optimizes row diffs, but when the selection extends past '
-              'the viewport edge (CURY == 23) hardware scroll occurs: ACTSLMD must '
-              'call SELPRE before ACTMVD scrolls, or inverted pixels will be blitted '
-              'and left as ghost artifacts')
+              'the viewport edge (CURY == 23) hardware scroll occurs and the '
+              'blitted overlay must stay consistent with the painted range, or '
+              'deselecting leaves ghost artifacts (SELSCRL since 2026-10-13; '
+              'H44 checks the painting itself)')
 
     def fixture(self, ctx, variant=None):
         lines = []
@@ -8118,6 +8119,149 @@ class H43CursorShape(Case):
         return checks
 
 
+# --- H44  A SELECTION SCROLLS WITH ITS OVERLAY ---------------------------
+
+
+class H44SelScroll(Case):
+    name = 'H44-sel-scroll'
+    desc = ('extending a selection across the top or bottom edge scrolls with '
+            'the overlay in place: the screen equals the same selection made '
+            'with no scroll at all')
+    origin = ('2026-10-13, v0.3: ACTSLMD / ACTSLMU called SELPRE at the edge '
+              'row, un-XORing the whole selection before the scroll, and '
+              'SELPOST XORed it all back -- with everything selected, two full '
+              'screens and a visible flash per row.  SELSCRL keeps the overlay '
+              'the blit carried and XORs only the rows the scroll exposed.')
+    # Each pair ends in the same state by two roads: the first scrolls while
+    # the selection is painted (the path under test), the reference brings
+    # the viewport there first and then selects the same range with no scroll.
+    variants = ('down', 'down-ref', 'up', 'up-ref')
+    TAG = 'H44'
+    ROWS = 24                           # ROWSVIS
+    VRAM = True
+
+    def fixture(self, ctx, variant=None):
+        return crlf(['LINE %02d %s' % (i, 'X' * ((i * 7) % 50))
+                     for i in range(80)])
+
+    def config(self, ctx, variant=None):
+        return Case.config(self, ctx, variant).replace('CLOCK=1', 'CLOCK=0')
+
+    def timeline(self, ctx, variant=None):
+        r = self.ROWS
+        t = Timeline()
+        t.snap('boot')
+        if variant == 'down':           # lines r-4 .. r+2, TOPLINE 0 -> 3
+            t.press('DOWN', repeat=r - 4)
+            t.press('DOWN', mods=['SHIFT'], repeat=6)
+        elif variant == 'down-ref':
+            t.press('DOWN', repeat=r + 2)
+            t.press('UP', repeat=6)
+            t.press('DOWN', mods=['SHIFT'], repeat=6)
+        elif variant == 'up':           # lines 17 .. 11, TOPLINE 17 -> 11
+            t.press('DOWN', repeat=r + 16)
+            t.press('UP', repeat=r - 1)
+            t.press('UP', mods=['SHIFT'], repeat=6)
+        else:
+            t.press('DOWN', repeat=r + 16)
+            t.press('UP', repeat=r + 5)
+            t.press('DOWN', repeat=6)
+            t.press('UP', mods=['SHIFT'], repeat=6)
+        t.wait(0.5)
+        t.snap('end', vram=self.VRAM)
+        return t
+
+    def screen_diff(self, ctx, a, b):
+        """Differences between the two end screens, cursor cell forgiven."""
+        cur = [(a.var('end', 'CURX') or 0, a.var('end', 'CURY') or 0)]
+        return vram.diff(a.blob('end', 'vram'), b.blob('end', 'vram'),
+                         ignore_cells=cur)
+
+    def verify(self, ctx, runs):
+        checks = []
+        for way, top in (('down', 3), ('up', 11)):
+            a, b = runs.get(way), runs.get(way + '-ref')
+            tag = '%s/%s' % (self.TAG, way)
+            if a is None or b is None:
+                checks.append(Check(tag, False, 'missing run'))
+                continue
+            keys = ('TOPLINE', 'DOCLINE', 'CURY', 'SELACT')
+            sa = tuple(a.var('end', k) for k in keys)
+            sb = tuple(b.var('end', k) for k in keys)
+            ok = sa == sb and sa[0] == top and sa[3] == 1
+            checks.append(Check(tag + '/state', ok,
+                                'both roads end at TOPLINE %d with the same '
+                                'selection' % top if ok else
+                                '(TOPLINE, DOCLINE, CURY, SELACT) %s vs %s'
+                                % (sa, sb)))
+            d = self.screen_diff(ctx, a, b) if ok else ['state differs']
+            checks.append(Check(tag + '/painted', not d,
+                                'the scrolled selection is painted exactly as '
+                                'one made without scrolling' if not d else
+                                '%d differences, first %s' % (len(d), d[:4])))
+        return checks
+
+
+# --- H45  SELECT ALL AND PAGE MOVES KEEP A VALID VIEWPORT ------------------
+
+
+class H45SelAllPage(Case):
+    name = 'H45-selall-page'
+    desc = ('Ctrl+A on a document longer than the screen brings its end into '
+            'view, and page moves with and without SHIFT keep the cursor in '
+            'the text band')
+    origin = ('2026-10-13, v0.3: ACTSELAL placed the cursor with SETCURY, '
+              'which only subtracts TOPLINE -- CURY 59 on a 60-line file, the '
+              'cursor on the status bar and the selection painted on the '
+              'wrong rows; every page move after it worked from that state.')
+    TAG = 'H45'
+    VRAM = False
+    LINES = ['LINE %02d %s' % (i, 'X' * (i % 30)) for i in range(60)]
+    STEPS = (('selall', 'A', ['CTRL']), ('spgu', 'UP', ['SHIFT', 'GRAPH']),
+             ('spgu2', 'UP', ['SHIFT', 'GRAPH']),
+             ('spgd', 'DOWN', ['SHIFT', 'GRAPH']),
+             ('spgd2', 'DOWN', ['SHIFT', 'GRAPH']), ('sup', 'UP', ['SHIFT']),
+             ('pgu', 'UP', ['GRAPH']), ('selall2', 'A', ['CTRL']),
+             ('pgd', 'DOWN', ['GRAPH']))
+    ROWS = 24
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        for label, key, mods in self.STEPS:
+            t.press(key, mods=mods)
+            t.wait(0.6)
+            t.snap(label, vram=self.VRAM)
+        return t
+
+    def painted(self, ctx, run, label):
+        """Screen problems at this step; S6ED checks the state only."""
+        return []
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        checks = []
+        last = len(self.LINES) - 1
+        for label, _, _ in self.STEPS:
+            v = {k: run.var(label, k)
+                 for k in ('DOCLINE', 'TOPLINE', 'CURY', 'SELACT')}
+            ok = (v['CURY'] is not None and 0 <= v['CURY'] < self.ROWS
+                  and v['DOCLINE'] == v['TOPLINE'] + v['CURY'])
+            if label.startswith('selall'):
+                ok = ok and v['DOCLINE'] == last and v['SELACT'] == 1
+            bad = self.painted(ctx, run, label) if ok else ['state']
+            checks.append(Check('%s/%s' % (self.TAG, label), ok and not bad,
+                                'cursor in the band (CURY %s), DOCLINE = '
+                                'TOPLINE + CURY%s' % (v['CURY'], '' if
+                                self.VRAM is False else ', screen as computed')
+                                if ok and not bad else
+                                '%s, screen %s' % (v, bad[:3])))
+        return checks
+
+
 CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G6Hooks(),
          G7Selection(), G8Config(), G9Directory(), G10Autoalign(), G11Paste(),
          G12ScreenRestore(), G13FeatureResidency(), H1Help(), H2HelpQuestion(), H3HelpFile(), H4FileSwitch(), H5Verbose(), H6DatMissing(), H7AboutDialog(),
@@ -8130,6 +8274,7 @@ CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G
          H32SaveNoName(), H33LongPath(), H34BrowseOpen(),
          H35BrowseMany(), H36BrowseSaveAs(), H37Settings(), H38DiskError(), H39DatForeign(),
          H40LoadProgress(), H41BrowseBusy(), H42IoBlocks(), H43CursorShape(),
+         H44SelScroll(), H45SelAllPage(),
          R1FreeListCompact(), R2LinewrtOom(), R3UndoCompactIX(), R4UndoLongLine(),
          K1WqSaveFailed(), K2LoadDiskError(), K3SaveCloseError(),
          P1ReflowBoundary(), P2DeleteLastRow0(), P3ReplaceAllUndo(),

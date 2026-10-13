@@ -4227,6 +4227,88 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'filter': 'S62-12',
         'expect': ['S62-12/std/ins', 'S62-12/vi/replace'],
     },
+    {
+        'name': 'sel-scroll-down',
+        'why': 'the exposed row is not given the painted extent after the '
+               'scroll: SELDIFF then works from a screen that is not what '
+               'DRWSTRL says',
+        'file': 'ACTION.Z8A',
+        'old': """                CALL    ACTMVD
+                POP     DE              ; DE = TOPLINE BEFORE THE MOVE
+                CALL    SELSCRL         ; THE SCROLL KEPT THE OVERLAY: FIX THE""",
+        'new': """                CALL    ACTMVD
+                POP     DE              ; DE = TOPLINE BEFORE THE MOVE
+                NOP                     ; MUTATION: NO SELSCRL
+                NOP
+                NOP""",
+        'filter': 'H44',
+        'expect': ['H44/down/painted'],
+    },
+    {
+        'name': 'sel-scroll-up',
+        'why': 'the exposed row is not given the painted extent after the '
+               'scroll: SELDIFF then works from a screen that is not what '
+               'DRWSTRL says',
+        'file': 'ACTION.Z8A',
+        'old': """                CALL    ACTMVU
+                POP     DE              ; DE = TOPLINE BEFORE THE MOVE
+                CALL    SELSCRL         ; THE SCROLL KEPT THE OVERLAY: FIX THE""",
+        'new': """                CALL    ACTMVU
+                POP     DE              ; DE = TOPLINE BEFORE THE MOVE
+                NOP                     ; MUTATION: NO SELSCRL
+                NOP
+                NOP""",
+        'filter': 'H44',
+        'expect': ['H44/up/painted'],
+    },
+    {
+        'name': 's2-sel-scroll-down',
+        'target': 'S2ED',
+        'why': 'the exposed row is not given the painted extent after the '
+               'scroll: SELDIFF then works from a screen that is not what '
+               'DRWSTRL says',
+        'file': 'ACTION.Z8A',
+        'old': """                CALL    ACTMVD
+                POP     DE              ; DE = TOPLINE BEFORE THE MOVE
+                CALL    SELSCRL         ; THE SCROLL KEPT THE OVERLAY: FIX THE""",
+        'new': """                CALL    ACTMVD
+                POP     DE              ; DE = TOPLINE BEFORE THE MOVE
+                NOP                     ; MUTATION: NO SELSCRL
+                NOP
+                NOP""",
+        'filter': 'S2-51',
+        'expect': ['S2-51/down/painted'],
+    },
+    {
+        'name': 'selall-setcury',
+        'why': 'Ctrl+A places the cursor with SETCURY again: on a document '
+               'longer than the screen CURY lands past the text band',
+        'file': 'ACTION.Z8A',
+        'old': """                LD      HL, (DOCLINE)
+                CALL    SHOWLN
+                CALL    REDRWSL""",
+        'new': """                CALL    SETCURY         ; MUTATION: NO VIEWPORT MOVE
+                NOP
+                NOP
+                CALL    REDRWSL""",
+        'filter': 'H45',
+        'expect': ['H45/selall'],
+    },
+    {
+        'name': 's2-redrsel-off',
+        'target': 'S2ED',
+        'why': 'REDRAW records the selection as painted without painting it: '
+               'a page move leaves the new page plain',
+        'file': 'ACTION.Z8A',
+        'old': """REDRSEL         LD      A, (SELREDR)
+                OR      A
+                RET     Z""",
+        'new': """REDRSEL         LD      A, (SELREDR)
+                OR      A
+                RET                     ; MUTATION: NEVER PAINTS""",
+        'filter': 'S2-52',
+        'expect': ['S2-52/selall', 'S2-52/spgu'],
+    },
 ]
 
 

@@ -2654,6 +2654,164 @@ SELDIFF         LD      B, 0
                 RET
 
 
+; --- SELSCRL                   ----------------------------------------
+
+
+; - SELSCRL ----------------------------
+; - AFTER A VERTICAL MOVE THAT MAY HAVE SCROLLED, MAKE THE SCREEN SHOW THE
+; - PAINTED RANGE (DRWSTRL..) AGAIN, SO SELDIFF CAN PAINT ONLY THE DELTA.
+; - A BLIT SCROLL CARRIES THE XOR OVERLAY WITH THE TEXT, SO EVERY ROW THAT
+; - MOVED IS STILL RIGHT; ONLY THE ROWS IT EXPOSED ARE RENDERED PLAIN, AND
+; - SELEXPO XORS THE PAINTED EXTENT OVER THEM. A REDRAW CLEARS SELDRAWN,
+; - AND THEN THERE IS NOTHING TO KEEP: SELPOST PAINTS THE RANGE WHOLE.
+; - THIS REPLACES SELPRE AT THE EDGE ROW, WHICH UN-XORED THE WHOLE
+; - SELECTION BEFORE THE SCROLL AND HAD SELPOST XOR IT ALL BACK: WITH
+; - EVERYTHING SELECTED, TWO FULL SCREENS AND A VISIBLE FLASH PER ROW.
+; - IN:  DE = TOPLINE BEFORE THE MOVE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+SELSCRL         LD      A, (SELDRAWN)
+                OR      A
+                RET     Z               ; NOTHING PAINTED, OR A REDRAW
+                LD      HL, (TOPLINE)
+                OR      A
+                SBC     HL, DE          ; HL = ROWS SCROLLED, SIGNED
+                RET     Z               ; NO SCROLL: SELDIFF SEES THE SCREEN
+                JR      C, .UP
+                ; DOWN BY HL: THE BOTTOM HL ROWS ARE NEW
+                LD      DE, ROWSVIS
+                CALL    CMPHLDE
+                JR      NC, .ALL        ; HL >= ROWSVIS: EVERY ROW IS NEW
+                LD      C, L            ; C = ROWS EXPOSED
+                LD      A, ROWSVIS
+                SUB     L
+                LD      B, A            ; B = FIRST EXPOSED ROW
+                JR      SELEXPO
+.UP             ; UP BY -HL: THE TOP -HL ROWS ARE NEW
+                EX      DE, HL
+                LD      HL, 0
+                OR      A
+                SBC     HL, DE          ; HL = ROWS SCROLLED UP
+                LD      DE, ROWSVIS
+                CALL    CMPHLDE
+                JR      NC, .ALL
+                LD      C, L
+                LD      B, 0
+                JR      SELEXPO
+.ALL            LD      BC, ROWSVIS     ; B = 0, C = ROWSVIS
+
+
+; - SELEXPO ----------------------------
+; - XOR THE PAINTED RANGE (DRWSTRL..) OVER A BAND OF SCREEN ROWS THAT WERE
+; - JUST RENDERED PLAIN.
+; - IN:  B = FIRST SCREEN ROW, C = ROW COUNT (>= 1)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+SELEXPO         LD      DE, DRWSTRL
+
+
+; - SELBAND ----------------------------
+; - XOR A RANGE RECORD'S EXTENT OVER A BAND OF SCREEN ROWS RENDERED PLAIN.
+; - IX IS RELOADED EVERY ROW: SELXOR CLOBBERS IT ON S2 (THE SELPAIN
+; - LESSON, 2026-09-23).
+; - IN:  B = FIRST SCREEN ROW, C = ROW COUNT (>= 1),
+; -      DE = RANGE RECORD (DRWSTRL OR SELSTRL, 6 BYTES)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+SELBAND         PUSH    DE
+                PUSH    BC
+                PUSH    DE
+                POP     IX              ; IX = RANGE RECORD
+                LD      HL, (TOPLINE)
+                LD      E, B
+                LD      D, 0
+                ADD     HL, DE          ; HL = DOCUMENT LINE OF THE ROW
+                CALL    SELEXT
+                JR      C, .NEXT        ; NOT IN THE RANGE
+                LD      A, E
+                CP      D
+                JR      Z, .NEXT
+                JR      C, .NEXT        ; EMPTY EXTENT
+                POP     BC
+                PUSH    BC
+                CALL    SELXOR          ; B = ROW, D = XA, E = XB
+.NEXT           POP     BC
+                POP     DE
+                INC     B
+                DEC     C
+                JR      NZ, SELBAND
+                RET
+
+
+; --- REDRAW SELECTION HOOKS     ----------------------------------------
+
+
+; - REDRSB / REDRSEL / REDRSE ----------
+; - EVERY TARGET'S REDRAW CALLS THESE AROUND ITS ROW LOOP. WITH SELREDR
+; - ZERO THEY RETURN AT ONCE AND REDRAW LEAVES THE SCREEN PLAIN, AS EVERY
+; - CALLER THAT DROPS OR REBUILDS THE SELECTION RELIES ON. WITH SELREDR SET
+; - THE SELECTION IS XORED OVER EACH ROW RIGHT AFTER IT IS RENDERED AND
+; - RECORDED AS PAINTED, SO THE PAGE COMES UP SELECTED IN ONE PASS AND THE
+; - SELPOST THAT FOLLOWS HAS NO DELTA. BEFORE, A PAGE MOVE SHOWED THE NEW
+; - PAGE PLAIN AND THEN THE SELECTION LAID OVER IT.
+; - REDRSB:  IN NONE.            CLOBBERS ALL (SELNORM)
+; - REDRSEL: IN B = SCREEN ROW (TXRFIRST..TXRLAST). B, C PRESERVED
+; - REDRSE:  IN NONE.            CLOBBERS ALL
+; -
+
+REDRSB          LD      A, (SELREDR)
+                OR      A
+                RET     Z
+                JP      SELNORM
+
+REDRSEL         LD      A, (SELREDR)
+                OR      A
+                RET     Z
+                PUSH    BC
+                LD      A, B
+                SUB     TXRFIRST
+                LD      B, A            ; B = VIEWPORT ROW
+                LD      C, 1
+                LD      DE, SELSTRL
+                CALL    SELBAND
+                POP     BC
+                RET
+
+REDRSE          LD      A, (SELREDR)
+                OR      A
+                RET     Z
+                LD      HL, SELSTRL
+                LD      DE, DRWSTRL
+                LD      BC, 6
+                LDIR
+                CALL    SELEMPTY
+                RET     Z               ; NOTHING SELECTED, NOTHING PAINTED
+                LD      A, 1
+                LD      (SELDRAWN), A
+                RET
+
+
+; - REDRWSL ----------------------------
+; - REDRAW WITH THE SELECTION PAINTED IN THE SAME PASS (SEE REDRSB)
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+REDRWSL         LD      A, 1
+                LD      (SELREDR), A
+                CALL    REDRAW
+                XOR     A
+                LD      (SELREDR), A
+                RET
+
+
 ; --- ACTDSEL                   ----------------------------------------
 
 
@@ -2684,8 +2842,9 @@ ACTDSEL         LD      A, (SELACT)
 ; - CLOBBERS: ALL
 ; -
 
-ACTSELAL        CALL    SELPRE          ; UN-XOR EXISTING IF DRAWN
-                LD      HL, 0
+                ; NO SELPRE: THE REDRAW BELOW REPAINTS EVERY ROW ANYWAY, AND
+                ; UN-XORING FIRST WAS ONE MORE VISIBLE PASS
+ACTSELAL        LD      HL, 0
                 LD      (SELANCL), HL
                 XOR     A
                 LD      (SELANCX), A
@@ -2700,8 +2859,13 @@ ACTSELAL        CALL    SELPRE          ; UN-XOR EXISTING IF DRAWN
                 LD      A, (WORKBUF)
                 LD      (CURX), A
 
-                CALL    SETCURY
-                CALL    REDRAW
+                ; SHOWLN, NOT SETCURY: SETCURY ONLY SUBTRACTS TOPLINE, AND IN
+                ; A DOCUMENT LONGER THAN THE SCREEN IT PUT CURY PAST THE TEXT
+                ; BAND (MEASURED 59 ON A 60-LINE FILE: THE CURSOR ON THE
+                ; STATUS BAR, THE SELECTION PAINTED ON THE WRONG ROWS)
+                LD      HL, (DOCLINE)
+                CALL    SHOWLN
+                CALL    REDRWSL
                 JP      SELPOST
 
 
@@ -2760,11 +2924,12 @@ ACTSLMR         CALL    SELBEG
 ; -
 
 ACTSLMU         CALL    SELBEG
-                LD      A, (CURY)
-                OR      A
-                CALL    Z, SELPRE       ; TOP ROW: THE MOVE SCROLLS, UN-XOR FIRST
+                LD      HL, (TOPLINE)
+                PUSH    HL
                 CALL    ACTMVU
-                JP      SELPOST
+                POP     DE              ; DE = TOPLINE BEFORE THE MOVE
+                CALL    SELSCRL         ; THE SCROLL KEPT THE OVERLAY: FIX THE
+                JP      SELPOST         ; EXPOSED ROWS, THEN PAINT THE DELTA
 
 
 ; --- ACTSLMD                   ----------------------------------------
@@ -2778,11 +2943,12 @@ ACTSLMU         CALL    SELBEG
 ; -
 
 ACTSLMD         CALL    SELBEG
-                LD      A, (CURY)
-                CP      ROWSVIS - 1
-                CALL    Z, SELPRE       ; BOTTOM ROW: THE MOVE SCROLLS, UN-XOR FIRST
+                LD      HL, (TOPLINE)
+                PUSH    HL
                 CALL    ACTMVD
-                JP      SELPOST
+                POP     DE              ; DE = TOPLINE BEFORE THE MOVE
+                CALL    SELSCRL         ; THE SCROLL KEPT THE OVERLAY: FIX THE
+                JP      SELPOST         ; EXPOSED ROWS, THEN PAINT THE DELTA
 
 
 ; --- ACTSLBOL                  ----------------------------------------
@@ -2891,9 +3057,12 @@ ACTSLWRT        CALL    SELBEG
 ; - CLOBBERS: ALL
 ; -
 
-ACTSLPGU        CALL    SELBEG
-                CALL    SELPRE
-                CALL    ACTPGUP
+ACTSLPGU        CALL    SELBEG          ; NO SELPRE: A PAGE MOVE REDRAWS, AND
+                LD      A, 1            ; WITH SELREDR THE SELECTION IS PAINTED
+                LD      (SELREDR), A    ; IN THE SAME PASS; AT THE FIRST PAGE
+                CALL    ACTPGUP         ; THERE IS NO REDRAW AND THE PAINTED
+                XOR     A               ; RANGE IS STILL ON SCREEN FOR SELDIFF
+                LD      (SELREDR), A
                 JP      SELPOST
 
 
@@ -2907,9 +3076,12 @@ ACTSLPGU        CALL    SELBEG
 ; - CLOBBERS: ALL
 ; -
 
-ACTSLPGD        CALL    SELBEG
-                CALL    SELPRE
+ACTSLPGD        CALL    SELBEG          ; AS ACTSLPGU
+                LD      A, 1
+                LD      (SELREDR), A
                 CALL    ACTPGDN
+                XOR     A
+                LD      (SELREDR), A
                 JP      SELPOST
 
 
