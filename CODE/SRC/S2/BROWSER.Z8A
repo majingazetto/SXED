@@ -170,6 +170,7 @@ DOBRW           XOR     A
                 LD      (HL), A         ; A = THE NEW ONE
                 PUSH    BC
                 CALL    .SCROLL         ; A = HOW GRID MOVED (0=SAME, 1=MOVED)
+                LD      E, C            ; E = THE OLD TOP (.SCROLL KEEPS IT IN C)
                 POP     BC
                 OR      A
                 JR      NZ, .SELSCR
@@ -203,12 +204,27 @@ DOBRW           XOR     A
 .ONEROW         CALL    WDUMPR          ; DUMP NEW ROW
                 JR      .SELFLD
 
-.SELSCR         ; VIEWPORT MOVED: FULL GRID REDRAW
+.SELSCR         ; VIEWPORT MOVED. ONE ROW: BRWGSH (PAGE 1) SHIFTS THE GRID IN
+                ; THE SHADOWS AND ONLY THE ROW THAT CAME IN IS PAINTED, PLUS
+                ; THE OLD BAR WHERE IT MOVED TO. FURTHER: EVERY SLOT. MEASURED
+                ; 254 MS FOR THE 48 SLOTS OF .LIST, THE BULK OF A SCROLL STEP.
+                LD      A, (BRWTOP)
+                SUB     E               ; A = NEW TOP - OLD TOP
+                LD      E, B            ; E = THE OLD SELECTION
+                PUSH    DE
+                CALL    BRWGSH
+                JR      C, .SELALL
+                LD      B, BRWCOLS      ; A = FIRST SLOT OF THE NEW ROW
+                CALL    .LSLP
+                POP     DE
+                LD      A, E
+                CALL    .SLOT           ; THE OLD BAR, WHERE IT MOVED TO
+                JR      .SELDMP
+.SELALL         POP     DE
                 CALL    .LIST
-                CALL    .DUMPG          ; DUMPS ROWS 3..14
-.SELFLD         CALL    .INFO
-                LD      A, BRWINFR
-                CALL    WDUMPR          ; DUMP INFO ROW
+.SELDMP         CALL    .DUMPG          ; DUMPS ROWS 3..14
+.SELFLD         CALL    BRWINFO         ; THE LINE, THEN ONLY THE CELLS THAT
+                CALL    BRWIS2          ; CHANGED, DUMPED ONLY IF ANY (PAGE 1)
                 LD      A, (BRWMODE)
                 OR      A
                 JP      NZ, .KEYLP      ; SAVE AS: TYPED NAME STAYS
@@ -794,7 +810,8 @@ DOBRW           XOR     A
                 CALL    BRWINFO         ; 56 CHARS IN BRWINF
 
                 ; DRAW IT AT ROW 16, CHAR COL 4
-.INFOD          LD      B, BRWINFR
+.INFOD          CALL    BRWIQS          ; THE WHOLE LINE: WHAT BRWIS2 DIFFS
+                LD      B, BRWINFR
                 LD      C, 4
                 LD      HL, BRWINF
                 LD      A, (VCOLWIN)

@@ -22,6 +22,7 @@ BDOS            PUSH    AF
                 RET
                 
 
+
 ; - DOSVER -----------
 ; - GET DOS VERSION
 ; -     
@@ -387,6 +388,8 @@ DREAD           LD      C,_READ
                 JP      BDOS
 
                 
+
+
 ; - DWRITE -----------
 ; - DOS2 WRITE BYTES TO #F
 ; - B: #F
@@ -420,6 +423,7 @@ DCREATE         EX      DE,HL
                 ; - COMPATIBLE DOS 1 / DOS 2
                 ; - "HIGH" LEVEL ROUTINES
                 ; - 
+
 
 ; - DSKCREAT ---------
 ; - CREATE FILE
@@ -827,6 +831,94 @@ BRWDIRX         LD      HL, BRWPATH
                 RET     Z               ; EMPTY BUT THERE (CY = 0 FROM THE CP)
                 SCF
                 RET
+
+
+; - BRWIDIF ----------------------------
+; - THE PART OF THE BROWSER'S INFORMATION LINE THAT CHANGED SINCE IT WAS
+; - LAST PAINTED: FROM THE FIRST TO THE LAST COLUMN THAT DIFFERS. A STEP
+; - BETWEEN NEIGHBOURING FILES USUALLY CHANGES THE NAME AND LITTLE ELSE,
+; - AND THE WHOLE LINE COST 30-40 MS A KEYSTROKE (2026-10-13). BRWINFQ IS
+; - UPDATED: THE CALLER PAINTS THE SPAN.
+; - IN:  BRWINF (NEW), BRWINFQ (AS PAINTED)
+; - OUT: Z = 1: NOTHING CHANGED
+; -      Z = 0: C = FIRST COLUMN, B = COLUMNS (>= 1)
+; - CLOBBERS: AF, DE, HL
+; -
+
+BRWIDIF         LD      HL, BRWINF
+                LD      DE, BRWINFQ
+                LD      B, BICLEN
+                LD      C, 0
+.FIRST          LD      A, (DE)
+                CP      (HL)
+                JR      NZ, .GOT1
+                INC     HL
+                INC     DE
+                INC     C
+                DJNZ    .FIRST
+                XOR     A               ; Z: THE SAME LINE. NOT LEFT TO THE
+                RET                     ; LOOP: INC C CLEARED IT AT C = BICLEN
+.GOT1           LD      HL, BRWINF + BICLEN - 1
+                LD      DE, BRWINFQ + BICLEN - 1
+                LD      B, BICLEN
+.LAST           LD      A, (DE)
+                CP      (HL)
+                JR      NZ, .GOT2
+                DEC     HL
+                DEC     DE
+                DJNZ    .LAST
+.GOT2           LD      A, B            ; ONE PAST THE LAST CHANGED COLUMN
+                SUB     C
+                LD      B, A            ; B = COLUMNS IN THE SPAN
+                PUSH    BC
+                CALL    BRWIQS
+                POP     BC
+                OR      1               ; Z = 0
+                RET
+
+
+; - BRWIQS -----------------------------
+; - BRWINFQ = BRWINF: THE WHOLE LINE HAS JUST BEEN PAINTED
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: BC, DE, HL
+; -
+
+BRWIQS          LD      HL, BRWINF
+                LD      DE, BRWINFQ
+                LD      BC, BICLEN
+                LDIR
+                RET
+
+
+; - BRWISPN ----------------------------
+; - COPY A SPAN OF THE INFORMATION LINE, NUL-TERMINATED, INTO BRWNAME
+; - (FREE WHILE THE LINE IS PAINTED) FOR A PRINT ROUTINE TO TAKE
+; - IN:  C = FIRST COLUMN, B = COLUMNS
+; - OUT: HL = BRWNAME
+; - CLOBBERS: AF, DE
+; -
+
+BRWISPN         PUSH    BC
+                LD      DE, BRWNAME
+                LD      A, B
+                OR      A
+                JR      Z, .NONE        ; NO SPAN: AN LDIR OF 0 IS 64 KB
+                LD      HL, BRWINF
+                LD      A, L
+                ADD     A, C
+                LD      L, A
+                JR      NC, .SRC
+                INC     H               ; HL = BRWINF + FIRST COLUMN
+.SRC            LD      C, B
+                LD      B, 0
+                LDIR
+.NONE           XOR     A
+                LD      (DE), A
+                POP     BC
+                LD      HL, BRWNAME
+                RET
+
 
 ; - HOMEFN -----------------------------
 ; - BUILD THE HOME-DIRECTORY PATH OF A PROGRAM FILE

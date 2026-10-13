@@ -637,6 +637,203 @@ CURINV          LD      B, 8            ; B = SCANLINES
                 JP      VDPDUMP
 
 
+; --- GRID SHIFT (FILE BROWSER)  ----------------------------------------
+
+
+                ASSERT  (PATSHAD & #FF) == 0
+                ASSERT  (COLMAP & #FF) == 0
+
+
+; - SHADROW ----------------------------
+; - COPY A SPAN OF CELLS OF ONE SCREEN ROW ONTO ANOTHER ROW IN THE RAM
+; - SHADOWS: PATTERNS (8 BYTES A CELL) AND COLOURS (1 BYTE A CELL). THE
+; - CALLER PUSHES THE ROWS TO VRAM.
+; - IN:  H = SOURCE ROW, L = DESTINATION ROW, D = FIRST CELL, E = CELLS
+; - OUT: NONE
+; - CLOBBERS: AF
+; - NOTE: VIDSEG BANKED AT PAGE 2
+; -
+
+SHADROW         PUSH    BC
+                PUSH    DE
+                PUSH    HL
+                LD      A, D
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      C, A            ; C = FIRST CELL * 8
+                LD      A, E
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      B, A            ; B = SPAN IN PATTERN BYTES
+                LD      A, L
+                ADD     A, HIGH PATSHAD
+                LD      D, A
+                LD      E, C            ; DE = DESTINATION PATTERNS
+                LD      A, H
+                ADD     A, HIGH PATSHAD
+                LD      H, A
+                LD      L, C            ; HL = SOURCE PATTERNS
+                LD      C, B
+                LD      B, 0
+                LDIR
+                POP     HL
+                POP     DE
+                PUSH    DE
+                PUSH    HL
+                LD      A, H
+                CALL    .CADR
+                PUSH    BC              ; SOURCE COLOURS
+                LD      A, L
+                CALL    .CADR           ; BC = DESTINATION COLOURS
+                LD      A, E            ; A = CELLS
+                POP     HL
+                LD      D, B
+                LD      E, C
+                LD      C, A
+                LD      B, 0
+                LDIR
+                POP     HL
+                POP     DE
+                POP     BC
+                RET
+
+                ; .CADR: A = ROW, D = CELL -> BC = COLMAP + ROW * 32 + CELL
+.CADR           LD      C, A
+                LD      B, 0
+                SLA     C
+                RL      B
+                SLA     C
+                RL      B
+                SLA     C
+                RL      B
+                SLA     C
+                RL      B
+                SLA     C
+                RL      B               ; BC = ROW * 32
+                LD      A, C
+                ADD     A, D            ; CELL <= 31: NO CARRY OUT OF A ROW
+                LD      C, A
+                LD      A, B
+                ADD     A, HIGH COLMAP
+                LD      B, A
+                RET
+
+
+; - GRDSCRL ----------------------------
+; - MOVE A BAND OF SCREEN ROWS ONE ROW UP OR DOWN IN THE SHADOWS
+; - IN:  A = 0: UP, ROWS B+1..B+C ONTO B..B+C-1
+; -      A = 1: DOWN, ROWS B..B+C-1 ONTO B+1..B+C
+; -      B = TOP ROW OF THE BAND, C = ROWS THAT MOVE (>= 1),
+; -      D = FIRST CELL, E = CELLS
+; - OUT: NONE
+; - CLOBBERS: AF, BC, HL
+; -
+
+GRDSCRL         OR      A
+                JR      NZ, .DOWN
+.UPLP           LD      L, B
+                LD      H, B
+                INC     H               ; SOURCE: THE ROW BELOW
+                CALL    SHADROW
+                INC     B
+                DEC     C
+                JR      NZ, .UPLP
+                RET
+.DOWN           LD      A, B
+                ADD     A, C
+                LD      B, A            ; FIRST DESTINATION: THE BOTTOM ROW
+.DNLP           LD      L, B
+                LD      H, B
+                DEC     H               ; SOURCE: THE ROW ABOVE
+                CALL    SHADROW
+                DEC     B
+                DEC     C
+                JR      NZ, .DNLP
+                RET
+
+
+; - BRWGSH -----------------------------
+; - THE S2ED FILE BROWSER'S GRID FOLLOWS A ONE-ROW SCROLL: ITS ROWS ARE
+; - SHIFTED IN THE SHADOWS, SO ONLY THE ROW THAT CAME IN NEEDS PAINTING.
+; - IN PAGE 1 BECAUSE S2ED'S FEATURE CONTAINER HAS NO ROOM FOR IT.
+; - IN:  A = NEW BRWTOP - OLD BRWTOP
+; - OUT: CY = 1: NOT ONE ROW, NOTHING MOVED (THE CALLER PAINTS ALL)
+; -      CY = 0: A = POSITION OF THE FIRST SLOT OF THE NEW ROW
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+BRWGSH          LD      BC, BRWRLST * 256 + BRWROWS - 1
+                LD      DE, BRWGC0 * 256 + BRWCOLS * BRWSLOT / 2
+                DEC     A
+                JR      Z, .UP          ; ONE ROW DOWN THE LIST: ROWS GO UP
+                INC     A
+                INC     A
+                SCF
+                RET     NZ              ; NEITHER +1 NOR -1
+                INC     A               ; A = 1: ROWS GO DOWN
+                CALL    GRDSCRL
+                LD      A, (BRWTOP)     ; THE NEW ROW IS THE TOP ONE
+                JR      .POS
+.UP             CALL    GRDSCRL         ; A = 0
+                LD      A, (BRWTOP)
+                ADD     A, BRWROWS - 1  ; THE NEW ROW IS THE BOTTOM ONE
+.POS            ADD     A, A
+                ADD     A, A            ; ROW * BRWCOLS
+                OR      A               ; CY = 0
+                RET
+
+
+; - BRWIS2 -----------------------------
+; - S2ED FILE BROWSER: PAINT ONLY THE PART OF THE INFORMATION LINE THAT
+; - CHANGED (BRWIDIF), WIDENED TO WHOLE CELLS -- A CELL HOLDS TWO
+; - CHARACTERS -- AND DUMP ITS ROW, OR NOTHING IF THE LINE IS THE SAME.
+; - THE LINE STARTS AT CHARACTER COLUMN 4, CELL 2 (.INFOD).
+; - IN:  BRWINF FORMATTED (BRWINFO)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; - NOTE: CALLED FROM THE BROWSER, VIDSEG (= FTRSEG) BANKED AT PAGE 2
+; -
+
+BRWIS2          CALL    BRWIDIF
+                RET     Z               ; THE ROW ON SCREEN IS STILL RIGHT
+                BIT     0, C
+                JR      Z, .EVEN
+                DEC     C               ; START ON A CELL
+                INC     B
+.EVEN           BIT     0, B
+                JR      Z, .WHOLE
+                INC     B               ; END ON A CELL (BICLEN IS EVEN)
+.WHOLE          CALL    BRWISPN         ; HL = THE SPAN, IN BRWNAME
+                PUSH    BC
+                ; CLEAR ITS CELLS: WINPUTS MAY LEAVE A SPACE UNDRAWN
+                LD      A, C
+                ADD     A, 4            ; CHARACTER COLUMN OF THE SPAN
+                ADD     A, A
+                ADD     A, A            ; CELL * 8 = COLUMN * 4
+                LD      L, A
+                LD      H, HIGH PATSHAD + BRWINFR
+                LD      A, B
+                ADD     A, A
+                ADD     A, A            ; CELLS * 8 = COLUMNS * 4
+                LD      B, A
+                XOR     A
+.CLR            LD      (HL), A
+                INC     HL
+                DJNZ    .CLR
+                POP     BC
+                LD      A, C
+                ADD     A, 4
+                LD      C, A
+                LD      B, BRWINFR
+                LD      HL, BRWNAME
+                LD      A, (VCOLWIN)
+                CALL    WINPUTS
+                LD      A, BRWINFR
+                JP      WDUMPR
+
+
 ; --- RENDIFF                   ----------------------------------------
 
 
