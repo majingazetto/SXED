@@ -4116,6 +4116,26 @@ SELTMPXB        EQU     SELTMPXB2""")],
         # the hang never returns to MAINLOOP, so it may also kill the session
         'expect_any': ['S62-11/after-open/saved', 'S62-11-saveas-after-open'],
     },
+    {
+        'name': 't0-theme-green-2c',
+        'why': 'GREEN chrome back to medium on dark green, 1.3:1: no menu, '
+               'status bar or dialog can be read',
+        'file': 'S2/VDP.Z8A',
+        'old': "THMGRN          DEFB    #21, #1C,",
+        'new': "THMGRN          DEFB    #21, #2C,",
+        'filter': 'T0',
+        'expect_static': ['s2-theme-contrast'],
+    },
+    {
+        'name': 't0-theme-amber-a6',
+        'why': 'AMBER window body painted dark yellow on medium green, '
+               '1.0:1: the ink vanishes into the surface',
+        'file': 'S2/VDP.Z8A',
+        'old': """                DEFB    #A6, #B6, #6B, #66""",
+        'new': """                DEFB    #A2, #B6, #6B, #66""",
+        'filter': 'T0',
+        'expect_static': ['s2-theme-contrast'],
+    },
 ]
 
 

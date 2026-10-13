@@ -793,6 +793,79 @@ def check_manual_charset(ctx):
                                    'nothing built yet'))
 
 
+# TMS9918 fixed palette, the values openMSX renders.
+TMS_RGB = [(0, 0, 0), (0, 0, 0), (33, 200, 66), (94, 220, 120),
+           (84, 85, 237), (125, 118, 252), (212, 82, 77), (66, 235, 245),
+           (252, 85, 84), (255, 121, 120), (212, 193, 84), (230, 206, 128),
+           (33, 176, 59), (201, 91, 186), (204, 204, 204), (255, 255, 255)]
+S2_ROLES = ('TXT', 'UI', 'BOLD', 'ITAL', 'UNDR', 'MARK', 'BORDER', 'STAT',
+            'WIN', 'HI', 'BSEL', 'SHDW')
+# MARK dims the delimiters on purpose, BORDER is a bare index, and SHDW is
+# flat (FG == BG): a shadow recolours a cell, it carries no ink to read.
+S2_ROLES_FREE = ('MARK', 'BORDER', 'SHDW')
+MIN_CONTRAST = 2.0
+
+
+def _tms_lum(index):
+    def ch(v):
+        v /= 255.0
+        return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
+    r, g, b = TMS_RGB[index]
+    return 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b)
+
+
+def _tms_contrast(byte):
+    hi, lo = sorted((_tms_lum(byte >> 4), _tms_lum(byte & 0x0F)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def check_s2_theme_contrast(ctx):
+    """Every S2ED theme keeps its ink readable on its own background.
+
+    The TMS9918 palette is fixed, and two of its greens differ by 24 in one
+    channel: GREEN shipped its whole chrome as medium on dark green (#2C,
+    1.3:1) and nobody could read a menu.  Each FG|BG role of each table in
+    S2/VDP.Z8A must reach MIN_CONTRAST (WCAG ratio), except the roles listed
+    in S2_ROLES_FREE.
+    """
+    path = os.path.join(ctx.src_dir, 'S2', 'VDP.Z8A')
+    themes, cur = {}, None
+    with open(path) as fh:
+        for line in fh:
+            code = _strip_comment(line).rstrip()
+            m = re.match(r'^(THM[A-Z0-9]+)\s+DEFB\s+(.*)$', code)
+            if m:
+                cur = m.group(1)
+                themes[cur] = []
+                body = m.group(2)
+            elif cur and re.match(r'^\s+DEFB\s+', code) and \
+                    len(themes[cur]) < len(S2_ROLES):
+                body = re.sub(r'^\s+DEFB\s+', '', code)
+            else:
+                cur = None
+                continue
+            for tok in body.split(','):
+                tok = tok.strip()
+                themes[cur].append(int(tok[1:], 16) if tok.startswith('#')
+                                   else int(tok))
+    bad = []
+    if not themes:
+        bad.append('no THMxxx tables in S2/VDP.Z8A')
+    for name, vals in sorted(themes.items()):
+        if len(vals) != len(S2_ROLES):
+            bad.append('%s has %d bytes' % (name, len(vals)))
+            continue
+        for role, byte in zip(S2_ROLES, vals):
+            if role in S2_ROLES_FREE:
+                continue
+            ratio = _tms_contrast(byte)
+            if ratio < MIN_CONTRAST:
+                bad.append('%s %s #%02X %.1f:1' % (name, role, byte, ratio))
+    return Check('s2-theme-contrast', not bad, '; '.join(bad[:8]) if bad else
+                 '%d S2ED themes, every FG|BG role >= %.0f:1'
+                 % (len(themes), MIN_CONTRAST))
+
+
 ALL = [check_build_clean, check_image_end, check_vars_block, check_init_clear,
        check_layout_asserts, check_record_exclusive, check_target_params,
        check_data_placement, check_statbuf_term,
@@ -801,7 +874,7 @@ ALL = [check_build_clean, check_image_end, check_vars_block, check_init_clear,
        check_page1_hooks,
        check_assets, check_feature_discipline, check_window_discipline,
        check_ftr_budget, check_tpa_chain, check_build_symmetry,
-       check_manual_width, check_manual_charset]
+       check_manual_width, check_manual_charset, check_s2_theme_contrast]
 
 
 def run(ctx):

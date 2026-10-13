@@ -735,6 +735,8 @@ class S210Theme(S2Case):
     THEMES = {
         'amber': [0xA1, 0xA6, 0xB1, 0x71, 0x31, 0xE1, 1,
                   0xA6, 0xA6, 0xB6, 0x6B, 0x66],      # THMAMBR
+        'green': [0x21, 0x1C, 0x31, 0x71, 0xB1, 0xE1, 1,
+                  0x1C, 0x1C, 0x13, 0x31, 0x33],      # THMGRN
         'light': [0x1F, 0x1E, 0x4F, 0xCF, 0x6F, 0xEF, 15,
                   0x1E, 0x1E, 0xF1, 0x1F, 0x11],      # THMLGHT
         'msx':   [0xF4, 0xF5, 0xB4, 0x74, 0x34, 0xE4, 4,
@@ -744,8 +746,8 @@ class S210Theme(S2Case):
     }
     # THEMEID, the same on both targets.  MSX and MONO share the initial, so
     # PARSTHM reads the second letter -- only these two variants see it.
-    IDS = {'amber': 1, 'light': 3, 'msx': 4, 'mono': 5}
-    variants = ('amber', 'light', 'msx', 'mono')
+    IDS = {'amber': 1, 'green': 2, 'light': 3, 'msx': 4, 'mono': 5}
+    variants = ('amber', 'green', 'light', 'msx', 'mono')
     LINES = ['THEME ON THIS LINE', 'SECOND LINE']
 
     def fixture(self, ctx, variant=None):
