@@ -245,6 +245,8 @@ In WRAP=TXT mode (see 6.4) moving right past the end of a line jumps to the star
 
 In overwrite mode ([OVR]) a typed character replaces the one under the cursor; at the end of the line it is appended as usual. Paste, RETURN, TAB, BS and DEL work the same in both modes. The editor always starts in insert mode.
 
+The cursor shows the mode: an underline while inserting, a block in overwrite mode. In the Vi profile it is a block in normal and visual mode, a thin bar between two characters in insert mode and an underline in replace mode.
+
 Deleting a selection, typing over it or pasting over it works as expected: the selected text is replaced (see 9).
 
 ### 6.3.- TABS
@@ -601,6 +603,8 @@ About...     (A)      Version and build information
 The browser shows the files of a directory as a grid (5x14 slots on S6ED, 4x12 on S61ED and S2ED), sorted: "..", then directories, then files, then drives, each group in alphabetical order. Hidden and system files are shown in a different style. The information line under the grid shows name, size (or <DIR>), date, time and attributes of the selected entry, plus the entry count (N+/MAX if the directory has more entries than the browser holds: 160 on S6ED and S61ED, 64 on S2ED).
 
 The starting directory is the current file's directory when known, or the current directory.
+
+Choosing a drive takes you back to the directory you left on it, otherwise to that drive's current directory, or to its root if that cannot be read. A drive that cannot be read at all (no disk) leaves the browser where it was.
 
 In the grid:
 

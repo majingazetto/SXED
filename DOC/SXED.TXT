@@ -322,6 +322,11 @@ one under the cursor; at the end of the line it is appended
 as usual. Paste, RETURN, TAB, BS and DEL work the same in
 both modes. The editor always starts in insert mode.
 
+The cursor shows the mode: an underline while inserting, a
+block in overwrite mode. In the Vi profile it is a block in
+normal and visual mode, a thin bar between two characters
+in insert mode and an underline in replace mode.
+
 Deleting a selection, typing over it or pasting over it works
 as expected: the selected text is replaced (see 9).
 
@@ -729,6 +734,11 @@ S61ED, 64 on S2ED).
 
 The starting directory is the current file's directory when
 known, or the current directory.
+
+Choosing a drive takes you back to the directory you left on
+it, otherwise to that drive's current directory, or to its
+root if that cannot be read. A drive that cannot be read at
+all (no disk) leaves the browser where it was.
 
 In the grid:
 
