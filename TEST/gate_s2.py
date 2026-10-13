@@ -20,7 +20,7 @@ import os
 import pattern
 from gate import (BRW_BYTES, H30NewDocument, H36BrowseSaveAs,
                   H43CursorShape, H44SelScroll, H45SelAllPage,
-                  asciiz)
+                  asciiz, brw_drives, full_ent_bytes)
 from cases import (Case, DEFAULT_CFG, HomePathCase, LongPathCase,
                    ShippedDiskCase, crlf, io_fixture, numbered)
 from harness import MACH_MSX1, Session
@@ -3053,7 +3053,7 @@ class S229BrowseMany(S2Case):
         t.snap('boot')
         t.press('O', mods=['CTRL'])
         t.wait(5.0)
-        t.snap('open', at='WINPOLL', bytes_=BRW_BYTES)
+        t.snap('open', at='WINPOLL', bytes_=full_ent_bytes(ctx))
         t.press('DOWN', repeat=14)
         t.wait(0.5)
         t.snap('down', at='WINPOLL', vram='patcol', bytes_=BRW_BYTES)
@@ -3090,6 +3090,9 @@ class S229BrowseMany(S2Case):
                   got[:3] == ['..\\', 'F000.TXT', 'F001.TXT'],
                   'the browser opens where the document is: %r %s'
                   % (asciiz(run, 'open', 'BRWPATH'), got[:3])),
+            Check('S2-29/drives', (brw_drives(run, 'open') or 0) >= 1,
+                  'the full listing still offers %s drive(s)'
+                  % brw_drives(run, 'open')),
             Check('S2-29/capacity',
                   b1('open', 'BRWCNT') == 64 and b1('open', 'BRWMORE') == 1
                   and info.rstrip().endswith('64+/64'),

@@ -691,6 +691,143 @@ CURDIR          PUSH    DE
                 RET
 
 
+; - BRWDRV -----------------------------
+; - THE FILE BROWSER CHANGES DRIVE: MAKE BRWPATH THE DIRECTORY TO LIST ON
+; - IT. IN ORDER: THE PATH LAST LEFT ON THAT DRIVE (BRWLST, ONE SLOT, SO
+; - GOING A -> B -> A RETURNS WHERE YOU WERE), ELSE ITS DOS CURRENT
+; - DIRECTORY, AND IF THAT CANNOT BE LISTED, ITS ROOT. IF NOT EVEN THE ROOT
+; - CAN (NO DISK), BRWPATH IS PUT BACK AND THE BROWSER STAYS WHERE IT WAS.
+; - IN:  A = DRIVE (1 = A:)
+; - OUT: CY = 0: BRWPATH CHANGED, RESCAN. CY = 1: BRWPATH UNCHANGED
+; - CLOBBERS: ALL
+; -
+; - IT LIVES IN PAGE 1 BECAUSE ALL THREE BROWSERS SHARE IT AND S2ED'S
+; - FEATURE CONTAINER HAS NO ROOM FOR IT. BEFORE IT (2026-10-13) THE
+; - BROWSER ASKED _GETCD ONLY AND, WHEN NEXTOR REFUSED IT ON ONE PARTITION
+; - OF A TWO-PARTITION SD, KEPT THE OLD PATH WHILE THE USER HAD PICKED THE
+; - OTHER DRIVE, AND THE LISTING NO LONGER MATCHED THE PATH IT SHOWED.
+; -
+
+BRWDRV          LD      C, A            ; C = DRIVE NUMBER
+                ADD     A, 'A' - 1
+                LD      B, A            ; B = LETTER
+                PUSH    BC
+                LD      HL, BRWPATH     ; THE PATH BEING LEFT, IN BRWOLD
+                LD      DE, BRWOLD
+                LD      BC, FNAMLEN
+                LDIR
+                POP     BC
+
+                ; 1. THE DIRECTORY LAST LEFT ON THIS DRIVE
+                LD      A, (BRWLST)
+                CP      B
+                JR      NZ, .DOSCD
+                PUSH    BC
+                LD      HL, BRWLST
+                LD      DE, BRWPATH
+                LD      BC, FNAMLEN
+                LDIR
+                POP     BC
+                JR      .TRY
+
+.DOSCD          ; 2. THE DRIVE'S DOS CURRENT DIRECTORY. CURDIR WRITES UP TO
+                ;    3 + 64 + 1 BYTES AND BRWPATH HOLDS FNAMLEN: STRAIGHT INTO
+                ;    BRWPATH IT RAN INTO BRWMASK, AND WITH THE MASK ZEROED NO
+                ;    FILE MATCHED -- A DRIVE CHANGE SHOWED ONLY DIRECTORIES.
+                ;    BRWNAME (FNAMLEN + HOMENAM) TAKES IT; A PATH TOO LONG FOR
+                ;    BRWPATH IS CUT AND TERMINATED, AND BRWDIRX REFUSES IT.
+                PUSH    BC
+                LD      A, C
+                LD      DE, BRWNAME
+                CALL    CURDIR
+                POP     BC
+                JR      C, .ROOT
+                PUSH    BC
+                LD      HL, BRWNAME
+                LD      DE, BRWPATH
+                LD      BC, FNAMLEN
+                LDIR
+                XOR     A
+                LD      (BRWPATH + FNAMLEN - 1), A
+                POP     BC
+.TRY            PUSH    BC
+                CALL    BRWDIRX
+                POP     BC
+                JR      NC, .DONE
+
+.ROOT           ; 3. THE ROOT
+                LD      HL, BRWPATH
+                LD      (HL), B
+                INC     HL
+                LD      (HL), ':'
+                INC     HL
+                LD      (HL), #5C       ; '\'
+                INC     HL
+                LD      (HL), 0
+                CALL    BRWDIRX
+                JR      NC, .DONE
+
+                ; 4. NOTHING READABLE: THE OLD PATH BACK
+                LD      HL, BRWOLD
+                LD      DE, BRWPATH
+                LD      BC, FNAMLEN
+                LDIR
+                SCF
+                RET
+
+.DONE           ; REMEMBER THE PATH LEFT BEHIND, UNLESS IT IS THIS SAME DRIVE
+                LD      A, (BRWPATH)
+                LD      HL, BRWOLD
+                CP      (HL)
+                RET     Z               ; SAME DRIVE: CY = 0 FROM THE CP
+                LD      DE, BRWLST
+                LD      BC, FNAMLEN
+                LDIR
+                OR      A               ; CY = 0
+                RET
+
+
+; - BRWDIRX ----------------------------
+; - CAN BRWPATH BE LISTED? _FFIRST ON "PATH*.*", APPENDED IN PLACE AND
+; - TAKEN OFF AGAIN. .NOFIL IS A DIRECTORY THAT IS THERE AND EMPTY (AN EMPTY
+; - ROOT); .NODIR, A DISK ERROR OR ANYTHING ELSE IS NOT LISTABLE, AND SO IS
+; - A PATH WITHOUT ROOM FOR THE "*.*" WITHIN FNAMLEN.
+; - IN:  NONE (USES BRWPATH)
+; - OUT: CY = 0 LISTABLE, CY = 1 NOT
+; - CLOBBERS: ALL
+; -
+
+BRWDIRX         LD      HL, BRWPATH
+                LD      BC, FNAMLEN
+                XOR     A
+                CPIR                    ; HL = ONE PAST THE NUL
+                SCF
+                RET     NZ              ; NO NUL WITHIN FNAMLEN
+                LD      A, C
+                CP      3
+                RET     C               ; NO ROOM FOR "*.*" (CY = 1)
+                DEC     HL
+                PUSH    HL              ; WHERE THE NUL GOES BACK
+                LD      (HL), '*'
+                INC     HL
+                LD      (HL), '.'
+                INC     HL
+                LD      (HL), '*'
+                INC     HL
+                LD      (HL), 0
+                LD      DE, BRWPATH
+                LD      B, ATR_ALL
+                LD      IX, BRWFIB
+                LD      C, _FFIRST
+                CALL    BDOS
+                POP     HL
+                LD      (HL), 0         ; THE PATH AS IT WAS (LD KEEPS FLAGS)
+                RET     NC              ; SOMETHING FOUND
+                CP      ENOFIL
+                RET     Z               ; EMPTY BUT THERE (CY = 0 FROM THE CP)
+                SCF
+                RET
+
 ; - HOMEFN -----------------------------
 ; - BUILD THE HOME-DIRECTORY PATH OF A PROGRAM FILE
 ; - IN:  HL = BARE 8.3 NAME (ASCIIZ, AT MOST HOMENAM BYTES)

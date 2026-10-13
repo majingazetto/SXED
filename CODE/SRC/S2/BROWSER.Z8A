@@ -355,20 +355,9 @@ DOBRW           XOR     A
 
 .DRIVE          LD      A, (HL)         ; THE LETTER
                 SUB     'A' - 1         ; 1 = A:
-                PUSH    AF
-                LD      HL, BRWPATH     ; KEEP THE PATH, IN CASE THE DRIVE
-                LD      DE, BRWNAME     ; CANNOT BE READ
-                LD      BC, FNAMLEN
-                LDIR
-                POP     AF
-                LD      DE, BRWPATH
-                CALL    CURDIR
-                JP      NC, .RESCAN
-                LD      HL, BRWNAME
-                LD      DE, BRWPATH
-                LD      BC, FNAMLEN
-                LDIR
-                JP      .KEYLP
+                CALL    BRWDRV          ; PAGE 1: WHERE YOU LEFT IT, THE DOS
+                JP      NC, .RESCAN     ; CURRENT DIRECTORY, OR THE ROOT
+                JP      .KEYLP          ; NOTHING READABLE: STAY PUT
 
                 ; --- RETURN IN THE FIELD, OR THE OPEN / SAVE BUTTON
 .ACCEPT         LD      A, (INPLEN)

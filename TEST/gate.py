@@ -5274,6 +5274,24 @@ def brw_listing(run, label):
     return out
 
 
+def brw_drives(run, label):
+    """How many drive entries the listing holds, from a full capture of
+    BRWENT (FULL_ENT_BYTES) -- the drives are filed after every name, past
+    the 32 entries BRW_BYTES reads."""
+    sn = run.snaps.get(label, {})
+    ent, cnt = sn.get('BRWENT'), sn.get('BRWCNT')
+    if ent is None or cnt is None:
+        return None
+    return sum(1 for n in range(cnt[0])
+               if (n + 1) * BRWESZ <= len(ent) and ent[n * BRWESZ + 11] & 0x40)
+
+
+def full_ent_bytes(ctx):
+    """BRW_BYTES with BRWENT widened to the target's whole BRWMAX."""
+    n = ctx.sym['BRWMAX'] * BRWESZ
+    return [(k, n if k == 'BRWENT' else v) for k, v in BRW_BYTES]
+
+
 class H34BrowseOpen(Case):
     name = 'H34-browse-open'
     desc = ('File > Open, Ctrl+O and :e: the browser lists, navigates into '
@@ -5555,7 +5573,7 @@ class H35BrowseMany(Case):
         # floppy, 23 ms per _FNEXT. Keys pressed while the Disk ROM reads
         # with interrupts off are never seen, so the timeline waits.
         t.wait(8.0)
-        t.snap('open', at='WINPOLL', bytes_=BRW_BYTES)
+        t.snap('open', at='WINPOLL', bytes_=full_ent_bytes(ctx))
         t.press('DOWN', repeat=20)
         t.wait(0.5)
         t.snap('down', at='WINPOLL', vram='screen', bytes_=BRW_BYTES)
@@ -5611,6 +5629,12 @@ class H35BrowseMany(Case):
                   'BRWCNT %s, BRWMORE %s, count %r'
                   % (b1('open', 'BRWCNT'), b1('open', 'BRWMORE'),
                      info.rstrip()[-10:])),
+            # A full listing used to have no room left for the drives,
+            # filed last: no way to another drive (2026-10-13). BRWSCAN now
+            # keeps a slot per drive while it walks the directory.
+            Check('H35/drives', (brw_drives(run, 'open') or 0) >= 1,
+                  'the full listing still offers %s drive(s)'
+                  % brw_drives(run, 'open')),
             Check('H35/scroll-down',
                   b1('down', 'BRWSEL') == 100 and b1('down', 'BRWTOP') == 7
                   and bar == vram.COL_HI,
@@ -8273,6 +8297,106 @@ class H45SelAllPage(Case):
         return checks
 
 
+# --- H46  THE BROWSER CHANGES DRIVE ---------------------------------------
+
+
+class H46DriveSwitch(Case):
+    name = 'H46-drive-switch'
+    desc = ('picking another drive in the browser lands where you left it, '
+            'else in its DOS current directory, else its root; a drive '
+            'that cannot be read leaves the browser where it was')
+    origin = ('2026-10-13, v0.3: .DRIVE asked _GETCD only and, when it '
+              'failed (Nextor, the FAT12 partition of a two-partition SD), '
+              'put the old path back -- the user had picked the other '
+              'drive and the listing no longer matched the path. BRWDRV '
+              '(page 1, shared) now remembers the path left behind, falls '
+              'back to the root and only stays put when nothing reads.')
+    machine = MACH_2MB                  # two floppy drives
+    TAG = 'H46'
+    BB = [('BRWPATH', 16), ('BRWLST', 16), ('BRWMASK', 4), ('BRWCNT', 1)]
+    # (label, key that jumps to the entry, BRWPATH after RETURN)
+    WALK = (('insub', None, 'A:\\SUB\\'), ('onb', 'B', 'B:\\'),
+            ('inx', 'X', 'B:\\XDIR\\'), ('backa', 'A', 'A:\\SUB\\'),
+            ('backb', 'B', 'B:\\XDIR\\'), ('toa', 'A', 'A:\\SUB\\'))
+
+    def fixture(self, ctx, variant=None):
+        return crlf(['DOC'])
+
+    def disk_files(self, ctx, variant=None):
+        files = Case.disk_files(self, ctx, variant)
+        files['SUB\\NOTE.TXT'] = b'N\r\n'
+        return files
+
+    def extra_disks(self, ctx, variant=None):
+        # No name on either disk starts with A or B, so those letters jump
+        # straight to the drive entries.  B2 lacks XDIR: the remembered
+        # path is gone after the swap and the root must be taken instead.
+        return {'B': {'XDIR\\Y.TXT': b'Y\r\n', 'Q.TXT': b'Q\r\n'},
+                'B2': {'Q.TXT': b'Q\r\n'}}
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.press('O', mods=['CTRL'])
+        t.wait(1.0)
+        t.snap('open', at='WINPOLL', bytes_=self.BB)
+        for label, key, _ in self.WALK:
+            if key:                     # 'insub': SUB is entry 0 at the root
+                t.press(key)
+                t.wait(0.4)
+            t.press('RETURN')
+            t.wait(3.0)
+            t.snap(label, at='WINPOLL', bytes_=self.BB)
+        t.at('diskb eject')             # B: empty: nothing to read
+        t.wait(0.5)
+        t.press('B')
+        t.wait(0.4)
+        t.press('RETURN')
+        t.wait(4.0)
+        t.snap('nodisk', at='WINPOLL', bytes_=self.BB)
+        t.at('diskb $OUT/B2.DSK')       # a disk without the remembered XDIR
+        t.wait(0.5)
+        t.press('B')
+        t.wait(0.4)
+        t.press('RETURN')
+        t.wait(4.0)
+        t.snap('swapped', at='WINPOLL', bytes_=self.BB)
+        t.press('ESC')
+        t.wait(1.0)
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        def path(label):
+            raw = run.snaps.get(label, {}).get('BRWPATH') or []
+            return bytes(raw).split(b'\0')[0].decode('latin-1')
+        checks = []
+        steps = [(l, w) for l, _, w in self.WALK] + [('nodisk', 'A:\\SUB\\'),
+                                                     ('swapped', 'B:\\')]
+        for label, want in steps:
+            got = path(label)
+            ok = got == want and run.var(label, 'WINACTV') == 1
+            checks.append(Check('%s/%s' % (self.TAG, label), ok,
+                                'BRWPATH %r, browser still open' % got if ok
+                                else 'BRWPATH %r (want %r), WINACTV %s'
+                                % (got, want, run.var(label, 'WINACTV'))))
+        # CURDIR writes up to 68 bytes; straight into BRWPATH it zeroed the
+        # head of BRWMASK and a drive change listed directories only.
+        bad = [l for l, _ in steps
+               if bytes(run.snaps.get(l, {}).get('BRWMASK') or []) != b'*.*\0']
+        checks.append(Check('%s/mask' % self.TAG, not bad,
+                            'the file mask is "*.*" after every drive change'
+                            if not bad else 'mask lost at %s' % bad))
+        # B:\ holds XDIR, Q.TXT and the DOS 2 system files, plus two drives:
+        # directories and drives alone are 3 entries.
+        cnt = (run.snaps.get('onb', {}).get('BRWCNT') or [0])[0]
+        checks.append(Check('%s/files' % self.TAG, cnt >= 5,
+                            'B:\\ lists its files too (%d entries)' % cnt
+                            if cnt >= 5 else
+                            'B:\\ lists %d entries: directories only' % cnt))
+        return checks
+
+
 CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G6Hooks(),
          G7Selection(), G8Config(), G9Directory(), G10Autoalign(), G11Paste(),
          G12ScreenRestore(), G13FeatureResidency(), H1Help(), H2HelpQuestion(), H3HelpFile(), H4FileSwitch(), H5Verbose(), H6DatMissing(), H7AboutDialog(),
@@ -8285,7 +8409,7 @@ CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G
          H32SaveNoName(), H33LongPath(), H34BrowseOpen(),
          H35BrowseMany(), H36BrowseSaveAs(), H37Settings(), H38DiskError(), H39DatForeign(),
          H40LoadProgress(), H41BrowseBusy(), H42IoBlocks(), H43CursorShape(),
-         H44SelScroll(), H45SelAllPage(),
+         H44SelScroll(), H45SelAllPage(), H46DriveSwitch(),
          R1FreeListCompact(), R2LinewrtOom(), R3UndoCompactIX(), R4UndoLongLine(),
          K1WqSaveFailed(), K2LoadDiskError(), K3SaveCloseError(),
          P1ReflowBoundary(), P2DeleteLastRow0(), P3ReplaceAllUndo(),

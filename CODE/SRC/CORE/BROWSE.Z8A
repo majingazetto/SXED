@@ -135,15 +135,18 @@ BRWCMP          CALL    BRWCAT
 
 
 ; - BRWFREE ----------------------------
-; - THE NEXT FREE ENTRY, OR NONE WHEN THE LISTING IS FULL
+; - THE NEXT FREE ENTRY, OR NONE WHEN THE LISTING IS FULL (BRWLIM: BRWSCAN
+; - KEEPS THE LAST SLOTS FOR THE DRIVES WHILE IT WALKS THE DIRECTORY)
 ; - IN:  NONE
 ; - OUT: CY = 0: HL = FREE ENTRY, ITS 11 NAME BYTES ALREADY SPACES AND
 ; -      THE REST ZERO. CY = 1: FULL (BRWMORE SET)
 ; - CLOBBERS: AF, B, DE
 ; -
 
-BRWFREE         LD      A, (BRWCNT)
-                CP      BRWMAX
+BRWFREE         LD      A, (BRWLIM)
+                LD      B, A
+                LD      A, (BRWCNT)
+                CP      B
                 JR      C, .ROOM
                 LD      A, 1
                 LD      (BRWMORE), A
@@ -440,7 +443,23 @@ BRWROOT         LD      A, (BRWPATH + 3)
 ; - CLOBBERS: ALL
 ; -
 
-BRWSCAN         XOR     A
+BRWSCAN         ; ONE SLOT KEPT FOR EVERY DRIVE: THEY GO IN LAST, AND A
+                ; DIRECTORY THAT FILLED BRWMAX USED TO LEAVE NO WAY TO ANOTHER
+                ; DRIVE (A ROOT WITH MANY FILES, 2026-10-13). _LOGIN GOES
+                ; STRAIGHT TO DOS: THE VECTOR IS IN HL, NOTHING IN A.
+                LD      C, _LOGIN
+                CALL    DOS
+                LD      A, L
+                LD      B, BRWMAX
+.DRVCNT         OR      A
+                JR      Z, .DRVLIM
+                SRL     A
+                JR      NC, .DRVCNT
+                DEC     B
+                JR      .DRVCNT
+.DRVLIM         LD      A, B
+                LD      (BRWLIM), A
+                XOR     A
                 LD      (BRWCNT), A
                 LD      (BRWMORE), A
                 LD      (BRWSEL), A
@@ -482,8 +501,10 @@ BRWSCAN         XOR     A
                 LD      C, _DSKCHK
                 CALL    BDOS
 
-                ; DRIVES. _LOGIN RETURNS THE VECTOR IN HL AND NOTHING IN A,
-                ; SO IT GOES STRAIGHT TO DOS, NOT THROUGH THE BDOS WRAPPER.
+                ; DRIVES, INTO THE SLOTS KEPT FOR THEM. _LOGIN RETURNS THE
+                ; VECTOR IN HL AND NOTHING IN A, SO IT GOES STRAIGHT TO DOS.
+                LD      A, BRWMAX
+                LD      (BRWLIM), A
                 LD      C, _LOGIN
                 CALL    DOS
                 LD      C, L
