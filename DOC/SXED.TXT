@@ -1,5 +1,5 @@
 -------------------------------------------------------------
-SXED Screen X Text Editor v0.2 (2026-10-13)
+SXED Screen X Text Editor v0.3 (2026-10-13)
 2024 - 2026 Armando Pérez Abad
 
 S6ED  - Screen 6 text editor for MSX2, 80 columns

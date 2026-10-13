@@ -1,6 +1,6 @@
 # SXED User Manual & Reference Guide
 
-**SXED Screen X Text Editor v0.2 (2026-10-13)**  
+**SXED Screen X Text Editor v0.3 (2026-10-13)**  
 *(c) 2024 - 2026 Armando Pérez Abad*  
 *Fonts by Miguel A. Fernandez*
 

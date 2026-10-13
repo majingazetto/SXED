@@ -475,8 +475,15 @@ DOBRW           XOR     A
 
 
                 ; .INITP: BRWPATH = THE DIRECTORY OF FILENAME WHEN IT IS A
-                ; WHOLE PATH ("D:\..."), ELSE THE CURRENT DIRECTORY
-.INITP          LD      A, (FILENAME + 1)
+                ; WHOLE PATH ("D:\..."), ELSE THE CURRENT DIRECTORY.
+                ; AN EMPTY FILENAME MUST BE TESTED FIRST: NEW AND A REFUSED
+                ; LOAD CLEAR ONLY ITS FIRST BYTE, SO THE DRIVE AND '\' OF THE
+                ; PREVIOUS PATH SURVIVE PAST THE TERMINATOR, FNBASE RETURNS
+                ; FILENAME ITSELF AND THE LDIR BELOW RUNS WITH BC = 0 (64 KB)
+.INITP          LD      A, (FILENAME)
+                OR      A
+                JR      Z, .CWD         ; NO DOCUMENT NAME
+                LD      A, (FILENAME + 1)
                 CP      ':'
                 JR      NZ, .CWD
                 LD      A, (FILENAME + 2)

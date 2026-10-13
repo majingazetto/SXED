@@ -737,10 +737,12 @@ MUTATIONS = [
         'why': 'the browser always starts in the current directory, not in '
                'the one the document came from',
         'file': 'BROWSER.Z8A',
-        'old': """.INITP          LD      A, (FILENAME + 1)
+        'old': """                JR      Z, .CWD         ; NO DOCUMENT NAME
+                LD      A, (FILENAME + 1)
                 CP      ':'
                 JR      NZ, .CWD""",
-        'new': """.INITP          LD      A, (FILENAME + 1)
+        'new': """                JR      Z, .CWD         ; NO DOCUMENT NAME
+                LD      A, (FILENAME + 1)
                 CP      ':'
                 JR      .CWD            ; MUTATION""",
         'filter': 'H35',
@@ -4078,6 +4080,41 @@ SELTMPXB        EQU     SELTMPXB2""")],
                 JR      Z, .CANCEL      ; MUTATION: CANCEL INSTEAD OF REOPEN""",
         'filter': 'S2-30',
         'expect_any': ['S2-30/overwrite-no/reopened', 'S2-30-browse-saveas'],
+    },
+    {
+        'name': 'f4-new-initp',
+        'why': 'the browser trusts FILENAME + 1 / + 2 on an empty name: after '
+               'Open + New, Save As LDIRs the directory with BC = 0 and hangs',
+        'file': 'BROWSER.Z8A',
+        'old': "                JR      Z, .CWD         ; NO DOCUMENT NAME",
+        'new': "                JR      NZ, $ + 2       ; MUTATION: NO GUARD",
+        'filter': 'H36',
+        # the hang never returns to MAINLOOP, so it may also kill the session
+        'expect_any': ['H36/after-open/saved', 'H36-browse-saveas'],
+    },
+    {
+        'name': 's2-f4-new-initp',
+        'target': 'S2ED',
+        'why': 'the browser trusts FILENAME + 1 / + 2 on an empty name: after '
+               'Open + New, Save As LDIRs the directory with BC = 0 and hangs',
+        'file': 'BROWSER.Z8A',
+        'old': "                JR      Z, .CWD         ; NO DOCUMENT NAME",
+        'new': "                JR      NZ, $ + 2       ; MUTATION: NO GUARD",
+        'filter': 'S2-30',
+        # the hang never returns to MAINLOOP, so it may also kill the session
+        'expect_any': ['S2-30/after-open/saved', 'S2-30-browse-saveas'],
+    },
+    {
+        'name': 's61-f4-new-initp',
+        'target': 'S61ED',
+        'why': 'the browser trusts FILENAME + 1 / + 2 on an empty name: after '
+               'Open + New, Save As LDIRs the directory with BC = 0 and hangs',
+        'file': 'S61/BROWSER.Z8A',
+        'old': "                JR      Z, .CWD         ; NO DOCUMENT NAME",
+        'new': "                JR      NZ, $ + 2       ; MUTATION: NO GUARD",
+        'filter': 'S62-11',
+        # the hang never returns to MAINLOOP, so it may also kill the session
+        'expect_any': ['S62-11/after-open/saved', 'S62-11-saveas-after-open'],
     },
 ]
 

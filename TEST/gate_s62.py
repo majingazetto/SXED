@@ -13,7 +13,7 @@ import os
 
 import screen62
 from cases import Case, ShippedDiskCase, crlf, numbered
-from gate import asciiz
+from gate import H36BrowseSaveAs, asciiz
 from harness import MACH_128K, MACH_2MB
 from keys import Timeline
 from result import Check
@@ -497,9 +497,25 @@ class S6210ShippedDisk(ShippedDiskCase):
         return self.shipped_checks(ctx, runs, 'S62-10', Check)
 
 
+# --- S62-11  SAVE AS AFTER NEW, ON A DOCUMENT OPENED BY PATH -------------
+
+
+class S6211SaveAsAfterOpen(H36BrowseSaveAs):
+    name = 'S62-11-saveas-after-open'
+    desc = ('Open through the browser, New, type, Save As: the browser starts '
+            'in the current directory and the file is written')
+    origin = ('2026-10-13: New cleared only FILENAME[0], .INITP read the old '
+              '"A:\\" past the terminator and LDIR ran with BC = 0 -- the '
+              'machine hung on all three targets')
+    machine = MACH_128K
+    cfg = S62_CFG
+    variants = ('after-open',)
+    TAG = 'S62-11'
+
+
 CASES = [S621Render(), S622Edit(), S623Scroll(), S624HScroll(),
          S625Windows(), S626Browse(), S627DatForeign(), S628LoadProgress(),
-         S629BrowseBusy(), S6210ShippedDisk()]
+         S629BrowseBusy(), S6210ShippedDisk(), S6211SaveAsAfterOpen()]
 
 
 def run(ctx, cases=None):

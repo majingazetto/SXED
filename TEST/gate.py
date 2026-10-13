@@ -5620,7 +5620,8 @@ class H36BrowseSaveAs(Case):
             'overwrites on YES, and routes Ctrl+S on untitled document')
     origin = ('F4 of the file browser spec: Save As on both targets with '
               'overwrite confirmation and reopen on No')
-    variants = ('new', 'sub', 'overwrite-no', 'overwrite-yes', 'untitled', 'menu')
+    variants = ('new', 'sub', 'overwrite-no', 'overwrite-yes', 'untitled', 'menu',
+                'after-open')
     TAG = 'H36'
     FIXTURE = crlf(['LINE 1', 'LINE 2', 'LINE 3'])
     EXISTING = b'ORIGINAL\r\n'
@@ -5639,6 +5640,33 @@ class H36BrowseSaveAs(Case):
         t = Timeline()
         t.snap('boot')
         b = self.BRW_BYTES
+        if variant == 'after-open':
+            # Open through the browser, so FILENAME holds a whole path
+            # ("A:\\EXIST.TXT"); New then clears only its first byte, and
+            # Save As used to read the stale "A:\\" past the terminator and
+            # LDIR the directory with BC = 0 -- 64 KB over the machine.
+            t.press('O', mods=['CTRL'])
+            t.wait(1.0)
+            t.press('TAB')
+            t.wait(0.3)
+            t.press('BS', repeat=12)
+            t.text('EXIST.TXT')
+            t.press('RETURN')
+            t.wait(2.0)
+            t.snap('opened', bytes_=b)
+            t.press('N', mods=['CTRL'])
+            t.wait(0.5)
+            t.text('X')
+            t.wait(0.5)
+            t.press('S', mods=['CTRL', 'SHIFT'])
+            t.wait(0.5)
+            t.snap('open', at='WINPOLL', bytes_=b)
+            t.press('BS', repeat=12)
+            t.text('NEWDOC.TXT')
+            t.press('RETURN')
+            t.wait(2.0)
+            t.snap('done', bytes_=b)
+            return t
         if variant == 'untitled':
             t.press('N', mods=['CTRL'])
             t.wait(0.5)
@@ -5708,6 +5736,21 @@ class H36BrowseSaveAs(Case):
 
         for variant, run in sorted(runs.items()):
             v = '%s/%s' % (self.TAG, variant)
+            if variant == 'after-open':
+                opened = asciiz(run, 'opened', 'FILENAME') or ''
+                got = run.session.extract(run.dsk, 'NEWDOC.TXT')
+                orig = run.session.extract(run.dsk, 'EXIST.TXT')
+                fn = asciiz(run, 'done', 'FILENAME') or ''
+                checks.append(Check('%s/opened' % v,
+                                    opened.endswith(':\\EXIST.TXT'),
+                                    'browser left a whole path: %r' % opened))
+                checks.append(Check('%s/saved' % v,
+                                    run.var('done', 'WINACTV') == 0 and
+                                    fn.endswith('NEWDOC.TXT') and
+                                    got == b'X\r\n' and orig == self.EXISTING,
+                                    'New + Save As after Open: NEWDOC.TXT %r, '
+                                    'EXIST.TXT intact %s' % (got, orig == self.EXISTING)))
+                continue
             if variant in ('untitled', 'menu'):
                 checks.append(Check('%s/open' % v,
                                     b1(run, 'open', 'BRWMODE') == 1 and
