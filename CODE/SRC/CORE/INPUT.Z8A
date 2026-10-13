@@ -100,7 +100,11 @@ MAINLOOP        ; CHECK CLOCK / COLON UPDATE
 .DRAWCUR        ; STATUS BAR FOLLOWS THE KEY (LN / COL / FLAGS), THEN THE CURSOR
                 CALL    ADJLCOL
                 JR      NC, .NOSCRL
+                LD      A, (SELACT)     ; A SELECTION COMES BACK IN THE SAME
+                LD      (SELREDR), A    ; PASS, NOT LAID OVER THE PLAIN PAGE
                 CALL    REDRAW
+                XOR     A
+                LD      (SELREDR), A
                 LD      A, (SELACT)
                 OR      A
                 CALL    NZ, SELPOST

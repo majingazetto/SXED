@@ -26,15 +26,17 @@
 REDRAW          CALL    ADJLCOL
                 XOR     A
                 LD      (SELDRAWN), A
+                CALL    REDRSB          ; SELREDR: NORMALISE THE SELECTION
                 LD      B, TXRFIRST
 .RDLP           PUSH    BC
                 CALL    RENDEROW
                 POP     BC
+                CALL    REDRSEL         ; SELREDR: XOR THIS ROW'S EXTENT
                 INC     B
                 LD      A, B
                 CP      TXRLAST + 1
                 JR      NZ, .RDLP
-                RET
+                JP      REDRSE          ; SELREDR: RECORD WHAT WAS PAINTED
 
 
 
