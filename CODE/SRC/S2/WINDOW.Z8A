@@ -338,7 +338,12 @@ WRSTOR          LD      HL, WSVBUF
 ; - IN INK, SO THEY READ AS LIGHT LINES. THE TITLE CUTS THE TOP EDGE:
 ; - ITS CELLS ARE CLEARED BEFORE THE TEXT GOES IN, AND A SEPARATOR LINE
 ; - CLOSES THE BAR ALONG SCANLINE 7 OF THAT ROW.
-; - IN:  HL = ASCIIZ TITLE STRING (0 = NONE)
+; - NO TITLE IS A DROPDOWN: NO TITLE BAR AND NO SEPARATOR, SO THE TOP ROW
+; - IS BODY AND KEEPS ONLY THE TOP EDGE, WHICH CLOSES THE WINDOW UNDER THE
+; - MENU BAR AS S6ED'S FRAME DOES. THE EDGE CANNOT SHARE A ROW WITH AN
+; - ITEM: THE 4X8 CAPITALS USE SCANLINE 0. THE MENU TITLE IS ALREADY
+; - HIGHLIGHTED IN ROW 0; REPEATING IT HERE READ AS AN UNREACHABLE ITEM.
+; - IN:  HL = ASCIIZ TITLE STRING (0 = NONE: A DROPDOWN)
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; -
@@ -367,9 +372,16 @@ WBOX            PUSH    HL              ; TITLE
                 ADD     HL, DE
                 LD      A, (WINR)
                 CP      B               ; B IS STILL THE ROW HERE
-                LD      A, (VCOLWIN)
+                JR      NZ, .CBODY
+                POP     DE              ; DE = THE LOOP'S BC
+                EX      (SP), HL        ; HL = TITLE
+                LD      A, H
+                OR      L
+                EX      (SP), HL
+                PUSH    DE
+                LD      A, (VCOLHI)     ; TOP ROW: TITLE BAR...
                 JR      NZ, .CFILS
-                LD      A, (VCOLHI)     ; TOP ROW: TITLE BAR
+.CBODY          LD      A, (VCOLWIN)    ; ...UNLESS A DROPDOWN
 .CFILS          LD      C, A            ; HOLD IT WHILE B TAKES WINNC
                 LD      A, (WINNC)
                 LD      B, A
@@ -491,7 +503,7 @@ WBOX            PUSH    HL              ; TITLE
                 POP     HL              ; TITLE
                 LD      A, H
                 OR      L
-                JR      Z, .SEP         ; NO TITLE, BUT STILL A TITLE BAR
+                RET     Z               ; A DROPDOWN: NO BAR TO CLOSE
                 PUSH    HL
                 ; SPAN: THE TITLE STARTS AT CHAR COLUMN (WINC+1)*2 AND
                 ; WINPUTS CLIPS IT AT WINCLIM (OR THE RIGHT SCREEN EDGE

@@ -24,8 +24,11 @@
 ;     COMMAND ENGINE TO SUB-BLIT ONE ROW WITH, AND THE CONTAINER IS THE SCARCE
 ;     RESOURCE HERE, NOT THE MILLISECONDS.
 ;
-; THE DROPDOWN CARRIES THE MENU'S NAME IN ITS TITLE BAR. WBOX PAINTS THAT ROW
-; FOR EVERY WINDOW, SO USING IT COSTS NOTHING AND LEAVES WBOX UNTOUCHED.
+; THE DROPDOWN HAS NO TITLE BAR, AS ON S6ED AND S61ED: ITS TITLE IS ALREADY
+; HIGHLIGHTED IN ROW 0. WBOX WITH NO TITLE LEAVES THE TOP ROW AS BODY WITH
+; ONLY THE TOP EDGE, WHICH CLOSES THE WINDOW UNDER THE BAR; THE ITEMS START
+; ONE ROW BELOW, BECAUSE THE 4X8 CAPITALS USE SCANLINE 0. IT USED TO REPEAT
+; THE NAME THERE, WHICH READ AS A FIRST ITEM THAT COULD NOT BE REACHED.
 ;
 ; ALL OF THIS RUNS PHASED IN FTRBASE (PAGE 2) VIA FCALL, SO IT MUST NEVER BANK.
 
@@ -190,18 +193,11 @@ DOMNU           LD      A, (MNUID)
                 ; "  S2ED | File  Edit  Help"
 .TITX           DEFB    #09, #04, #0F, #04, #15, #04
 
-                ; DROPDOWN TITLES, ONE POINTER PER MENU
-.TITP           DEFW    .T0, .T1, .T2
-
-.T0             DEFM    "File", 0
-.T1             DEFM    "Edit", 0
-.T2             DEFM    "Help", 0
-
                 ; 8 BYTES PER MENU RECORD:
                 ; [WINC(1B), WINNC(1B), WINNR(1B), ITEMCNT(1B),
                 ;  PTR_STBL(2B), PTR_ACCL(2B)]
                 ;
-                ; WINNR IS ITEMCNT + 2: THE TITLE BAR ROW AND THE BOTTOM
+                ; WINNR IS ITEMCNT + 2: THE TOP EDGE ROW AND THE BOTTOM
                 ; BORDER ROW. WINNC IS 12 FOR EVERY MENU BECAUSE THE SAVE
                 ; BUFFER BINDS THE WIDEST ONE: EDIT HAS 10 ITEMS, SO WITH THE
                 ; SHADOW MARGIN IT SAVES 13 X 13 CELLS AND WSVMAX / 9 IS 170.
@@ -334,21 +330,12 @@ MNULOAD         LD      A, (MNUID)
 
 ; - MNUOPEN ----------------------------
 ; - OPEN THE ACTIVE MENU'S WINDOW, PAINT ITS ITEMS AND PUSH IT TO VRAM
-; - IN:  NONE (USES MNUID AND THE GEOMETRY MNULOAD SET)
+; - IN:  NONE (USES THE GEOMETRY MNULOAD SET)
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; -
 
-MNUOPEN         LD      A, (MNUID)
-                ADD     A, A
-                LD      E, A
-                LD      D, 0
-                LD      HL, DOMNU.TITP
-                ADD     HL, DE
-                LD      A, (HL)
-                INC     HL
-                LD      H, (HL)
-                LD      L, A            ; HL = DROPDOWN TITLE
+MNUOPEN         LD      HL, 0           ; NO TITLE: A DROPDOWN
                 CALL    WINOPEN
                 CALL    MNUDRAW
                 JP      WDUMP
@@ -450,7 +437,7 @@ MNUCHKS         PUSH    BC
 MNUPNT          PUSH    BC
                 LD      C, A            ; C = ITEM INDEX
                 LD      A, (WINR)
-                INC     A
+                INC     A               ; BELOW THE TOP EDGE ROW
                 ADD     A, C
                 LD      (MNUTMPY), A    ; SCREEN ROW OF THE ITEM
 

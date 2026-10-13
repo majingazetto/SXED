@@ -4136,6 +4136,34 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'filter': 'T0',
         'expect_static': ['s2-theme-contrast'],
     },
+    {
+        'name': 's2-menu-titlebar',
+        'target': 'S2ED',
+        'why': 'a dropdown gets the accent title bar back on its top row, '
+               'over the first item',
+        'file': 'WINDOW.Z8A',
+        'old': """                LD      A, (VCOLHI)     ; TOP ROW: TITLE BAR...
+                JR      NZ, .CFILS""",
+        'new': """                LD      A, (VCOLHI)     ; TOP ROW: TITLE BAR...
+                JR      .CFILS          ; MUTATION: EVEN WITH NO TITLE""",
+        'filter': 'S2-16',
+        'expect': ['S2-16/open/colour'],
+    },
+    {
+        'name': 's2-menu-topedge',
+        'target': 'S2ED',
+        'why': 'the top edge goes, and the dropdown no longer closes under '
+               'the menu bar',
+        'file': 'WINDOW.Z8A',
+        'old': """                LD      DE, 8
+                LD      A, #FF
+.TEDG           LD      (HL), A""",
+        'new': """                LD      DE, 8
+                XOR     A               ; MUTATION: NO TOP EDGE
+.TEDG           LD      (HL), A""",
+        'filter': 'S2-16',
+        'expect': ['S2-16/no-title-bar'],
+    },
 ]
 
 

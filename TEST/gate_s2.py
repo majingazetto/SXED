@@ -1576,9 +1576,8 @@ class S216Menu(S2Case):
                 for i in range(0, len(text), 2)]
 
     def want_colour(self, row, cell, sel):
-        """The role that owns one cell of the dropdown, in the DARK theme."""
-        if row == self.WINR:
-            return pattern.COLHI                    # title bar
+        """The role that owns one cell of the dropdown, in the DARK theme.
+        No title bar: the top row is body, the items start below it."""
         if self.C0 <= cell <= self.C1 and row == self.WINR + 1 + sel:
             return pattern.COLBSEL                  # the selected item: a bar
         return pattern.COLWIN
@@ -1640,21 +1639,26 @@ class S216Menu(S2Case):
                        self.WINC, self.WINC + self.WINNC)).items()
                    if v != {self.want_colour(r, c, sel)}]
             checks.append(Check('S2-16/%s/colour' % label, not bad,
-                                'body #%02X, title bar #%02X, selected item '
-                                '#%02X' % (pattern.COLWIN, pattern.COLHI,
-                                           pattern.COLBSEL)
+                                'body #%02X, selected item #%02X, no title '
+                                'bar' % (pattern.COLWIN, pattern.COLBSEL)
                                 if not bad else 'cells wrong: %s' % bad[:6]))
 
-        # The dropdown carries its menu's name in the title bar.  Scanline 7
-        # of the top row belongs to the separator, laid down after the text.
+        # No title bar, as on S6ED and S61ED: the title is already
+        # highlighted in row 0, and repeating it in the window read as a first
+        # item nobody could reach (2026-10-13).  The top row keeps only the
+        # top edge, which closes the window under the bar: corners, then a
+        # bare scanline 0 -- no text, no separator on scanline 7.
         trow = pattern.row_of(opened, self.WINR)
-        bad = [self.C0 + i
-               for i, want in enumerate(self.text_cells(fnt, 'File'))
-               if trow[(self.C0 + i) * 8:(self.C0 + i + 1) * 8]
-               != want[:7] + b'\xff']
-        checks.append(Check('S2-16/title-text', not bad,
-                            'the dropdown is titled "File"' if not bad else
-                            'title cells differ: %s' % bad))
+        rc = self.WINC + self.WINNC - 1
+        want = {self.WINC: b'\xff' + b'\xc0' * 7,
+                rc: b'\xff' + b'\x03' * 7}
+        bad = [c for c in range(self.WINC, rc + 1)
+               if trow[c * 8:(c + 1) * 8]
+               != want.get(c, b'\xff' + b'\x00' * 7)]
+        checks.append(Check('S2-16/no-title-bar', not bad,
+                            'top row is the top edge alone: no title, no '
+                            'separator' if not bad else
+                            'top-row cells differ: %s' % bad))
 
         # Item text, composed from the same RAM font the document uses.
         for item, text in ((0, 'New               ^N'),
