@@ -8072,7 +8072,12 @@ class H43CursorShape(Case):
         t.snap('insert', vram=self.VRAM)
         t.press('ESC')                          # back to normal: CURX - 1
         t.press('RIGHT')
-        t.press('R', mods=['SHIFT'], tail=0.05) # R: replace
+        t.press('R', mods=['SHIFT'])            # R: replace
+        # A chord ends MODLEAD + HOLD after its key-down, too close to the
+        # 0.3 s blink: LEFT + RIGHT brings the cursor back to the column
+        # with it guaranteed up (the S2-3 way)
+        t.press('LEFT')
+        t.press('RIGHT', tail=0.05)
         t.snap('replace', vram=self.VRAM)
         return t
 
@@ -8217,12 +8222,18 @@ class H45SelAllPage(Case):
     TAG = 'H45'
     VRAM = False
     LINES = ['LINE %02d %s' % (i, 'X' * (i % 30)) for i in range(60)]
-    STEPS = (('selall', 'A', ['CTRL']), ('spgu', 'UP', ['SHIFT', 'GRAPH']),
-             ('spgu2', 'UP', ['SHIFT', 'GRAPH']),
-             ('spgd', 'DOWN', ['SHIFT', 'GRAPH']),
-             ('spgd2', 'DOWN', ['SHIFT', 'GRAPH']), ('sup', 'UP', ['SHIFT']),
-             ('pgu', 'UP', ['GRAPH']), ('selall2', 'A', ['CTRL']),
-             ('pgd', 'DOWN', ['GRAPH']))
+    # (label, key, modifiers, presses).  'shrink' walks the cursor up from
+    # the last line across the top edge with everything selected: every
+    # scroll exposes a row INSIDE the painted range, which is the one case
+    # SELSCRL / SELEXPO have to repaint (extending outward never does).
+    STEPS = (('selall', 'A', ['CTRL'], 1), ('shrink', 'UP', ['SHIFT'], 26),
+             ('spgu', 'UP', ['SHIFT', 'GRAPH'], 1),
+             ('spgu2', 'UP', ['SHIFT', 'GRAPH'], 1),
+             ('spgd', 'DOWN', ['SHIFT', 'GRAPH'], 1),
+             ('spgd2', 'DOWN', ['SHIFT', 'GRAPH'], 1),
+             ('sup', 'UP', ['SHIFT'], 1),
+             ('pgu', 'UP', ['GRAPH'], 1), ('selall2', 'A', ['CTRL'], 1),
+             ('pgd', 'DOWN', ['GRAPH'], 1))
     ROWS = 24
 
     def fixture(self, ctx, variant=None):
@@ -8231,8 +8242,8 @@ class H45SelAllPage(Case):
     def timeline(self, ctx, variant=None):
         t = Timeline()
         t.snap('boot')
-        for label, key, mods in self.STEPS:
-            t.press(key, mods=mods)
+        for label, key, mods, n in self.STEPS:
+            t.press(key, mods=mods, repeat=n)
             t.wait(0.6)
             t.snap(label, vram=self.VRAM)
         return t
@@ -8245,7 +8256,7 @@ class H45SelAllPage(Case):
         run = one(runs)
         checks = []
         last = len(self.LINES) - 1
-        for label, _, _ in self.STEPS:
+        for label, _, _, _ in self.STEPS:
             v = {k: run.var(label, k)
                  for k in ('DOCLINE', 'TOPLINE', 'CURY', 'SELACT')}
             ok = (v['CURY'] is not None and 0 <= v['CURY'] < self.ROWS

@@ -1180,12 +1180,12 @@ MUTATIONS = [
                'deltas that cancel each other out',
         'target': 'S2ED',
         'file': 'RENDER.Z8A',
-        'old': """                LD      E, #F0
-                JR      Z, .PXHAVE
-                LD      E, #0F""",
-        'new': """                LD      E, #FF          ; MUTATION: WHOLE CELL
-                JR      Z, .PXHAVE
-                LD      E, #FF""",
+        'old': """                LD      A, #F0          ; EVEN COLUMN: HIGH NIBBLE
+                JR      Z, .HALF
+                LD      A, #0F          ; ODD COLUMN: LOW NIBBLE""",
+        'new': """                LD      A, #FF          ; MUTATION: WHOLE CELL
+                JR      Z, .HALF
+                LD      A, #FF""",
         'filter': 'S2-3',
         'expect': ['S2-3/one-column'],
     },
@@ -1358,10 +1358,8 @@ MUTATIONS = [
                'dialog is a patch of document and cannot be themed apart',
         'target': 'S2ED',
         'file': 'WINDOW.Z8A',
-        'old': """                LD      A, (VCOLWIN)
-                JR      NZ, .CFILS""",
-        'new': """                LD      A, (VCOLTXT)    ; MUTATION: BODY = DOCUMENT
-                JR      NZ, .CFILS""",
+        'old': """.CBODY          LD      A, (VCOLWIN)    ; ...UNLESS A DROPDOWN""",
+        'new': """.CBODY          LD      A, (VCOLTXT)    ; MUTATION: BODY = DOCUMENT""",
         'filter': 'S2-11',
         'expect': ['S2-11/window-colour'],
     },
@@ -1371,14 +1369,10 @@ MUTATIONS = [
                'band and the accent never reaches the screen',
         'target': 'S2ED',
         'file': 'WINDOW.Z8A',
-        'old': """                LD      A, (WINR)
-                CP      B               ; B IS STILL THE ROW HERE
-                LD      A, (VCOLWIN)
-                JR      NZ, .CFILS
-                LD      A, (VCOLHI)     ; TOP ROW: TITLE BAR
-.CFILS          LD      C, A            ; HOLD IT WHILE B TAKES WINNC""",
+        'old': """                LD      A, (VCOLHI)     ; TOP ROW: TITLE BAR...
+                JR      NZ, .CFILS""",
         'new': """                LD      A, (VCOLWIN)    ; MUTATION: NO TITLE BAR
-.CFILS          LD      C, A            ; HOLD IT WHILE B TAKES WINNC""",
+                JR      NZ, .CFILS""",
         'filter': 'S2-11',
         'expect': ['S2-11/window-colour'],
     },
@@ -2550,9 +2544,9 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'why': 'ACTSLMD does not advance row on selection',
         'file': 'ACTION.Z8A',
         'old': """ACTSLMD         CALL    SELBEG
-                LD      A, (CURY)""",
+                LD      HL, (TOPLINE)""",
         'new': """ACTSLMD         RET                     ; MUTATION: ACTSLMD NO-OP
-                LD      A, (CURY)""",
+                LD      HL, (TOPLINE)""",
         'filter': 'E3',
         'expect': ['E3/docline-advanced', 'E3/viewport-scrolled'],
     },
@@ -4228,58 +4222,6 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'expect': ['S62-12/std/ins', 'S62-12/vi/replace'],
     },
     {
-        'name': 'sel-scroll-down',
-        'why': 'the exposed row is not given the painted extent after the '
-               'scroll: SELDIFF then works from a screen that is not what '
-               'DRWSTRL says',
-        'file': 'ACTION.Z8A',
-        'old': """                CALL    ACTMVD
-                POP     DE              ; DE = TOPLINE BEFORE THE MOVE
-                CALL    SELSCRL         ; THE SCROLL KEPT THE OVERLAY: FIX THE""",
-        'new': """                CALL    ACTMVD
-                POP     DE              ; DE = TOPLINE BEFORE THE MOVE
-                NOP                     ; MUTATION: NO SELSCRL
-                NOP
-                NOP""",
-        'filter': 'H44',
-        'expect': ['H44/down/painted'],
-    },
-    {
-        'name': 'sel-scroll-up',
-        'why': 'the exposed row is not given the painted extent after the '
-               'scroll: SELDIFF then works from a screen that is not what '
-               'DRWSTRL says',
-        'file': 'ACTION.Z8A',
-        'old': """                CALL    ACTMVU
-                POP     DE              ; DE = TOPLINE BEFORE THE MOVE
-                CALL    SELSCRL         ; THE SCROLL KEPT THE OVERLAY: FIX THE""",
-        'new': """                CALL    ACTMVU
-                POP     DE              ; DE = TOPLINE BEFORE THE MOVE
-                NOP                     ; MUTATION: NO SELSCRL
-                NOP
-                NOP""",
-        'filter': 'H44',
-        'expect': ['H44/up/painted'],
-    },
-    {
-        'name': 's2-sel-scroll-down',
-        'target': 'S2ED',
-        'why': 'the exposed row is not given the painted extent after the '
-               'scroll: SELDIFF then works from a screen that is not what '
-               'DRWSTRL says',
-        'file': 'ACTION.Z8A',
-        'old': """                CALL    ACTMVD
-                POP     DE              ; DE = TOPLINE BEFORE THE MOVE
-                CALL    SELSCRL         ; THE SCROLL KEPT THE OVERLAY: FIX THE""",
-        'new': """                CALL    ACTMVD
-                POP     DE              ; DE = TOPLINE BEFORE THE MOVE
-                NOP                     ; MUTATION: NO SELSCRL
-                NOP
-                NOP""",
-        'filter': 'S2-51',
-        'expect': ['S2-51/down/painted'],
-    },
-    {
         'name': 'selall-setcury',
         'why': 'Ctrl+A places the cursor with SETCURY again: on a document '
                'longer than the screen CURY lands past the text band',
@@ -4308,6 +4250,24 @@ SELTMPXB        EQU     SELTMPXB2""")],
                 RET                     ; MUTATION: NEVER PAINTS""",
         'filter': 'S2-52',
         'expect': ['S2-52/selall', 'S2-52/spgu'],
+    },
+    {
+        'name': 's2-sel-scroll-shrink',
+        'target': 'S2ED',
+        'why': 'shrinking a selection up across the top edge leaves the row '
+               'the scroll exposed plain inside the painted range: SELDIFF '
+               'then works from a screen that is not what DRWSTRL says',
+        'file': 'ACTION.Z8A',
+        'old': """                CALL    ACTMVU
+                POP     DE              ; DE = TOPLINE BEFORE THE MOVE
+                CALL    SELSCRL         ; THE SCROLL KEPT THE OVERLAY: FIX THE""",
+        'new': """                CALL    ACTMVU
+                POP     DE              ; DE = TOPLINE BEFORE THE MOVE
+                NOP                     ; MUTATION: NO SELSCRL
+                NOP
+                NOP""",
+        'filter': 'S2-52',
+        'expect': ['S2-52/shrink'],
     },
 ]
 

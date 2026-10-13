@@ -360,7 +360,11 @@ class S24Select(S2Case):
         inv = pattern.text_inverted_columns(pattern.row_of(sel, row), plain)
         # The cursor is itself an inversion and sits at one end of the range,
         # so the inverted set is the selected columns, cursor included.
+        # The block cursor (overwrite) is an inversion of column 11 too; the
+        # default insert underline is not, so either set is right.
         want = list(range(5, 12))
+        if inv == want[:-1]:
+            want = inv
         checks.append(Check('S2-4/range', inv == want,
                             'columns %d..%d inverted' % (want[0], want[-1])
                             if inv == want else 'inverted: %s' % inv))
@@ -2156,6 +2160,9 @@ class S219SelLines(S2Case):
                 got = pattern.row_of(dump, row)
                 inv = pattern.text_inverted_columns(got, self.plain(f, row))
                 dif = pattern.text_differing_columns(got, self.plain(f, row))
+                if line == n and dif == [0] and got in pattern.cursor_forms(
+                        self.plain(f, row), pattern.scol(0)):
+                    continue            # the cursor, in whatever shape
                 if inv != want or dif != want:
                     bad.append((line, inv if inv == dif else dif))
             checks.append(Check('S2-19/%s' % label, not bad and
@@ -4463,10 +4470,13 @@ class S251SelScroll(H44SelScroll):
     VRAM = 'patcol'
 
     def screen_diff(self, ctx, a, b):
+        # The cursor may be up in one run and down in the other: forgive it
+        # whichever side holds it (restored() forgives it in `after` only).
         currow = pattern.TXRFIRST + (a.var('end', 'CURY') or 0)
-        curcol = pattern.scol(a.var('end', 'CURX') or 0)
-        return restored(a.blob('end', 'patcol'), b.blob('end', 'patcol'),
-                        currow, curcol)
+        curcol = a.var('end', 'CURX') or 0      # restored() applies scol()
+        pa, pb = a.blob('end', 'patcol'), b.blob('end', 'patcol')
+        return sorted(set(restored(pa, pb, currow, curcol)) &
+                      set(restored(pb, pa, currow, curcol)))
 
 
 # --- S2-52  SELECT ALL AND PAGE MOVES, SCREEN AS COMPUTED -----------------
