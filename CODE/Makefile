@@ -100,7 +100,7 @@ clean:
 	@$(RM) -R $(OUTPUT) $(DATFILE) $(LSTFILE) $(SYMFILE) $(DSKFILE) $(FNTFILE) \
 		$(OUTPUT_S2) $(DATFILE_S2) $(LSTFILE_S2) $(SYMFILE_S2) $(DSKFILE_S2) $(FNTFILE_S2) \
 		$(OUTPUT_S61) $(DATFILE_S61) $(LSTFILE_S61) $(SYMFILE_S61) $(DSKFILE_S61) $(FNTFILE_S61) \
-		$(MANUAL) $(FONTS61)
+		$(MANUAL) $(CHANGES) $(FONTS61)
 
 # `build` means the PROJECT, every target.  It used to mean S6ED alone while
 # `clean` removed the artefacts of both, so `make clean build` left the tree
@@ -155,6 +155,14 @@ UTF8MSX			= python3 ../tools/utf8msx.py
 $(MANUAL): $(MANUALSRC) ../tools/utf8msx.py
 	@$(UTF8MSX) $< $@
 
+# The version history goes the same way and sits next to the manual on every
+# disk, held to the same 61 columns and charset by the same T0 checks.
+CHANGESSRC		= ../DOC/CHANGES.TXT
+CHANGES			= CHANGES_MSX.TXT
+
+$(CHANGES): $(CHANGESSRC) ../tools/utf8msx.py
+	@$(UTF8MSX) $< $@
+
 # The release bundle, built here instead of by hand: v0.1's was put together
 # by hand and shipped the UTF-8 source as SXED.TXT, which an MSX shows as two
 # glyphs per accented letter (reported on a Japanese machine).  Two manuals
@@ -167,19 +175,20 @@ VERMINOR		:= $(shell sed -n "s/^\.MINOR.*'\(.\)'.*/\1/p" $(SRC_DIR)/CORE/CONST_C
 DISTZIP			= SXED-v$(VERMAJOR).$(VERMINOR).zip
 DISTBIN			= $(DSKTOOLS) $(FONTS61) $(DSKFILE) $(DSKFILE_S2) $(DSKFILE_S61)
 
-dist: $(DISTBIN) $(MANUAL)
+dist: $(DISTBIN) $(MANUAL) $(CHANGES)
 	@mkdir -p $(DISTDIR)
 	@cp $(DISTBIN) $(DISTDIR)/
 	@cp $(MANUAL) $(DISTDIR)/SXED.TXT
+	@cp $(CHANGES) $(DISTDIR)/CHANGES.TXT
 	@cp ../DOC/MANUAL.md $(DISTDIR)/MANUAL.md
 	@$(RM) $(DISTDIR)/$(DISTZIP)
-	@cd $(DISTDIR) && zip -q -X $(DISTZIP) $(notdir $(DISTBIN)) SXED.TXT MANUAL.md
+	@cd $(DISTDIR) && zip -q -X $(DISTZIP) $(notdir $(DISTBIN)) SXED.TXT CHANGES.TXT MANUAL.md
 	@echo "$(DISTDIR)/$(DISTZIP)"
 
 DSKTOOLS		= $(OUTPUT) $(DATFILE) $(FNTFILE) S6ED.CFG \
 			  $(OUTPUT_S2) $(DATFILE_S2) $(FNTFILE_S2) $(CFGFILE_S2) \
 			  $(OUTPUT_S61) $(DATFILE_S61) $(FNTFILE_S61) $(CFGFILE_S61)
-DSKCONT			= $(DSKTOOLS) $(MANUAL) TEST.TXT TEST_S2.TXT TEST_S61.TXT \
+DSKCONT			= $(DSKTOOLS) $(MANUAL) $(CHANGES) TEST.TXT TEST_S2.TXT TEST_S61.TXT \
 			  LOCAL_S6.CFG LOCAL_S2.CFG LOCAL_S61.CFG AUTOEXEC.BAT
 
 $(DSKFILE): $(DSKCONT) $(FONTS61) Makefile
@@ -187,7 +196,7 @@ $(DSKFILE): $(DSKCONT) $(FONTS61) Makefile
 	@$(DSKFAT) $(DSKFILE) add . AUTOEXEC.BAT
 	@$(DSKFAT) $(DSKFILE) add TOOLS $(DSKTOOLS)
 	@$(DSKFAT) $(DSKFILE) add TOOLS/FONTS $(FONTS61)
-	@$(DSKFAT) $(DSKFILE) add DEV $(MANUAL)=SXED.TXT TEST.TXT TEST_S2.TXT TEST_S61.TXT \
+	@$(DSKFAT) $(DSKFILE) add DEV $(MANUAL)=SXED.TXT $(CHANGES)=CHANGES.TXT TEST.TXT TEST_S2.TXT TEST_S61.TXT \
 		LOCAL_S6.CFG=S6ED.CFG LOCAL_S2.CFG=S2ED.CFG LOCAL_S61.CFG=S61ED.CFG
 
 # -	 S2 Targets --------------------------------------------------------------
@@ -217,11 +226,11 @@ DSKCONT_S2		= $(OUTPUT_S2) $(DATFILE_S2) $(FNTFILE_S2) $(CFGFILE_S2)
 # Same layout as the S6ED disk.  The S2 sample document talks about 64 columns
 # and Screen 2, so it goes in as \DEV\TEST.TXT, and the S2 AUTOEXEC as the
 # root AUTOEXEC.BAT: dskfat takes the on-disk name after the '='.
-$(DSKFILE_S2): $(DSKCONT_S2) $(MANUAL) TEST_S2.TXT AUTOEXEC_S2.BAT LOCAL_S2.CFG Makefile
+$(DSKFILE_S2): $(DSKCONT_S2) $(MANUAL) $(CHANGES) TEST_S2.TXT AUTOEXEC_S2.BAT LOCAL_S2.CFG Makefile
 	@cp $(DSKBASE) $(DSKFILE_S2)
 	@$(DSKFAT) $(DSKFILE_S2) add . AUTOEXEC_S2.BAT=AUTOEXEC.BAT
 	@$(DSKFAT) $(DSKFILE_S2) add TOOLS $(DSKCONT_S2)
-	@$(DSKFAT) $(DSKFILE_S2) add DEV $(MANUAL)=SXED.TXT TEST_S2.TXT=TEST.TXT LOCAL_S2.CFG=S2ED.CFG
+	@$(DSKFAT) $(DSKFILE_S2) add DEV $(MANUAL)=SXED.TXT $(CHANGES)=CHANGES.TXT TEST_S2.TXT=TEST.TXT LOCAL_S2.CFG=S2ED.CFG
 
 # -	 S61 Targets -------------------------------------------------------------
 
@@ -261,12 +270,12 @@ dsk-s61: $(DSKFILE_S61)
 
 DSKCONT_S61		= $(OUTPUT_S61) $(DATFILE_S61) $(FNTFILE_S61) $(CFGFILE_S61)
 
-$(DSKFILE_S61): $(DSKCONT_S61) $(FONTS61) $(MANUAL) TEST_S61.TXT AUTOEXEC_S61.BAT LOCAL_S61.CFG Makefile
+$(DSKFILE_S61): $(DSKCONT_S61) $(FONTS61) $(MANUAL) $(CHANGES) TEST_S61.TXT AUTOEXEC_S61.BAT LOCAL_S61.CFG Makefile
 	@cp $(DSKBASE) $(DSKFILE_S61)
 	@$(DSKFAT) $(DSKFILE_S61) add . AUTOEXEC_S61.BAT=AUTOEXEC.BAT
 	@$(DSKFAT) $(DSKFILE_S61) add TOOLS $(DSKCONT_S61)
 	@$(DSKFAT) $(DSKFILE_S61) add TOOLS/FONTS $(FONTS61)
-	@$(DSKFAT) $(DSKFILE_S61) add DEV $(MANUAL)=SXED.TXT TEST_S61.TXT=TEST.TXT LOCAL_S61.CFG=S61ED.CFG
+	@$(DSKFAT) $(DSKFILE_S61) add DEV $(MANUAL)=SXED.TXT $(CHANGES)=CHANGES.TXT TEST_S61.TXT=TEST.TXT LOCAL_S61.CFG=S61ED.CFG
 
 run-s61-128: build-s61 dsk-s61
 	m2d2 128k $(DSKFILE_S61)

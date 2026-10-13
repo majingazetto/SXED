@@ -1,0 +1,99 @@
+-------------------------------------------------------------
+SXED Screen X Text Editor - version history
+2024 - 2026 Armando Pérez Abad
+
+Newest first. The manual is SXED.TXT.
+-------------------------------------------------------------
+
+
+ -------- v0.4 (2026-10-13)
+
+Changed
+- S6ED / S61ED: buttons lose their brackets and the label is
+  centred in the button. A 9-letter "[  YES  ]" ran past the
+  button onto its border.
+- S6ED / S61ED: a button without the focus is drawn in the
+  text colour, so only the focused one looks highlighted.
+- S6ED / S61ED: the status bar is as tall as the menu bar
+  (8 px instead of 12).
+
+Fixed
+- Undoing back to the text last loaded or saved now clears
+  the modified mark (*), and redoing away from it sets it
+  again. Before, the mark stayed on after any edit.
+
+
+ -------- v0.3 (2026-10-13)
+
+Fixed
+- Save As froze the machine after opening a file with the
+  browser, File > New and typing something (all editors).
+- File browser, changing drive (Nextor SD with two
+  partitions):
+  - only directories were listed, not files;
+  - when DOS could not report the other drive's current
+    directory, the browser kept the old path;
+  - a directory with many files pushed the drives off the
+    end of the list.
+- Ctrl+A in a document longer than the screen put the cursor
+  on the status bar, and every page move after it went wrong.
+- S2ED, GREEN theme: menus, status bar and dialogs could not
+  be read. They are now black on green.
+- S6ED / S61ED: the focused button was white on yellow in the
+  DARK theme. It is now the inverse of an unfocused button.
+- S2ED: drop-down menus repeated the menu name as a first
+  item you could not reach.
+
+New
+- The cursor shows the editing mode: underline while
+  inserting, block in overwrite mode. In Vi: block in normal
+  and visual mode, thin bar in insert mode, underline in
+  replace mode (R).
+- The file browser remembers the directory you left on each
+  drive (A: -> B: -> A: returns to it).
+
+Improved
+- Extending a selection past the edge of the screen no longer
+  repaints the whole selection on every row.
+- File browser keystrokes repaint less: 30 to 60 per cent
+  faster on a plain move.
+- Cursor blink: 0.3 s instead of 0.4 s at 50 Hz.
+
+
+ -------- v0.2 (2026-10-13)
+
+Fixed
+- The manual in the v0.1 bundle was UTF-8, so accented
+  letters showed as two characters on the MSX. The bundle now
+  carries SXED.TXT in the MSX character set and MANUAL.md in
+  UTF-8. The disk images were already correct.
+- Overwrite mode: [OVR] was shown but typing still inserted.
+- S2ED: garbage in the Settings "Shadow" field, and
+  SHADOW=OFF written on every save.
+
+New
+- Vi: r<c> replaces one character, R enters replace mode
+  ([REP]) until ESC.
+
+Other
+- Tested on Japanese MSX2+ machines (a Boosted MSX2+ JP and a
+  Sony HB-F1XV with 512 KB of mapper).
+
+
+ -------- v0.1 (2026-10-07)
+
+First release, for MSX-DOS 2 or Nextor.
+
+- S6ED: MSX2 Screen 6, 80x24, 6x8 font in four weights.
+- S61ED: MSX2 Screen 6, 61x24, 8x8 font in four weights;
+  CGA, CPC and BIOS fonts included.
+- S2ED: MSX1 Screen 2 (TMS9918), 61x22, two 4x8 glyphs per
+  cell, colour themes. Runs under Nextor.
+- Drop-down menus (F1-F5), windows with drop shadows.
+- Dialogs: Go to Line, Find & Replace, Settings.
+- File browser (Open / Save As) with drive changes.
+- Key profiles STD, TED (TED 2.6) and EMC (Emacs), plus a
+  modal Vi (normal, insert, visual, : commands).
+- Undo / redo in a ring buffer.
+- Word wrap, paragraph reflow, horizontal scrolling.
+- Manual as MSX text (SXED.TXT) and Markdown (MANUAL.md).

@@ -1209,7 +1209,10 @@ class H7AboutDialog(Case):
 
         hi_pixels = sum(1 for b in v_d1 for s in (0, 2, 4, 6) if ((b >> s) & 3) == 3)
         checks.append(Check('H7/color-highlight',
-                            hi_pixels > 900,
+                            # ~789 px since v0.4 (the unfocused OK button
+                            # lost its amber border and text); the 288 px top
+                            # accent band alone is what c3-accent removes
+                            hi_pixels > 650,
                             'Color 3 (amber) highlights present (%d px)' % hi_pixels))
 
         cursor = [(run.var('boot', 'CURX') or 0, run.var('boot', 'CURY') or 0)]

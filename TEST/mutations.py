@@ -209,6 +209,25 @@ MUTATIONS = [
         'expect_static': ['manual-width'],
     },
     {
+        'name': 't0-changes-62',
+        'why': 'a version history line one column wider than the narrowest '
+               'editor',
+        'file': '../DOC/CHANGES.TXT',
+        'old': 'Newest first. The manual is SXED.TXT.',
+        'new': 'Newest first. The manual is SXED.TXT, read with any editor ok.',
+        'filter': 'T0',
+        'expect_static': ['manual-width'],
+    },
+    {
+        'name': 't0-changes-s2disk',
+        'why': 'the S2ED disk goes out without the version history',
+        'file': 'Makefile',
+        'old': 'add DEV $(MANUAL)=SXED.TXT $(CHANGES)=CHANGES.TXT TEST_S2.TXT',
+        'new': 'add DEV $(MANUAL)=SXED.TXT TEST_S2.TXT',
+        'filter': 'T0',
+        'expect_static': ['manual-charset'],
+    },
+    {
         'name': 's2-col-digits',
         'target': 'S2ED',
         'why': 'the S2ED status bar shows the column with two digits',
@@ -3856,9 +3875,11 @@ SELTMPXB        EQU     SELTMPXB2""")],
                'UNDOGMAX 28 > ROWSVIS 22)',
         'target': 'S2ED',
         'file': 'UNDO.Z8A',
-        'old': """UNDOPNT         LD      HL, (DOCLINE)
+        'old': """.MODSET         LD      (MODIFIED), A
+                LD      HL, (DOCLINE)
                 CALL    SHOWLN""",
-        'new': """UNDOPNT         CALL    SETCURY         ; MUTATION: TOPLINE TRUSTED""",
+        'new': """.MODSET         LD      (MODIFIED), A
+                CALL    SETCURY         ; MUTATION: TOPLINE TRUSTED""",
         'filter': 'S2-20',
         'expect': ['S2-20/big/cycle'],
     },
