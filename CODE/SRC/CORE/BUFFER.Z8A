@@ -73,7 +73,9 @@ BUFRESET        CALL    SEGTRIM
                 LD      (CURX), A
                 LD      (CURY), A
                 LD      (LEFTCOL), A
-                JP      UNDOINIT
+                CALL    UNDOINIT
+                JP      UNDOSAV         ; ONE BLANK LINE OR A FILE ABOUT TO
+                                        ; LOAD: EITHER WAY, THE CLEAN STATE
 
 
 ; --- RECBLNK0                  ----------------------------------------

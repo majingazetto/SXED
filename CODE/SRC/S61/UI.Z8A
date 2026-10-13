@@ -72,7 +72,7 @@ DRWSTAT         LD      A, (MODIFIED)
                 LD      (VDP_DY), HL
                 LD      HL, 512
                 LD      (VDP_NX), HL
-                LD      HL, 12
+                LD      HL, STBARH
                 LD      (VDP_NY), HL
                 LD      A, CLR_UI
                 LD      (VDP_CLR), A

@@ -667,8 +667,13 @@ def check_statbuf_term(ctx):
                  % (got, cols + 1))
 
 
+# The documents that ship on every disk, read with the editors themselves:
+# (file in DOC/ and on the disks, Makefile variable holding the MSX copy).
+MSXDOCS = (('SXED.TXT', 'MANUAL'), ('CHANGES.TXT', 'CHANGES'))
+
+
 def check_manual_width(ctx):
-    """DOC/SXED.TXT fits the narrowest text viewport of the three editors.
+    """DOC/SXED.TXT and DOC/CHANGES.TXT fit the narrowest text viewport.
 
     The manual says it is that wide "on purpose: you can read it with any
     of the editors themselves, without horizontal scrolling".  The width is
@@ -690,13 +695,18 @@ def check_manual_width(ctx):
                          'TEXTCOLS not in %s.sym' % prefix)
         widths[prefix] = int(m.group(1), 16)
     limit = min(widths.values())
-    path = os.path.join(ctx.code_dir, '..', 'DOC', 'SXED.TXT')
-    with open(path, encoding='utf-8') as fh:
-        over = [(n, len(l.rstrip('\r\n'))) for n, l in enumerate(fh, 1)
-                if len(l.rstrip('\r\n')) > limit]
+    over = []
+    for doc, _ in MSXDOCS:
+        path = os.path.join(ctx.code_dir, '..', 'DOC', doc)
+        with open(path, encoding='utf-8') as fh:
+            over += [(doc, n, len(l.rstrip('\r\n')))
+                     for n, l in enumerate(fh, 1)
+                     if len(l.rstrip('\r\n')) > limit]
+    names = ' and '.join(d for d, _ in MSXDOCS)
     return Check('manual-width', not over,
-                 'SXED.TXT fits %d columns (narrowest TEXTCOLS: %s)'
-                 % (limit, ', '.join('%s %d' % kv for kv in widths.items()))
+                 '%s fit %d columns (narrowest TEXTCOLS: %s)'
+                 % (names, limit,
+                    ', '.join('%s %d' % kv for kv in widths.items()))
                  if not over else 'lines wider than %d: %s'
                  % (limit, over[:6]))
 
@@ -722,7 +732,7 @@ def _msx_text_faults(data):
 
 
 def check_manual_charset(ctx):
-    """Every SXED.TXT that ships is in the MSX charset, with CR LF.
+    """Every SXED.TXT and CHANGES.TXT that ships is in the MSX charset, CR LF.
 
     DOC/SXED.TXT is UTF-8 so it reads and diffs on the host; utf8msx
     converts it on the way to the disks.  The v0.1 bundle was assembled by
@@ -731,66 +741,73 @@ def check_manual_charset(ctx):
     The disks were right all along, which is why nothing noticed: the shape
     of the Makefile is checked (every SXED.TXT it ships is $(MANUAL), and
     $(MANUAL) is made by utf8msx), the conversion of today's manual is run,
-    and whatever images and bundle are already built are read back.
+    and whatever images and bundle are already built are read back.  The
+    version history (CHANGES.TXT, $(CHANGES)) ships beside it on the same
+    terms since v0.4.
     """
-    bad = []
-    text = open(os.path.join(ctx.code_dir, 'Makefile'),
-                errors='replace').read()
-    m = re.search(r'^\$\(MANUAL\):.*\n\t(.*)$', text, re.M)
-    if m is None or '$(UTF8MSX)' not in m.group(1):
-        bad.append('$(MANUAL) is not made by utf8msx')
-    ships = re.findall(r'(\S+)=SXED\.TXT', text)
-    for src in ships:
-        if src != '$(MANUAL)':
-            bad.append('a disk ships %s as SXED.TXT' % src)
-    if len(ships) < 3:
-        bad.append('only %d disks ship SXED.TXT' % len(ships))
-    dist = re.search(r'^dist:(.*?)(?=^\S|\Z)', text, re.M | re.S)
-    if dist is None:
-        bad.append('Makefile has no dist target')
-    else:
-        body = dist.group(1)
-        if not re.search(r'cp \$\(MANUAL\) \S+/SXED\.TXT', body):
-            bad.append('dist does not ship $(MANUAL) as SXED.TXT')
-        if 'MANUAL.md' not in body:
-            bad.append('dist does not ship MANUAL.md')
-        if '$(MANUALSRC)' in body or 'DOC/SXED.TXT' in body:
-            bad.append('dist ships the UTF-8 source')
-
     import importlib.util
     spec = importlib.util.spec_from_file_location(
         'utf8msx', os.path.join(ctx.project_dir, 'tools', 'utf8msx.py'))
     utf8msx = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(utf8msx)
-    with open(os.path.join(ctx.project_dir, 'DOC', 'SXED.TXT'),
-              encoding='utf-8') as fh:
-        data, errors = utf8msx.convert(fh.read().replace('\r\n', '\n'))
-    if errors:
-        bad.append('utf8msx refuses the manual: %s' % '; '.join(errors[:3]))
+    text = open(os.path.join(ctx.code_dir, 'Makefile'),
+                errors='replace').read()
+    dist = re.search(r'^dist:(.*?)(?=^\S|\Z)', text, re.M | re.S)
+    bad = []
+    if dist is None:
+        bad.append('Makefile has no dist target')
+    elif 'MANUAL.md' not in dist.group(1):
+        bad.append('dist does not ship MANUAL.md')
+    readback = []
+    for doc, var in MSXDOCS:
+        ref = '$(%s)' % var
+        m = re.search(r'^\$\(%s\):.*\n\t(.*)$' % var, text, re.M)
+        if m is None or '$(UTF8MSX)' not in m.group(1):
+            bad.append('%s is not made by utf8msx' % ref)
+        ships = re.findall(r'(\S+)=%s' % re.escape(doc), text)
+        for src in ships:
+            if src != ref:
+                bad.append('a disk ships %s as %s' % (src, doc))
+        if len(ships) < 3:
+            bad.append('only %d disks ship %s' % (len(ships), doc))
+        if dist is not None:
+            body = dist.group(1)
+            if not re.search(r'cp %s \S+/%s' % (re.escape(ref),
+                                                 re.escape(doc)), body):
+                bad.append('dist does not ship %s as %s' % (ref, doc))
+            if 'DOC/' + doc in body:
+                bad.append('dist ships the UTF-8 source of %s' % doc)
 
-    shipped = []
-    for img in ('S6ED.DSK', 'S2ED.DSK', 'S61ED.DSK'):
-        path = os.path.join(ctx.code_dir, img)
-        if not os.path.exists(path):
-            continue
-        out = os.path.join(ctx.out_dir, 'manual_%s.txt' % img[:-4])
-        r = subprocess.run(['python3', ctx.dskfat, path, 'get',
-                            'DEV/SXED.TXT', out], capture_output=True)
-        if r.returncode != 0:
-            bad.append('%s has no DEV\\SXED.TXT' % img)
-            continue
-        shipped.append((img, open(out, 'rb').read()))
-    bundle = os.path.join(ctx.project_dir, 'dist', 'SXED.TXT')
-    if os.path.exists(bundle):
-        shipped.append(('dist/SXED.TXT', open(bundle, 'rb').read()))
-    for where, blob in shipped:
-        fault = _msx_text_faults(blob)
-        if fault:
-            bad.append('%s: %s' % (where, fault))
+        with open(os.path.join(ctx.project_dir, 'DOC', doc),
+                  encoding='utf-8') as fh:
+            data, errors = utf8msx.convert(fh.read().replace('\r\n', '\n'))
+        if errors:
+            bad.append('utf8msx refuses %s: %s' % (doc, '; '.join(errors[:3])))
+
+        shipped = []
+        for img in ('S6ED.DSK', 'S2ED.DSK', 'S61ED.DSK'):
+            path = os.path.join(ctx.code_dir, img)
+            if not os.path.exists(path):
+                continue
+            out = os.path.join(ctx.out_dir, '%s_%s' % (img[:-4], doc))
+            r = subprocess.run(['python3', ctx.dskfat, path, 'get',
+                                'DEV/' + doc, out], capture_output=True)
+            if r.returncode != 0:
+                bad.append('%s has no DEV\\%s' % (img, doc))
+                continue
+            shipped.append(('%s:%s' % (img, doc), open(out, 'rb').read()))
+        bundle = os.path.join(ctx.project_dir, 'dist', doc)
+        if os.path.exists(bundle):
+            shipped.append(('dist/' + doc, open(bundle, 'rb').read()))
+        for where, blob in shipped:
+            fault = _msx_text_faults(blob)
+            if fault:
+                bad.append('%s: %s' % (where, fault))
+        readback += [w for w, _ in shipped]
     return Check('manual-charset', not bad, '; '.join(bad) if bad else
-                 'every SXED.TXT shipped is $(MANUAL) from utf8msx; read '
-                 'back from %s' % (', '.join(w for w, _ in shipped) or
-                                   'nothing built yet'))
+                 'every SXED.TXT and CHANGES.TXT shipped comes from utf8msx; '
+                 'read back from %s' % (', '.join(readback) or
+                                        'nothing built yet'))
 
 
 # TMS9918 fixed palette, the values openMSX renders.

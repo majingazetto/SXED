@@ -1,5 +1,5 @@
 -------------------------------------------------------------
-SXED Screen X Text Editor v0.3 (2026-10-13)
+SXED Screen X Text Editor v0.4 (2026-10-13)
 2024 - 2026 Armando Pérez Abad
 
 S6ED  - Screen 6 text editor for MSX2, 80 columns
@@ -662,6 +662,10 @@ ONE undo step), line split/join/delete, word delete, paste,
 selection edits and replace: a whole Replace All reverts with
 a single undo. Each undo also restores the cursor position
 and the viewport. A new edit invalidates the redo chain.
+
+Undoing back to the text last loaded or saved clears the
+modified mark (*), and redoing away from it sets it again.
+Once the ring has forgotten that point, the mark stays.
 
 The undo history lives in a 4 KB ring (about 23 operations on
 S6ED, 30 on S61ED and S2ED); the oldest operations are

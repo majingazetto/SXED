@@ -1209,7 +1209,10 @@ class H7AboutDialog(Case):
 
         hi_pixels = sum(1 for b in v_d1 for s in (0, 2, 4, 6) if ((b >> s) & 3) == 3)
         checks.append(Check('H7/color-highlight',
-                            hi_pixels > 900,
+                            # ~789 px since v0.4 (the unfocused OK button
+                            # lost its amber border and text); the 288 px top
+                            # accent band alone is what c3-accent removes
+                            hi_pixels > 650,
                             'Color 3 (amber) highlights present (%d px)' % hi_pixels))
 
         cursor = [(run.var('boot', 'CURX') or 0, run.var('boot', 'CURY') or 0)]
@@ -1267,16 +1270,18 @@ class H7AboutDialog(Case):
                             if not bad_body else
                             'body mismatches at: %s' % ', '.join(bad_body)))
 
-        # Button: "[  OK  ]" at (232, 138) in bold (variant 1) on UI background
+        # Button: "OK" centred in the 56 px body at (228, 136): x = 228 +
+        # (56 - 2 * 6) / 2 = 250, bold (variant 1), no brackets.  A 9-char
+        # "[  YES  ]" once ran 2 px past its body onto the border.
         bad_btn = []
-        for pos, ch in enumerate("[  OK  ]"):
-            x0 = 232 + pos * vram.CELLW
+        for pos, ch in enumerate("OK"):
+            x0 = 250 + pos * vram.CELLW
             got = vram.ink_mask(v_d1, x0, 138, ground=vram.COL_UI, first_line=vram.TEXT_FIRST_LINE)
             want = vram.glyph_mask(font, ch, variant=1)
             if got != want:
                 bad_btn.append("char %d (%r)" % (pos, ch))
         checks.append(Check('H7/button-text', not bad_btn,
-                            'button "[  OK  ]" rendered in bold'
+                            'button "OK" centred and rendered in bold'
                             if not bad_btn else
                             'button mismatches at: %s' % ', '.join(bad_btn)))
 
@@ -6800,6 +6805,99 @@ class U9UndoLineEdits(Case):
                             '%d px' % (changed, len(d1), again, len(d2))))
         return checks
 
+# --- U10  UNDO BACK TO THE FILE CLEARS MODIFIED ------------------------
+
+
+class U10UndoClean(Case):
+    name = 'U10-undo-clean'
+    desc = 'undoing back to the state on disk clears MODIFIED, redo sets it again'
+    origin = ('reported on real hardware: Ctrl+Z back to the loaded text left the '
+              'asterisk on.  SAVEPTR remembers the history head the file matches '
+              '(load, save, new); UNDOPNT compares it once per group.  It must '
+              'die with the record it names (eviction) and with the empty '
+              'history once anything is evicted, or a full undo of a wrapped '
+              'ring reports a clean document that is not the file')
+    cfg = UNDO_CFG
+    variants = ('back', 'saved', 'evict')
+    LINES = ['C%02d %s' % (i, 'LINE OF THE CLEAN TEST') for i in range(40)]
+    EDITS = 26          # wraps the 23-record ring: the three oldest evicted
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.wait(1.0)
+        if variant == 'back':
+            t.text('X')
+            t.wait(1.0)
+            t.snap('typed')
+            t.press('Z', mods=['CTRL'])
+            t.wait(1.0)
+            t.snap('undone')
+            t.press('Z', mods=['SHIFT', 'CTRL'])
+            t.wait(1.0)
+            t.snap('redone')
+        elif variant == 'saved':
+            t.text('X')
+            t.press('S', mods=['CTRL'])
+            t.wait(3.0)
+            t.snap('saved')
+            # Typed straight after the save, on the same line: it must start
+            # its own record, not extend the burst the save point names
+            t.text('Y')
+            t.wait(1.0)
+            t.snap('typed')
+            t.press('Z', mods=['CTRL'])
+            t.wait(1.0)
+            t.snap('back')
+            t.press('Z', mods=['CTRL'])
+            t.wait(1.0)
+            t.snap('before')
+            t.press('Z', mods=['SHIFT', 'CTRL'])
+            t.wait(1.0)
+            t.snap('redone')
+        else:
+            for i in range(self.EDITS):     # one record per line
+                t.text('Q')
+                t.press('LEFT')
+                t.press('DOWN')
+            t.wait(1.0)
+            t.snap('typed')
+            t.press('Z', mods=['CTRL'], repeat=self.EDITS)
+            t.wait(1.0)
+            t.snap('undone')
+        return t
+
+    def verify(self, ctx, runs):
+        def mod(v, label):
+            return runs[v].var(label, 'MODIFIED')
+
+        def expect(cid, v, label, want, what):
+            got = mod(v, label)
+            return Check(cid, got == want,
+                         what if got == want else
+                         'MODIFIED = %r, want %r' % (got, want))
+
+        return [
+            expect('U10/back/typed', 'back', 'typed', 0xFF, 'a typed key marks the document'),
+            expect('U10/back/undone', 'back', 'undone', 0,
+                   'Ctrl+Z back to the loaded text clears MODIFIED'),
+            expect('U10/back/redone', 'back', 'redone', 0xFF, 'redo marks it again'),
+            expect('U10/saved/saved', 'saved', 'saved', 0, 'Ctrl+S clears MODIFIED'),
+            expect('U10/saved/back', 'saved', 'back', 0,
+                   'undoing the key typed after the save is clean again: '
+                   'the save closed the typing burst'),
+            expect('U10/saved/before', 'saved', 'before', 0xFF,
+                   'undoing past the save point is a change against the file'),
+            expect('U10/saved/redone', 'saved', 'redone', 0,
+                   'redoing up to the save point is clean'),
+            expect('U10/evict/undone', 'evict', 'undone', 0xFF,
+                   'after the ring evicted the oldest edits a full undo does not '
+                   'reach the file: still modified'),
+        ]
+
+
 # --- H40 / H41  DISK ACTIVITY ON THE STATUS BAR ------------------------
 
 
@@ -8092,30 +8190,35 @@ class H43CursorShape(Case):
         cfg = Case.config(self, ctx, variant)
         return cfg.replace('PROFILE=STD', 'PROFILE=VI') if variant == 'vi' else cfg
 
+    # Every sample is taken TAIL after the key-up.  .DRAWCUR draws the cursor
+    # at the key-down and the blink takes it down BLNKTCK ticks later -- 0.3 s
+    # at 50 Hz since v0.3, 0.25 s at 60 Hz.  A 0.05 s tail after the 0.25 s
+    # hold sampled at ~0.30 s, right on that edge: S2-50/vi/replace fell on
+    # the wrong side every run.  0.45 s lands at ~0.70 s, the middle of the
+    # second up phase (0.6-0.9 s at 50 Hz, 0.5-0.75 s at 60 Hz).
+    TAIL = 0.45
+
     def timeline(self, ctx, variant=None):
-        # Every sample follows a keystroke with a short tail: .DRAWCUR draws
-        # the cursor and sets BLNKPH = 1, and the blink would only take it
-        # down 20 JIFFY ticks later (the S2-3 lesson).
         t = Timeline()
         t.snap('boot')
         t.press('RIGHT', repeat=self.COL - 1)
-        t.press('RIGHT', tail=0.05)
+        t.press('RIGHT', tail=self.TAIL)
         if variant == 'std':
             t.snap('ins', vram=self.VRAM)
-            t.press('INS', tail=0.05)
+            t.press('INS', tail=self.TAIL)
             t.snap('ovr', vram=self.VRAM)
             return t
         t.snap('normal', vram=self.VRAM)
-        t.press('I', tail=0.05)                 # i: insert
+        t.press('I', tail=self.TAIL)                 # i: insert
         t.snap('insert', vram=self.VRAM)
         t.press('ESC')                          # back to normal: CURX - 1
         t.press('RIGHT')
         t.press('R', mods=['SHIFT'])            # R: replace
-        # A chord ends MODLEAD + HOLD after its key-down, too close to the
-        # 0.3 s blink: LEFT + RIGHT brings the cursor back to the column
-        # with it guaranteed up (the S2-3 way)
+        # A chord ends MODLEAD + HOLD after its key-down, so its own key-down
+        # is not the one TAIL is measured from: LEFT + RIGHT redraws the
+        # cursor on the column with a plain key (the S2-3 way)
         t.press('LEFT')
-        t.press('RIGHT', tail=0.05)
+        t.press('RIGHT', tail=self.TAIL)
         t.snap('replace', vram=self.VRAM)
         return t
 
@@ -8437,7 +8540,8 @@ CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G
          E1Cut(), E2Paste(), E3SelScroll(), E4SelAllDel(), E5Replace(), E6SelWordPage(), E7ClipLimit(),
          I1UnixAuto(), I2DosAuto(), I3ConvertDosToUnix(), I4ConvertUnixToDos(),
          U1UndoMod(), U2UndoDel(), U3UndoSplit(), U4UndoJoin(), U5UndoSel(),
-         U6UndoSelDel(), U7UndoRing(), U8UndoDropped(), U9UndoLineEdits()]
+         U6UndoSelDel(), U7UndoRing(), U8UndoDropped(), U9UndoLineEdits(),
+         U10UndoClean()]
 
 
 def run(ctx, cases):
