@@ -1,6 +1,6 @@
 # SXED User Manual & Reference Guide
 
-**SXED Screen X Text Editor v0.3 (2026-10-13)**  
+**SXED Screen X Text Editor v0.4 (2026-10-13)**  
 *(c) 2024 - 2026 Armando Pérez Abad*  
 *Fonts by Miguel A. Fernandez*
 
@@ -544,6 +544,8 @@ Undo/redo:
 | `VI:` | u undo, Ctrl+R redo |
 
 Undo covers typing (a continuous run of edits on one line is ONE undo step), line split/join/delete, word delete, paste, selection edits and replace: a whole Replace All reverts with a single undo. Each undo also restores the cursor position and the viewport. A new edit invalidates the redo chain.
+
+Undoing back to the text last loaded or saved clears the modified mark (*), and redoing away from it sets it again. Once the ring has forgotten that point, the mark stays.
 
 The undo history lives in a 4 KB ring (about 23 operations on S6ED, 30 on S61ED and S2ED); the oldest operations are forgotten as it fills. A single operation touching more lines than the ring can hold (a huge selection delete, for example) cannot be recorded half-way: then the whole history is dropped instead of restoring a partial, wrong state.
 

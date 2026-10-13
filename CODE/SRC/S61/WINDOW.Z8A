@@ -692,10 +692,14 @@ WINSID          LD      HL, (WINH)
 ; -
 ; - WINBTS -----------------------------
 ; - SAME, WITH EXPLICIT STYLE FOR OPTION SELECTION:
-; - STYLE 0 (NORMAL):   COL_HI BORDER, COL_UI BODY, BOLD TEXT IN TOR
+; - STYLE 0 (NORMAL):   COL_FG BORDER, COL_UI BODY, BOLD TEXT IN TIMP:
+; -   TEXT COLOUR, SO AN UNFOCUSED BUTTON DOES NOT READ AS HIGHLIGHTED
 ; - STYLE 1 (SELECTED): COL_HI BORDER, COL_HI BODY, BOLD TEXT IN TXOR:
 ; -   %01 INK ^ %11 BODY = %10, COL_UI ON COL_HI, AS THE BROWSER'S FOCUS.
 ; -   TIMP GAVE COL_FG ON COL_HI: WHITE ON YELLOW IN DARK, UNREADABLE
+; - THE LABEL CARRIES NO BRACKETS OR PADDING: IT IS CENTRED IN THE BODY
+; - FROM ITS LENGTH. A 9-CHARACTER "[  YES  ]" RAN 2 PX PAST THE BODY AND
+; - ITS "]" LANDED ON THE BORDER.
 ; - IN:  A  = STYLE (0 = NORMAL, 1 = SELECTED)
 ; -      HL, DE, BC AS ABOVE
 ; - OUT: NONE
@@ -708,7 +712,7 @@ WINBTS          LD      (WINBST), A
                 PUSH    DE
                 PUSH    BC
 
-                ; 1. OUTER BORDER (COL_HI) 74 X 14
+                ; 1. OUTER BORDER (COL_FG NORMAL, COL_HI SELECTED) 74 X 14
                 LD      HL, (WINX)
                 ADD     HL, DE
                 DEC     HL
@@ -717,12 +721,16 @@ WINBTS          LD      (WINBST), A
                 ADD     HL, BC
                 DEC     HL
                 LD      (VDP_DY), HL
-                LD      HL, 74
+                LD      HL, BTNBODW + 2
                 LD      (VDP_NX), HL
                 LD      HL, 14
                 LD      (VDP_NY), HL
+                LD      A, (WINBST)
+                OR      A
+                LD      A, COL_FG
+                JR      Z, .BRDGO
                 LD      A, COL_HI
-                LD      (VDP_CLR), A
+.BRDGO          LD      (VDP_CLR), A
                 XOR     A
                 LD      (VDP_ARG), A
                 LD      HL, VDPCMBLK
@@ -742,7 +750,7 @@ WINBTS          LD      (WINBST), A
                 LD      HL, WINCOMP_Y
                 ADD     HL, BC
                 LD      (VDP_DY), HL
-                LD      HL, 72
+                LD      HL, BTNBODW
                 LD      (VDP_NX), HL
                 LD      HL, 12
                 LD      (VDP_NY), HL
@@ -758,16 +766,30 @@ WINBTS          LD      (WINBST), A
                 LD      HL, VDPCMBLK
                 CALL    HMMV
 
-                ; 3. BUTTON TEXT IN BOLD: TOR NORMAL, TXOR SELECTED
+                ; 3. BUTTON TEXT IN BOLD, CENTRED: TIMP NORMAL, TXOR SELECTED
+                POP     BC              ; BC = REL Y
+                POP     DE              ; DE = REL X
+                POP     HL              ; HL = TEXT
+                PUSH    BC
+                PUSH    HL
+                LD      A, BTNBODW
+.TXTLEN         LD      C, (HL)
+                INC     C
+                DEC     C
+                JR      Z, .TXTCEN
+                SUB     CELLW
+                INC     HL
+                JR      .TXTLEN
+.TXTCEN         SRL     A               ; A = (BODY - LENGTH * CELLW) / 2
+                POP     HL              ; HL = TEXT
                 POP     BC
-                POP     DE
+                PUSH    HL
                 LD      HL, (WINX)
                 ADD     HL, DE
-                INC     HL
-                INC     HL
-                INC     HL
-                INC     HL
-                EX      DE, HL          ; DE = DX = WINX + REL X + 4
+                LD      E, A
+                LD      D, 0
+                ADD     HL, DE
+                EX      DE, HL          ; DE = DX = WINX + REL X + CENTRING
                 LD      HL, WINCOMP_Y + 2
                 ADD     HL, BC
                 LD      B, H
@@ -775,10 +797,8 @@ WINBTS          LD      (WINBST), A
                 POP     HL              ; HL = TEXT
                 LD      A, (WINBST)
                 OR      A
-                JR      NZ, .TXTSEL
                 LD      A, 1            ; BOLD (VARIANT 1)
-                JP      WINSTR3
-.TXTSEL         LD      A, 1            ; BOLD (VARIANT 1)
+                JP      Z, WINSTR       ; COL_FG INK ON THE COL_UI BODY
                 JP      WINSTRX         ; COL_UI INK ON THE COL_HI BODY
 
 
@@ -1042,7 +1062,7 @@ DOABT           LD      HL, 72          ; CENTRED: (512 - 368) / 2
 .LBMEM          DEFM    "Memory:  ", 0
 .VALMEM         DEFM    "DOS 2 / Nextor Mapper Manager", 0
 .STRINS         DEFM    "Press ENTER, SPACE or ESC to close", 0
-.BTNOK          DEFM    "[  OK  ]", 0
+.BTNOK          DEFM    "OK", 0
 
 
 ; - DOQIT / DOOPN / DONEW --------------
@@ -1214,8 +1234,8 @@ DOASK           LD      A, 1            ; SHOW UNSAVED WARNING IF DIRTY
 .STRNEW         DEFM    "Discard changes?", 0
 .STROVR         DEFM    "Overwrite file?", 0
 .STRWRN         DEFM    "Unsaved changes!", 0
-.BTNYES         DEFM    "[  YES ]", 0
-.BTNNO          DEFM    "[  NO  ]", 0
+.BTNYES         DEFM    "Yes", 0
+.BTNNO          DEFM    "No", 0
 
 
 ; --- WINEDIT                   ----------------------------------------
@@ -1634,8 +1654,8 @@ EDBTNS          LD      HL, .BTNOK
                 INC     A
 .PAINT2         JP      WINBTS
 
-.BTNOK          DEFM    "[  OK  ]", 0
-.BTNCAN         DEFM    "[CANCEL]", 0
+.BTNOK          DEFM    "OK", 0
+.BTNCAN         DEFM    "Cancel", 0
 
 
 ; --- DOFIND                    ----------------------------------------
@@ -2125,10 +2145,10 @@ DOFIND          LD      HL, 88          ; CENTRED: (512 - 336) / 2
 .STRX           DEFM    "X", 0
 .STRBRK         DEFM    "]", 0
 .STRCRT         DEFB    #DB, 0
-.BTNFND         DEFM    "[ Find ]", 0
-.BTNRPL         DEFM    "[ Repl ]", 0
-.BTNALL         DEFM    "[ All  ]", 0
-.BTNCAN         DEFM    "[Cancel]", 0
+.BTNFND         DEFM    "Find", 0
+.BTNRPL         DEFM    "Repl", 0
+.BTNALL         DEFM    "All", 0
+.BTNCAN         DEFM    "Cancel", 0
 
 
 ; --- DOSETT                    ----------------------------------------
@@ -2631,5 +2651,5 @@ DOSETT          LD      HL, 120
 .VM1            DEFM    "MD", 0
 .VM2            DEFM    "LIT", 0
 
-.BTNOK          DEFM    "[  OK  ]", 0
-.BTNCAN         DEFM    "[Cancel]", 0
+.BTNOK          DEFM    "OK", 0
+.BTNCAN         DEFM    "Cancel", 0

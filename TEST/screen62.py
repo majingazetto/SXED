@@ -7,7 +7,7 @@ neighbouring cell involved.  That makes the S2 gate's method possible here
 too: no golden images, the verdict is computed from the font and the document.
 
 Text area:  rows 1..24, y = 8 * row, ink COL_FG (%01) on COL_BG (%00).
-Status bar: text at y = 202, x = 8 + 8 * c, ink COL_FG on COL_UI (%10) --
+Status bar: text at y = 200, x = 8 + 8 * c, ink COL_FG on COL_UI (%10) --
             the UI-paper copy EXPSTAT builds in the right half of the font.
 Cursor:     DRWCUR XORs the cell with COL_FG, so a cell under the cursor is
             accepted either plain or with every pixel XOR %01 (its blink
@@ -22,7 +22,7 @@ TXORG_X = 16
 ROWS = 24                   # text rows 1..24
 COLS = 61
 STB_X = 8
-STB_Y = 202
+STB_Y = 200                 # bar 200..207, as tall as the menu bar
 STATCOLS = 62
 
 COL_BG, COL_FG, COL_UI, COL_HI = 0, 1, 2, 3

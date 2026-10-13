@@ -15,13 +15,17 @@
 
 
 ; - UNDOINIT ---------------------------
-; - INITIALIZE UNDO RING BUFFER POINTERS
+; - INITIALIZE UNDO RING BUFFER POINTERS. THE HISTORY IS GONE, AND WITH
+; - IT ANY WAY BACK TO THE STATE ON DISK: SAVEPTR BECOMES UNREACHABLE.
+; - A CALLER THAT HAS JUST MADE THE DOCUMENT CLEAN FOLLOWS WITH UNDOSAV.
 ; - IN:  NONE
 ; - OUT: NONE
 ; - CLOBBERS: AF, HL
 ; -
 
-UNDOINIT        XOR     A
+UNDOINIT        LD      HL, SAVENIL
+                LD      (SAVEPTR), HL
+                XOR     A
                 LD      (UNDOPTR), A
                 LD      (UNDOPTR + 1), A
                 LD      (REDOPTR), A
@@ -45,6 +49,86 @@ UNDOINIT        XOR     A
 
 UNDOCLS         XOR     A
                 LD      (UNDOTYP), A
+                RET
+
+
+; --- SAVE POINT                ----------------------------------------
+
+
+; - UNDOSAV ----------------------------
+; - THE DOCUMENT NOW MATCHES THE FILE (LOADED, SAVED, NEW): REMEMBER THE
+; - HISTORY HEAD THAT GOES WITH IT, SO AN UNDO OR REDO THAT LANDS BACK ON
+; - IT CLEARS MODIFIED (UNDOPNT). THE TYPING BURST IS CLOSED, OR THE NEXT
+; - KEY WOULD JOIN THE HEAD RECORD AND THE HEAD WOULD STILL MATCH.
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: AF, HL
+; -
+
+UNDOSAV         LD      HL, (UNDOPTR)
+                LD      (SAVEPTR), HL
+                JP      UNDOCLS
+
+
+; - UNDOSVC ----------------------------
+; - THE REDO CHAIN IS ABOUT TO BE THROWN AWAY: IF THE SAVED STATE IS ONE
+; - OF ITS RECORDS IT CAN NO LONGER BE REACHED, AND ITS SLOT WILL BE
+; - REUSED -- A HEAD AT THAT ADDRESS WOULD THEN CLAIM A CLEAN DOCUMENT.
+; - IN:  NONE (WALKS REDOPTR -> NEXT_TRN)
+; - OUT: NONE
+; - CLOBBERS: AF, DE, HL
+; -
+
+UNDOSVC         LD      HL, (REDOPTR)
+                LD      DE, (SAVEPTR)
+.WALK           LD      A, H
+                OR      L
+                RET     Z               ; END OF THE CHAIN: NOT IN IT
+                OR      A
+                SBC     HL, DE
+                ADD     HL, DE          ; KEEPS Z
+                JR      Z, UNDOSVX
+                INC     HL
+                INC     HL
+                LD      A, (HL)
+                INC     HL
+                LD      H, (HL)
+                LD      L, A            ; HL = NEXT_TRN
+                JR      .WALK
+
+
+; - UNDOSVE ----------------------------
+; - A RECORD IS BEING EVICTED: THE SAVED STATE GOES WITH IT IF IT WAS
+; - THAT RECORD, OR IF IT WAS THE EMPTY HISTORY (UNDOING EVERYTHING NO
+; - LONGER LEADS BACK TO THE ORIGINAL DOCUMENT)
+; - IN:  IX = RECORD BEING EVICTED
+; - OUT: NONE
+; - CLOBBERS: AF, DE (PRESERVES BC, HL, IX)
+; -
+
+UNDOSVE         LD      DE, (SAVEPTR)
+                LD      A, D
+                OR      E
+                JR      Z, UNDOSVX
+                PUSH    HL
+                PUSH    IX
+                POP     HL
+                OR      A
+                SBC     HL, DE
+                POP     HL
+                RET     NZ
+                ; FALL THROUGH
+
+
+; - UNDOSVX ----------------------------
+; - FORGET THE SAVED STATE: NO UNDO OR REDO CAN CLEAR MODIFIED ANY MORE
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: DE
+; -
+
+UNDOSVX         LD      DE, SAVENIL
+                LD      (SAVEPTR), DE
                 RET
 
 
@@ -85,6 +169,10 @@ UNDOREC         LD      C, A            ; C = OP_TYPE
 .DROP           LD      (HL), 1
                 JP      UNDOINIT
 .KEEP
+
+                PUSH    BC
+                CALL    UNDOSVC         ; THE REDO CHAIN GOES: SO MAY THE SAVE
+                POP     BC
 
                 ; 0. A NEW EDIT ENDS THE REDO CHAIN HERE: CUT THE HEAD'S LINK
                 ;    NOW, BEFORE EVICTION WALKS IT. LEFT IN PLACE, EVICTING THE
@@ -361,6 +449,7 @@ UNDOEVC         ; EVICT TRANSACTIONS AT (UNDOBOT) THAT COLLIDE WITH [HL, HL + UN
 
                 ; COLLISION DETECTED: EVICT RECORD AT (UNDOBOT)
 .EVICT          LD      IX, (UNDOBOT)
+                CALL    UNDOSVE         ; THE SAVED STATE MAY GO WITH IT
                 LD      E, (IX + 2)     ; NEXT_TRN LOW
                 LD      D, (IX + 3)     ; NEXT_TRN HIGH
                 LD      A, D
@@ -505,6 +594,7 @@ ACTUNDO         CALL    UNDOCLS
 .FINISH         LD      A, (UNDONRD)    ; A LINE TOO LONG TO KEEP CAME OUT:
                 OR      A               ; THIS ACTION CANNOT BE REDONE
                 JP      Z, UNDOPNT
+                CALL    UNDOSVC         ; THE REDO CHAIN GOES: SO MAY THE SAVE
                 LD      HL, 0
                 LD      (REDOPTR), HL
                 JP      UNDOPNT
@@ -641,12 +731,23 @@ REDODSP         LD      A, (IX + 4)
 ; - EVERY OTHER ACTION: THE CURSOR IS AN XOR, AND DRAWING IT HERE AS WELL
 ; - CANCELLED IT OUT WHILE BLNKPH SAID IT WAS UP, SO THE NEXT KEY'S ERASE
 ; - PAINTED IT INSTEAD AND EVERY UNDO LEFT AN INVERTED CELL BEHIND.
+; - MODIFIED IS DECIDED HERE, ONCE FOR THE GROUP: CLEAR WHEN THE HISTORY
+; - HEAD IS THE ONE THE FILE WAS LOADED OR SAVED AT (SAVEPTR), SET
+; - OTHERWISE -- UNDOING BACK TO THE FILE LEFT THE ASTERISK ON.
 ; - IN:  DOCLINE, CURX, TOPLINE
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; -
 
-UNDOPNT         LD      HL, (DOCLINE)
+UNDOPNT         LD      HL, (UNDOPTR)
+                LD      DE, (SAVEPTR)
+                OR      A
+                SBC     HL, DE
+                LD      A, #FF
+                JR      NZ, .MODSET
+                XOR     A
+.MODSET         LD      (MODIFIED), A
+                LD      HL, (DOCLINE)
                 CALL    SHOWLN
                 JP      REDRAW
 

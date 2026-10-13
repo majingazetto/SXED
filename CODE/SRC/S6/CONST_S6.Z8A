@@ -34,7 +34,10 @@ TXRFIRST        EQU     1               ; FIRST TEXT ROW
 TXRLAST         EQU     24              ; LAST TEXT ROW
 STBROW          EQU     25              ; STATUS BAR ROW
 STBTX_X         EQU     8               ; STATUS BAR TEXT ORIGIN X (ENDS AT 506)
-STBTX_Y         EQU     202             ; STATUS BAR TEXT ORIGIN Y (BAR IS 200..211)
+STBTX_Y         EQU     STBROW * CELLH  ; STATUS BAR TEXT ORIGIN Y (BAR IS 200..207)
+STBARH          EQU     CELLH           ; STATUS BAR HEIGHT: AS TALL AS THE MENU BAR.
+                                        ; LINES 208..211 STAY BACKGROUND, A MARGIN
+                                        ; THAT MATCHES THE TOP EDGE OF THE MENU BAR
 STATCOLS        EQU     83              ; STATUS BAR COLUMNS (COLS 0..82)
 
 
@@ -63,6 +66,7 @@ VR_FBI          EQU     #0E000          ; FONT: BOLD+ITALIC  SY 448
 VR_WINBF        EQU     #10000          ; WINDOW BACKGROUND BUFFER BASE (SY 512)
 WINBUF_Y        EQU     512             ; OFF-SCREEN VRAM WINDOW BUFFER BASE Y
 WINCOMP_Y       EQU     768             ; OFF-SCREEN VRAM COMPOSITION BUFFER BASE Y
+BTNBODW         EQU     56              ; BUTTON BODY WIDTH (PX, MULTIPLE OF 4: HMMV)
 WINSHDW         EQU     4               ; WINDOW DROP SHADOW OFFSET/WIDTH (PX).
                                         ; 4 PX KEEPS WINX+WINW A MULTIPLE OF 4
                                         ; AND EVERY SHADOW BAR BYTE-ALIGNED

@@ -3562,6 +3562,44 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'expect': ['U1/undone-state'],
     },
     {
+        'name': 'undo-clean-mark',
+        'why': 'UNDOPNT always marks the document modified: undoing back to '
+               'the file leaves the asterisk on',
+        'file': 'UNDO.Z8A',
+        'old': """                JR      NZ, .MODSET
+                XOR     A
+.MODSET""",
+        'new': """                JR      NZ, .MODSET
+                NOP                     ; MUTATION: NEVER CLEAN
+.MODSET""",
+        'filter': 'U10',
+        'expect': ['U10/back/undone'],
+    },
+    {
+        'name': 'undo-clean-burst',
+        'why': 'the save leaves the typing burst open, so the next key joins '
+               'the record the save point names',
+        'file': 'UNDO.Z8A',
+        'old': """                LD      (SAVEPTR), HL
+                JP      UNDOCLS""",
+        'new': """                LD      (SAVEPTR), HL
+                RET                     ; MUTATION: BURST LEFT OPEN""",
+        'filter': 'U10',
+        'expect': ['U10/saved/back'],
+    },
+    {
+        'name': 'undo-clean-evict',
+        'why': 'eviction keeps the empty-history save point, so a full undo '
+               'of a wrapped ring claims the file',
+        'file': 'UNDO.Z8A',
+        'old': """                CALL    UNDOSVE         ; THE SAVED STATE MAY GO WITH IT""",
+        'new': """                NOP                     ; MUTATION: SAVE POINT SURVIVES
+                NOP
+                NOP""",
+        'filter': 'U10',
+        'expect': ['U10/evict/undone'],
+    },
+    {
         'name': 'undo-del',
         'why': 'line deletion fails to record in undo ringbuffer when UNDODEL is bypassed',
         'file': 'ACTION.Z8A',

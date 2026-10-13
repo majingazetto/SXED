@@ -568,7 +568,8 @@ FILESAVE        LD      HL, FILENAME
                 LD      A, (SAVHAND)
                 CALL    DSKCLSW
                 JR      C, .SVERR       ; THE CLOSE FAILED: NOT SAVED
-                
+
+                CALL    UNDOSAV         ; UNDOING BACK HERE IS CLEAN AGAIN
                 XOR     A
                 LD      (MODIFIED), A
 

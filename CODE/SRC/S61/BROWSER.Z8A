@@ -930,6 +930,6 @@ DOBRW           XOR     A
 .TITOPN         DEFM    "Open  ", 0
 .TITSAV         DEFM    "Save As  ", 0
 .STRNAM         DEFM    "Name:", 0
-.BTNOPN         DEFM    "[ OPEN ]", 0
-.BTNSAV         DEFM    "[ SAVE ]", 0
-.BTNCAN         DEFM    "[CANCEL]", 0
+.BTNOPN         DEFM    "Open", 0
+.BTNSAV         DEFM    "Save", 0
+.BTNCAN         DEFM    "Cancel", 0
