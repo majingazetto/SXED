@@ -68,6 +68,13 @@ class Case(object):
         files['AUTOEXEC.BAT'] = cmd + '\r\n'
         return files
 
+    def extra_disks(self, ctx, variant=None):
+        """{name: {path: bytes}} -- more disk images, each a copy of the DOS 2
+        base with these files (a "DIR\\NAME" path goes into a subdirectory).
+        The one named 'B' is mounted as drive B:; the others sit in the run
+        directory as NAME.DSK for a timeline to swap in (`diskb $OUT/X.DSK`)."""
+        return {}
+
     def disk_copies(self, ctx):
         out = [os.path.join(ctx.code_dir, ctx.prefix + '.COM')]
         if self.with_font:

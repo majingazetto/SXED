@@ -4269,6 +4269,63 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'filter': 'S2-52',
         'expect': ['S2-52/shrink'],
     },
+    {
+        'name': 'brw-drive-nolast',
+        'why': 'the browser forgets the path left on the other drive: going '
+               'A -> B -> A lands in the DOS current directory, not where '
+               'you were',
+        'file': 'BDOS.Z8A',
+        'old': """                LD      A, (BRWLST)
+                CP      B
+                JR      NZ, .DOSCD""",
+        'new': """                LD      A, (BRWLST)
+                CP      B
+                JR      .DOSCD          ; MUTATION: NEVER REMEMBERED""",
+        'filter': 'H46',
+        'expect': ['H46/backa', 'H46/backb'],
+    },
+    {
+        'name': 'brw-drive-noroot',
+        'why': 'a drive whose directory cannot be listed is never tried at '
+               'its root: the browser stays on the old drive instead',
+        'file': 'BDOS.Z8A',
+        'old': """                CALL    BRWDIRX
+                JR      NC, .DONE
+
+                ; 4. NOTHING READABLE: THE OLD PATH BACK""",
+        'new': """                SCF                     ; MUTATION: THE ROOT NEVER READS
+                JR      NC, .DONE
+
+                ; 4. NOTHING READABLE: THE OLD PATH BACK""",
+        'filter': 'H46',
+        'expect': ['H46/swapped'],
+    },
+    {
+        'name': 'brw-drive-curdir-path',
+        'why': 'CURDIR writes straight into BRWPATH again: its 68 bytes run '
+               'into BRWMASK and a drive change lists directories only',
+        'file': 'BDOS.Z8A',
+        'old': """                LD      A, C
+                LD      DE, BRWNAME
+                CALL    CURDIR""",
+        'new': """                LD      A, C
+                LD      DE, BRWPATH     ; MUTATION: INTO THE 64-BYTE PATH
+                CALL    CURDIR""",
+        'filter': 'H46',
+        'expect': ['H46/mask', 'H46/files'],
+    },
+    {
+        'name': 'brw-no-drive-room',
+        'why': 'the directory walk fills the whole listing again and the '
+               'drives, filed last, find no slot: no way to another drive',
+        'file': 'BROWSE.Z8A',
+        'old': """.DRVLIM         LD      A, B
+                LD      (BRWLIM), A""",
+        'new': """.DRVLIM         LD      A, BRWMAX       ; MUTATION: NO ROOM KEPT
+                LD      (BRWLIM), A""",
+        'filter': 'H35',
+        'expect': ['H35/drives'],
+    },
 ]
 
 

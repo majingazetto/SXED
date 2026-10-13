@@ -187,6 +187,26 @@ class Session(object):
                                    % (r.stdout + r.stderr))
         return dsk
 
+    def build_extra_disks(self):
+        """Case.extra_disks as images in the run directory: {name: path}."""
+        out = {}
+        for name, files in self.case.extra_disks(self.ctx, self.variant).items():
+            dsk = os.path.join(self.dir, '%s.DSK' % name)
+            shutil.copy(os.path.join(self.ctx.res_dir, 'DOS2.DSK'), dsk)
+            for path, data in files.items():
+                parts = path.replace('/', '\\').split('\\')
+                host = os.path.join(self.dir, '%s_%s' % (name, '_'.join(parts)))
+                with open(host, 'wb') as fh:
+                    fh.write(data)
+                r = subprocess.run(['python3', self.ctx.dskfat, dsk, 'add',
+                                    '\\'.join(parts[:-1]) or '.',
+                                    '%s=%s' % (host, parts[-1])],
+                                   capture_output=True, text=True)
+                if r.returncode != 0:
+                    raise RuntimeError('dskfat failed: %s' % (r.stdout + r.stderr))
+            out[name] = dsk
+        return out
+
     def extract_path(self, dsk, path):
         """Read a file in any directory back off the disk (dskfat get)."""
         out = os.path.join(self.dir, 'x_' + path.replace('\\', '_'))
@@ -464,6 +484,9 @@ class Session(object):
         cmd = ['openmsx', '-machine', machine]
         for ext in exts:
             cmd += ['-ext', ext]
+        extra = self.build_extra_disks()
+        if 'B' in extra:
+            cmd += ['-diskb', extra['B']]
         cmd += ['-diska', dsk, '-script', script]
         run = Run(self.case, self.dir)
         # openMSX's own output goes to FILES, never to pipes: with a pipe it
