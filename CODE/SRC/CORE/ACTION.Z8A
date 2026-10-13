@@ -84,6 +84,8 @@ ACTTBL          DEFW    ACTNONE         ; 0
                 DEFW    ACTVILIN        ; 72 (VI V / LINE VISUAL MODE)
                 DEFW    ACTVICPY        ; 73 (VI y / YANK VISUAL SELECTION)
                 DEFW    ACTVICUT        ; 74 (VI d/x / CUT VISUAL SELECTION)
+                DEFW    ACTVIREP        ; 75 (VI R / REPLACE MODE)
+                DEFW    ACTVILER        ; 76 (VI LEADER 'r')
                 ASSERT  ($ - ACTTBL) / 2 == ACMAX
 
 
@@ -1764,7 +1766,9 @@ ACTCYCKM        JP      KMAPCYC
 ; - CLOBBERS: ALL
 ; -
 
-ACTVIINS        LD      A, VIMINS
+ACTVIINS        LD      A, INS_MODE     ; i, a, o... INSERT, WHATEVER R LEFT
+                LD      (INSMODE), A
+                LD      A, VIMINS
                 LD      (VIMODE), A
                 LD      HL, KMAPVII
                 LD      (KMAPPTR), HL
@@ -1805,7 +1809,9 @@ ACTVIAPP        LD      HL, (DOCLINE)
 ; - CLOBBERS: ALL
 ; -
 
-ACTVINRM        LD      A, (SELACT)
+ACTVINRM        LD      A, INS_MODE     ; ESC ENDS R
+                LD      (INSMODE), A
+                LD      A, (SELACT)
                 OR      A
                 CALL    NZ, ACTDSEL
                 LD      A, (VIMODE)
@@ -1885,6 +1891,72 @@ ACTVIINB        CALL    ACTBOL
 ACTVILEG        LD      A, 'g'
                 LD      (VILEAD), A
                 RET
+
+
+; --- ACTVILER                  ----------------------------------------
+
+
+; - ACTVILER ---------------------------
+; - SET VI 'r' LEADER PENDING: THE NEXT KEY REPLACES ONE CHARACTER
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: AF
+; -
+
+ACTVILER        LD      A, 'r'
+                LD      (VILEAD), A
+                RET
+
+
+; --- ACTVIRPL                  ----------------------------------------
+
+
+; - ACTVIRPL ---------------------------
+; - VI r<c>: REPLACE THE CHARACTER UNDER THE CURSOR, WHICH STAYS ON IT.
+; - A KEY THAT TYPES NOTHING (ESC AMONG THEM) CANCELS, AND SO DOES A LINE
+; - WITH NOTHING UNDER THE CURSOR. EACH r IS ITS OWN UNDO STEP.
+; - IN:  A = KEYCODE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTVIRPL        CP      #20
+                RET     C               ; CONTROL CODES, ESC
+                CP      #7F
+                RET     Z
+                CP      #FF
+                RET     Z
+                LD      C, A
+                PUSH    BC
+                LD      HL, (DOCLINE)
+                CALL    LINELEN         ; A = LENGTH
+                POP     BC
+                LD      B, A
+                LD      A, (CURX)
+                CP      B
+                RET     NC              ; NOTHING UNDER THE CURSOR
+                PUSH    AF              ; A = CURX
+                LD      A, C
+                CALL    EDOVRCHR
+                POP     AF
+                LD      (CURX), A       ; BACK ON THE REPLACED CHARACTER
+                JP      UNDOCLS
+
+
+; --- ACTVIREP                  ----------------------------------------
+
+
+; - ACTVIREP ---------------------------
+; - VI R: INSERT MODE THAT OVERWRITES, UNTIL ESC ([REP] ON THE STATUS BAR)
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTVIREP        CALL    ACTVIINS
+                LD      A, OVR_MODE
+                LD      (INSMODE), A
+                JP      DRWSTAT
 
 
 ; --- ACTVIKIL                  ----------------------------------------

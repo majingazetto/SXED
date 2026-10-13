@@ -1,6 +1,6 @@
 # SXED User Manual & Reference Guide
 
-**SXED Screen X Text Editor v0.1**  
+**SXED Screen X Text Editor v0.2 (2026-10-13)**  
 *(c) 2024 - 2026 Armando Pérez Abad*  
 *Fonts by Miguel A. Fernandez*
 
@@ -132,6 +132,13 @@ Three disk images are distributed, all laid out the same way: the editors in A:\
 
 The MSX2 disks also carry S61ED's example fonts in A:\TOOLS\FONTS (see 13).
 
+The release also carries this manual twice, under two names:
+
+| File | Contents |
+|:---|:---|
+| `SXED.TXT` | The manual in the MSX character set with CR LF line endings. Copy this one to the MSX (it is also in A:\DEV on every disk). |
+| `MANUAL.md` | This file: the same manual in UTF-8 Markdown, for reading on a modern computer. Do not copy it to the MSX: accents come out garbled. |
+
 ## 4.- STARTING THE EDITOR
 
 Usage:
@@ -193,6 +200,7 @@ The status bar has two channels:
     [INS]   insert mode        [OVR]   overwrite mode
     [SEL]   selection active
     [NORM]  Vi normal mode     [VIS]   Vi visual mode
+    [REP]   Vi replace mode (R)
 ```
 
 ```text
@@ -234,6 +242,8 @@ In WRAP=TXT mode (see 6.4) moving right past the end of a line jumps to the star
 | `` | column 1 it joins the line with the previous. |
 | `DEL` | Deletes the character under the cursor; at the |
 | `` | end of line it pulls the next line up. |
+
+In overwrite mode ([OVR]) a typed character replaces the one under the cursor; at the end of the line it is appended as usual. Paste, RETURN, TAB, BS and DEL work the same in both modes. The editor always starts in insert mode.
 
 Deleting a selection, typing over it or pasting over it works as expected: the selected text is replaced (see 9).
 
@@ -445,6 +455,8 @@ x / X                    Delete char under / before
 dd                       Delete current line
 D                        Delete to end of line
 p                        Paste clipboard
+r<c>                     Replace one character
+R                        Replace mode, until ESC
 u / Ctrl+R               Undo / redo
 ```
 
@@ -714,6 +726,8 @@ SHADOW chooses which color the window drop shadows borrow:
               HI. ON means UI.
 [S2ED]        OFF, ON (the theme's own shadow color) or
               a single hex digit 0-F (a TMS9918 color).
+              Settings shows a color as ON and saves
+              the digit back.
 ```
 
 Extra keys, only on [S6ED/S61ED] (Screen 6 has a programmable palette; they are never written by Settings):
@@ -850,6 +864,10 @@ The text looks wrong / status bar shows [ROM]  [S6ED/S61ED] The .FNT file is mis
 Settings are not being saved Settings writes to the LOCAL .CFG of the current directory when there is one (see 11). Check which file you are editing, and that the disk is not write-protected ([SAVE ERROR] would tell you).
 
 Accents type twice or not at all They should not: the editor reads the keyboard matrix directly and arbitrates against the BIOS. Please report the machine model if you see this.
+
+Accented letters show as two odd characters The file is in UTF-8, as most modern computers save text. The manual in that form is MANUAL.md; on the MSX use SXED.TXT (see 3). Other UTF-8 files must be converted to the MSX character set before copying.
+
+Accents show as Japanese kana under TYPE Japanese machines hold kana where the international character set has the accented letters, so any program that uses the ROM font shows kana instead. The editors use their own font: read the manual inside them.
 
 The disk boots to the DOS prompt instead of the editor AUTOEXEC.BAT must have DOS line endings (CR LF). A file edited on a modern computer and saved with bare LF line endings is ignored by COMMAND2.COM. Save it with EOL=DOS.
 

@@ -76,8 +76,9 @@ EDINSCHR        PUSH    AF
                 LD      HL, (DOCLINE)
                 CALL    LINEWRT
 
-                ; RE-RENDER CURRENT ROW, UNLESS A BATCH EDIT IS RUNNING
-                LD      A, (RNDHOLD)
+                ; RE-RENDER CURRENT ROW, UNLESS A BATCH EDIT IS RUNNING.
+                ; EDOVRCHR ENTERS HERE TOO: ONE CHARACTER WRITTEN, ONE STEP.
+EDCHRDN         LD      A, (RNDHOLD)
                 OR      A
                 JR      NZ, .NOREND
                 LD      A, (CURY)
@@ -716,13 +717,41 @@ EDTGLWRP        LD      A, (WRAPMODE)
 
 ; - EDOVRCHR ---------------------------
 ; - OVERWRITE CHARACTER AT CURSOR
+; - THE CHARACTER UNDER THE CURSOR IS REPLACED AND THE CURSOR ADVANCES; THE
+; - LENGTH NEVER CHANGES, SO NO WRAP RULE APPLIES. AT OR PAST THE END OF THE
+; - LINE THERE IS NOTHING TO REPLACE AND IT APPENDS EXACTLY AS EDINSCHR DOES.
+; - IT WAS A STUB THAT CALLED EDINSCHR UNTIL 2026-10-13: [OVR] INSERTED.
 ; - IN:  A = CHAR CODE
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; -
 
-EDOVRCHR        CALL    EDINSCHR        ; FOR NOW, ROUTE TO INSERT
-                RET
+EDOVRCHR        PUSH    AF
+                LD      HL, (DOCLINE)
+                CALL    LINEREAD
+                POP     AF
+                LD      C, A            ; C = CHARACTER
+                LD      A, (WORKBUF)
+                LD      B, A            ; B = LENGTH
+                LD      A, (CURX)
+                CP      B
+                LD      A, C
+                JP      NC, EDINSCHR    ; AT/PAST THE END: APPEND
+
+                CALL    UNDOBGN         ; A TYPING BURST, AS FOR INSERT
+                LD      A, (CURX)
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE          ; HL = THE CHARACTER UNDER THE CURSOR
+                LD      (HL), C
+                LD      DE, WORKATTR
+                ADD     HL, DE          ; HL = ITS ATTRIBUTE
+                LD      A, (TYPATTR)
+                LD      (HL), A
+                LD      HL, (DOCLINE)
+                CALL    LINEWRT
+                JP      EDCHRDN         ; PAINT THE CELL, ADVANCE, MODIFIED
 
 
 ; --- REFLOW                    ----------------------------------------

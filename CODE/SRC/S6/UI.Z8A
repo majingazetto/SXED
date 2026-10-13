@@ -193,6 +193,10 @@ BLDSTAT         ; 1. PRE-FILL STATBUF WITH 83 SPACES, FOLLOWED BY NULL TERMINATO
                 CP      VIMNORM
                 LD      HL, .STRVIN     ; "[NORM]"
                 JR      Z, .PUTVI
+                LD      A, (INSMODE)    ; VI R: INSERT MODE, OVERWRITING
+                OR      A
+                LD      HL, .STRVIR     ; "[REP] "
+                JR      Z, .PUTVI
                 LD      HL, .STRVII     ; "[INS] "
 .PUTVI          CALL    .CPY6
                 JR      .DONEMOD
@@ -285,6 +289,7 @@ BLDSTAT         ; 1. PRE-FILL STATBUF WITH 83 SPACES, FOLLOWED BY NULL TERMINATO
 .STRVII         DEFM    "[INS] "
 .STRVIV         DEFM    "[VIS] "
 .STROVR         DEFM    "[OVR] "
+.STRVIR         DEFM    "[REP] "
 .STRSEL         DEFM    "[SEL] "
 .STRLN          DEFM    "Ln "
 .STRCOL         DEFM    "  Col "

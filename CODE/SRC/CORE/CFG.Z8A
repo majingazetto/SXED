@@ -696,6 +696,8 @@ PARSSHD         LD      A, (HL)
                 JR      .S2ST
 .S2ON           XOR     A
 .S2ST           LD      (SHDWOFF), A
+                XOR     A               ; ON/OFF: THE THEME'S COLOUR AGAIN
+                LD      (SHDWCUS), A    ; (A LOCAL CFG OVERRIDES A GENERAL ONE)
                 RET
 
 .S2COL          LD      A, C            ; A HEX DIGIT: 0-9 OR A-F
@@ -710,15 +712,10 @@ PARSSHD         LD      A, (HL)
                 SUB     'A' - 10
                 JR      .S2SET
 .S2DIG          SUB     '0'
-.S2SET          LD      C, A
-                ADD     A, A
-                ADD     A, A
-                ADD     A, A
-                ADD     A, A            ; A = N << 4
-                OR      C               ; FLATTEN: N << 4 | N
-                LD      (VCOLSHDW), A
-                XOR     A
-                LD      (SHDWOFF), A
+.S2SET          INC     A               ; KEPT APART FROM THE THEME'S VCOLSHDW:
+                LD      (SHDWCUS), A    ; A THEME= LINE OR SETTINGS OK RELOADS
+                XOR     A               ; THAT ROLE, AND USED TO WIPE IT. SHDCOL
+                LD      (SHDWOFF), A    ; FLATTENS IT WHEN WSHDW PAINTS
                 RET
                 ELSE
                 LD      A, B
@@ -928,18 +925,18 @@ CFGSAVE         LD      A, (CFGLOC)
                 ; 9. SHADOW
                 LD      DE, KEYSHDW
                 IFDEF   S2ED
-                LD      HL, SHDWOFF
-                LD      A, 1            ; 1 = ON (SHDWOFF == 0)
-                OR      (HL)
-                JR      Z, .S2SHOK
-                XOR     A               ; 0 = OFF (SHDWOFF != 0)
-.S2SHOK         LD      HL, .ALNV
+                ; OFF, ON OR THE COLOUR DIGIT IT WAS LOADED WITH. THE VALUE IS
+                ; BUILT IN PAGE 1 (SHDVAL): THIS SEGMENT HAS NO ROOM FOR IT
+                PUSH    DE
+                CALL    SHDVAL          ; DE = VALUE STRING
+                POP     HL              ; HL = KEY STRING
+                CALL    .WRPAR
                 ELSE
                 LD      A, (SHDWCLR)    ; A PACKED BYTE: COLOUR N IS N * #55
                 AND     3               ; 0 OFF (BG), 1 FG, 2 UI, 3 HI
                 LD      HL, .S6SHDV
-                ENDIF
                 CALL    .WRLIST
+                ENDIF
 
                 ; CLOSE FILE: CY = 1 IF IT, OR ANY WRITE ABOVE, FAILED
                 LD      A, (CFGHAND)

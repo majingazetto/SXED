@@ -120,6 +120,8 @@ is caught only by `S2-8/matches-document`. Measured, 2026-09-21.
 | `S2-26-long-path` | `H33-long-path` on S2ED, row 0 compared with the computed bar |
 | `S2-27-dialog-keys` | 46 keys into the File menu, none dropped: the `WINPOLL` / `CHGET` flag defect on S2ED |
 | `S2-33-bare-launch` | `S2ED` with no argument: menu bar, blank document and status bar, colours against the named theme (not the RAM roles, which the defect zeroes) |
+| `S2-48-shadow-roundtrip` | Settings opened on `SHADOW=OFF`, `ON` and a colour digit placed before `THEME=`: the field shows the right value, OK saves back what was loaded, and the About drop shadow still wears it | `CFGSAVE` always wrote `SHADOW=OFF` and `DOSETT` copied `SHDWOFF = #FF` into `STTSHD`: the next Settings printed entry 255 of a 3-entry table (garbage seen on real hardware) |
+| `S2-49-overwrite` | INS, then `xyz` over `ABCDEFGH`: the screen equals the table computed from `xyzDEFGH` and the file holds it | the S2ED face of the `EDOVRCHR` stub |
 
 Two traps this suite met while being built, both worth knowing before adding a
 case:
@@ -222,6 +224,7 @@ Every case names the defect it was derived from in its `origin` field.
 | D8 | Spanish characters via GRAPH matrix combos and dead-key state machine, each accent delivered exactly once | `CHKACNT` matrix scanner, `TRNGRPH` claim and `TRNDEAD` |
 | D9 | suppress KANA mode and force physical LED off in Boosted_MSX2+_JP | `MAINLOOP` / `KANARST` PSG R15 bit 7 control |
 | D10 | markdown and lite markup: cycling, delimiters, selection wrapping | `ACTCYCMK`, `INSDELIM` and `WRAPSEL` |
+| D13 | INS overwrite: typing replaces the character under the cursor (screen equals a full REDRAW), past the end it appends, a selection is replaced by an insert, one Ctrl+Z undoes the burst; Vi `r<c>` keeps the cursor, `R` shows `[REP]` and ESC returns to insert | `EDOVRCHR` was a stub that called `EDINSCHR`: `[OVR]` on the status bar, and every character inserted |
 | H8-H16 | corrupt `S6ED.DAT` (magic, version, NUMBLKS, truncation, LENGTH, BLKID) aborts with a message, never a hang | Fase C1: unvalidated container loader |
 | H17 | padded container loads correctly via `DSEEK` to DATAOFF | Fase C1: table-driven multi-block loader |
 | E1 | multi-line cut removes lines with clean screen | `ACTCUT` and `ACTDLS` multi-line deletion |
@@ -245,6 +248,7 @@ Every case names the defect it was derived from in its `origin` field.
 | H25 | resident Find & Replace modal: differential field redraw, match-case focus highlight, block caret, and atomic undo | resident search engine & DOFIND dialog |
 | H26 | find on current line: DOCLINE preservation from WORKBUF corruption, forward/backward wrap, and match XOR highlight retention | current-line search pointer & highlight retention |
 | B5 | `S6ED.DSK` as `make dsk` ships it -- `AUTOEXEC.BAT` puts `\TOOLS` on the `PATH` and runs the editor from `\DEV` -- boots into the sample document with the program's own DAT, FNT, general and local CFG | every disk carried everything in the root, which hid that the program files were opened in the current directory |
+| B6, B6F | `SXED.TXT` off the shipped `S6ED.DSK`, opened in the editor on a Japanese MSX2+ (`Boosted_MSX2+_JP`; B6F on a stock `Sony_HB-F1XV` with a 512 kB mapper cartridge), section 6.6 on screen: every cell of the screenful equals the `S6ED.FNT` glyph of the byte the converted manual holds there, accents included. T0 `manual-charset` guards the same thing statically (every `SXED.TXT` the Makefile ships is `$(MANUAL)` from `utf8msx`, the `dist` bundle too, and the built images and bundle are read back: no byte above `#AF`, CR LF) | v0.1's hand-made bundle shipped the UTF-8 source as `SXED.TXT`; a tester on a Japanese machine read every accent as two glyphs |
 | H29 | program in `\TOOLS` found through `PATH`, run from `\DEV` (layout built by `AUTOEXEC.BAT` with `MD`/`COPY`, since dsktool has no directories): DAT/FNT next to the program, general CFG then local CFG, one read when both are the same directory, and the old DAT-in-current-directory setup still boots | DAT, FNT and CFG opened by bare name: run through `PATH` the editor aborted with "S6ED.DAT not found" |
 | H30 | Ctrl+N and File > New: a clean document is replaced at once, a modified one only after YES in the New Document dialog (`DONEW` = `DOASK` with its text) | New reset a modified document without asking; Ctrl+N bound nowhere |
 | H31 | `:e` loads, `:e` on a missing file opens an empty document under that name (vi), `:e` on an oversized file keeps the current document and its name, `:e!` clears `MODIFIED` | `FILELOAD` reset the document before opening, and `:e` put the new name in `FILENAME` first: a refused load left the old text under the refused file's name |

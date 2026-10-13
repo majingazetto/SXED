@@ -247,6 +247,69 @@ THMLOAD         LD      HL, THMDARK     ; DEFAULT THEME
 
 
 
+; --- SHDCOL                    ----------------------------------------
+
+
+; - SHDCOL -----------------------------
+; - THE COLOUR BYTE OF THE WINDOW DROP SHADOW: SHADOW=<HEX> FLATTENED
+; - (N << 4 | N), OR THE THEME'S VCOLSHDW. THE DIGIT IS KEPT APART FROM THE
+; - THEME ROLE BECAUSE A LATER THEME= LINE, OR SETTINGS OK, RELOADS THE ROLE
+; - BLOCK AND USED TO WIPE IT. PAGE 1: THE FEATURE SEGMENT HAS NO ROOM.
+; - IN:  NONE
+; - OUT: A = COLOUR BYTE
+; - CLOBBERS: AF, E
+; -
+
+SHDCOL          LD      A, (SHDWCUS)
+                OR      A
+                JR      Z, .THEME
+                DEC     A               ; A = N
+                LD      E, A
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A            ; A = N << 4
+                OR      E
+                RET
+.THEME          LD      A, (VCOLSHDW)
+                RET
+
+
+
+; --- SHDVAL                    ----------------------------------------
+
+
+; - SHDVAL -----------------------------
+; - THE SHADOW= VALUE CFGSAVE WRITES: "OFF", "ON", OR THE HEX DIGIT THE
+; - COLOUR WAS LOADED WITH, SO SAVING THE SETTINGS NEVER LOSES IT. THE
+; - DIGIT GOES TO SHDWSTR, WHOSE SECOND BYTE INIT CLEARS AND NOTHING WRITES.
+; - IN:  NONE
+; - OUT: DE = ASCIIZ VALUE
+; - CLOBBERS: AF, DE
+; -
+
+SHDVAL          LD      DE, .SVOFF
+                LD      A, (SHDWOFF)
+                OR      A
+                RET     NZ
+                LD      DE, .SVON
+                LD      A, (SHDWCUS)
+                OR      A
+                RET     Z
+                DEC     A               ; A = N (0..15) -> '0'..'9', 'A'..'F'
+                ADD     A, #90
+                DAA
+                ADC     A, #40
+                DAA
+                LD      DE, SHDWSTR
+                LD      (DE), A
+                RET
+
+.SVOFF          DEFM    "OFF", 0
+.SVON           DEFM    "ON", 0
+
+
+
 ; --- VDPRSET                   ----------------------------------------
 
 

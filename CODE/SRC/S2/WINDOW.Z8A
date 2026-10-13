@@ -611,7 +611,7 @@ WSHDW           LD      A, (SHDWOFF)
                 INC     H
 .RSNC           LD      DE, COLMAP
                 ADD     HL, DE
-                LD      A, (VCOLSHDW)
+                CALL    SHDCOL          ; THE THEME'S, OR SHADOW=<HEX>
                 LD      (HL), A
                 POP     BC
                 INC     B
@@ -640,7 +640,7 @@ WSHDW           LD      A, (SHDWOFF)
                 ADD     HL, DE
                 LD      A, (WINNC)
                 LD      B, A            ; B = WINNC CELLS
-                LD      A, (VCOLSHDW)
+                CALL    SHDCOL          ; THE THEME'S, OR SHADOW=<HEX>
 .BSLP           LD      (HL), A
                 INC     HL
                 DJNZ    .BSLP
@@ -1887,13 +1887,12 @@ DOSETT          LD      A, 5
                 XOR     A
 .THMOK          LD      (STTTHM), A
 
-                ; SHADOW (0=OFF, 1=ON)
-                XOR     A
-                LD      HL, SHDWOFF
-                OR      (HL)
-                JR      NZ, .SHDSET
-                INC     A
-.SHDSET         LD      (STTSHD), A
+                ; SHADOW (0=OFF, 1=ON). SHDWOFF IS ONLY EVER 0 OR #FF, SO ONE
+                ; INC MAPS IT. IT USED TO COPY #FF INTO STTSHD, AND .DRWUI
+                ; THEN PRINTED ENTRY 255 OF A 3-ENTRY TABLE (2026-10-13)
+                LD      A, (SHDWOFF)
+                INC     A               ; #FF (OFF) -> 0, 0 (ON) -> 1
+                LD      (STTSHD), A
 
                 XOR     A
                 LD      (SETTFOC), A
@@ -2179,11 +2178,8 @@ DOSETT          LD      A, 5
                 CALL    APPLYTHM
 
                 LD      A, (STTSHD)
-                OR      A
-                LD      A, #FF
-                JR      Z, .SHDDON
-                XOR     A
-.SHDDON         LD      (SHDWOFF), A
+                DEC     A               ; 1 (ON) -> 0, 0 (OFF) -> #FF
+                LD      (SHDWOFF), A    ; SHDWCUS STAYS: A COLOUR SURVIVES OK
 
                 LD      HL, STRSAVG
                 CALL    SETMSG

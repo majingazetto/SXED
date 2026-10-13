@@ -72,7 +72,7 @@ def run(ctx, name_filter='', baseline=None):
     static.check_build_clean(ctx)
     ctx.reload_symbols()
     static.check_build_clean(ctx.for_target('S2ED'))
-    static.check_build_clean(ctx.for_target('S62ED'))
+    static.check_build_clean(ctx.for_target('S61ED'))
     return checks
 
 
@@ -126,7 +126,7 @@ def _verdicts(ctx, muts):
             out[chk.name] = not chk.counts_as_failure
     filters = {m['filter'].upper() for m in muts}
     catalog, runner = {'S2ED': (gate_s2.CASES, gate_s2.run),
-                       'S62ED': (gate_s62.CASES, gate_s62.run)}.get(
+                       'S61ED': (gate_s62.CASES, gate_s62.run)}.get(
                            ctx.target, (gate.CASES, gate.run))
     cases = [c for c in catalog
              if any(f in c.name.upper() for f in filters)]

@@ -418,7 +418,9 @@ WINACTV         DEFB    0               ; 1 = MODAL WINDOW ACTIVE, 0 = INACTIVE
                 ; ZERO, WHICH INIT ALREADY WRITES AND WHICH MEANS "AS BEFORE":
                 ; ON S2ED THE THEME'S VCOLSHDW, ON S6ED CLR_BG.
                 IFDEF   S2ED
-SHDWOFF         DEFB    0               ; NON-ZERO: NO DROP SHADOW AT ALL
+SHDWOFF         DEFB    0               ; #FF: NO DROP SHADOW AT ALL, ELSE 0
+SHDWCUS         DEFB    0               ; SHADOW=<HEX>: COLOUR + 1, 0 = THEME'S
+SHDWSTR         DEFS    2               ; CFGSAVE: THE DIGIT, NUL (NEVER WRITTEN)
                 ELSE
 SHDWCLR         DEFB    0               ; PACKED FILL BYTE FOR THE SHADOW BARS
                 ENDIF

@@ -10,11 +10,13 @@ it.  `origin` on each case says which.
 import hashlib
 import os
 import re
+import shutil
+import subprocess
 
 import vram
 from cases import (Case, DEFAULT_CFG, HomePathCase, LongPathCase,
                    ShippedDiskCase, crlf, io_fixture, numbered)
-from harness import MACH_128K, MACH_2MB, MACH_JP
+from harness import MACH_128K, MACH_2MB, MACH_F1XV, MACH_JP, Session
 from keys import Timeline
 from result import Check
 
@@ -3132,6 +3134,142 @@ class D12LongLine(Case):
 # --- E1  MULTI-LINE CUT -----------------------------------------------
 
 
+class D13Overwrite(Case):
+    name = 'D13-overwrite'
+    desc = ('INS switches to overwrite: a character replaces the one under '
+            'the cursor, past the end it appends, a selection is replaced by '
+            'an insert, one Ctrl+Z undoes the burst; Vi r and R')
+    origin = ('2026-10-13: INS toggled [INS]/[OVR] on the status bar since '
+              'Sprint 1, but EDOVRCHR was a stub that called EDINSCHR -- '
+              'overwrite never existed, and Vi had neither r nor R')
+    variants = ('std', 'undo', 'sel', 'vi')
+    HEAD = 'ABCDEFGH'
+    LINES = [HEAD] + ['LINE %02d' % i for i in range(1, 60)]
+
+    def config(self, ctx, variant=None):
+        if variant == 'vi':
+            return DEFAULT_CFG.replace('PROFILE=STD', 'PROFILE=VI')
+        return DEFAULT_CFG
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        if variant == 'vi':
+            t.text('rX')                        # 'XBCDEFGH', stays on col 0
+            t.wait(0.5)
+            t.snap('r', bytes_=[('STATBUF', 80)])
+            t.text('lR')                        # col 1, replace mode
+            t.wait(0.5)
+            t.snap('rep', bytes_=[('STATBUF', 80)])
+            t.text('yz')                        # 'XyzDEFGH'
+            t.press('ESC')                      # normal, col 2
+            t.wait(0.5)
+            t.snap('esc')
+            t.text('ik')                        # insert again: 'XykzDEFGH'
+            t.press('ESC')
+        else:
+            t.press('INS')
+            t.wait(0.5)
+            t.snap('ovr', bytes_=[('STATBUF', 80)])
+            if variant == 'sel':
+                t.press('RIGHT', mods=['SHIFT'], repeat=3)      # select ABC
+                t.text('Q')                     # 'QDEFGH'
+            else:
+                t.text('xyz')                   # 'xyzDEFGH'
+                t.wait(0.5)
+                t.snap('typed', vram=True)
+                if variant == 'undo':
+                    t.press('Z', mods=['CTRL'])
+                    t.wait(0.5)
+                    t.snap('undone')
+                else:
+                    t.press('DOWN', mods=['GRAPH'])     # page down...
+                    t.press('UP', mods=['GRAPH'])       # ...and back: REDRAW
+                    t.wait(0.5)
+                    t.snap('redrawn', vram=True)
+                    t.press('RIGHT', repeat=5)          # end of line, col 8
+                    t.text('12')                        # appended
+                    t.press('INS')                      # back to insert
+                    t.press('LEFT', mods=['CTRL'])      # start of line
+                    t.text('k')                         # inserted
+        t.wait(0.5)
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    WANT = {'std': 'kxyzDEFGH12', 'undo': 'ABCDEFGH', 'sel': 'QDEFGH',
+            'vi': 'XykzDEFGH'}
+
+    def verify(self, ctx, runs):
+        checks = []
+        for variant, run in sorted(runs.items()):
+            tag = 'D13/%s' % variant
+            got = run.session.extract(run.dsk, 'DOC.TXT')
+            want = crlf([self.WANT[variant]] + self.LINES[1:])
+            checks.append(Check(tag + '/content', got == want,
+                                'line 0 saved as %r, rest intact'
+                                % self.WANT[variant] if got == want else
+                                'line 0 saved as %r' % (got.split(b'\r\n')[0]
+                                                        if got else None)))
+            if variant == 'vi':
+                r_bar = bytes(run.var('r', 'STATBUF') or [])
+                rep_bar = bytes(run.var('rep', 'STATBUF') or [])
+                checks.append(Check(tag + '/r',
+                                    run.var('r', 'CURX') == 0 and
+                                    run.var('r', 'VIMODE') == 0,
+                                    'r leaves the cursor on col 0 in normal '
+                                    'mode (CURX %s, VIMODE %s)'
+                                    % (run.var('r', 'CURX'),
+                                       run.var('r', 'VIMODE'))))
+                checks.append(Check(tag + '/rep-shown', b'[REP]' in rep_bar
+                                    and b'[REP]' not in r_bar,
+                                    'R shows [REP] on the status bar: %r'
+                                    % rep_bar))
+                checks.append(Check(tag + '/esc',
+                                    run.var('esc', 'VIMODE') == 0 and
+                                    run.var('esc', 'INSMODE') == 1 and
+                                    run.var('esc', 'CURX') == 2,
+                                    'ESC leaves R: VIMODE %s, INSMODE %s, '
+                                    'CURX %s' % (run.var('esc', 'VIMODE'),
+                                                 run.var('esc', 'INSMODE'),
+                                                 run.var('esc', 'CURX'))))
+                continue
+            bar = bytes(run.var('ovr', 'STATBUF') or [])
+            checks.append(Check(tag + '/mode', run.var('ovr', 'INSMODE') == 0
+                                and b'[OVR]' in bar,
+                                'INS: INSMODE %s, status bar %r'
+                                % (run.var('ovr', 'INSMODE'), bar)))
+            if variant == 'std':
+                checks.append(Check(tag + '/cursor',
+                                    run.var('typed', 'CURX') == 3,
+                                    'three characters over, CURX %s'
+                                    % run.var('typed', 'CURX')))
+                a, b = run.snaps.get('typed', {}), run.snaps.get('redrawn', {})
+                if all(a.get(k) == b.get(k) for k in
+                       ('TOPLINE', 'DOCLINE', 'CURX', 'CURY')):
+                    d = vram.diff(run.blob('typed', 'vram'),
+                                  run.blob('redrawn', 'vram'),
+                                  ignore_cells=[(a.get('CURX', 0),
+                                                 a.get('CURY', 0))])
+                    checks.append(Check(tag + '/render-pure', not d,
+                                        'screen identical to a full REDRAW'
+                                        if not d else '%d stray pixels'
+                                        % len(d)))
+                else:
+                    checks.append(Check(tag + '/render-pure', False,
+                                        'state mismatch before diff'))
+            if variant == 'undo':
+                checks.append(Check(tag + '/one-step',
+                                    run.var('undone', 'CURX') == 0,
+                                    'one Ctrl+Z took the burst back, '
+                                    'CURX %s' % run.var('undone', 'CURX')))
+        return checks
+
+
 class E1Cut(Case):
     name = 'E1-cut'
     desc = 'multi-line cut removes lines, preserves remainder, zero visual residue'
@@ -4732,6 +4870,138 @@ class B5ShippedDisk(ShippedDiskCase):
 
     def verify(self, ctx, runs):
         return self.shipped_checks(ctx, runs, 'B5', Check)
+
+
+# --- B6  THE MANUAL ON A JAPANESE MACHINE -----------------------------
+
+
+class B6ManualJp(ShippedDiskCase):
+    """The shipped manual, read in the editor on a Japanese MSX2+.
+
+    A Japanese ROM charset holds kana where the international one has the
+    accented letters (#80-#AF), so a Japanese machine is where a manual in
+    the wrong charset shows.  The editor draws with S6ED.FNT, not the ROM,
+    so the accents must come out as that font's glyphs whatever the machine.
+    The shipped AUTOEXEC is kept but for its last line, which opens the
+    manual instead of TEST.TXT, and the screen is taken at section 6.6 --
+    the accent table the report was about.
+    """
+
+    name = 'B6-manual-jp'
+    desc = 'SXED.TXT off the shipped disk, section 6.6, on a Japanese MSX2+'
+    origin = ('2026-10-13: v0.1 shipped the UTF-8 source of the manual as '
+              'SXED.TXT next to the disks; a tester on a Japanese machine '
+              'read it in the editor and every accent came out as two glyphs')
+    machine = MACH_JP
+    dsk_target = 'dsk'
+    dsk_name = 'S6ED.DSK'
+    tag = 'B6'
+    ANCHOR = b'    GRAPH+A/E/I/O/U'
+
+    def execute(self, ctx):
+        # The shipped image, but booting into the manual.  dskfat replaces
+        # AUTOEXEC.BAT in the session's own copy, never in the shipped one.
+        r = subprocess.run(['make', self.dsk_target], cwd=ctx.code_dir,
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            raise RuntimeError('make %s failed: %s'
+                               % (self.dsk_target, r.stdout + r.stderr))
+        session = Session(ctx, self, None)
+        src = os.path.join(ctx.code_dir, self.dsk_name)
+
+        def build_disk():
+            dsk = os.path.join(session.dir, self.dsk_name)
+            shutil.copy(src, dsk)
+            bat = os.path.join(session.dir, 'AUTOEXEC.BAT')
+            with open(bat, 'wb') as fh:
+                fh.write(b'MODE 80\r\nPATH A:\\TOOLS\r\nCD \\DEV\r\n'
+                         b'S6ED SXED.TXT\r\n')
+            subprocess.run(['python3', ctx.dskfat, dsk, 'add', '.', bat],
+                           check=True, capture_output=True)
+            return dsk
+
+        session.build_disk = build_disk
+        return {None: session.run(self.timeline(ctx))}
+
+    def manual(self, ctx):
+        """The manual as the disk carries it: lines of MSX-charset bytes."""
+        with open(os.path.join(ctx.code_dir, 'SXED_MSX.TXT'), 'rb') as fh:
+            return fh.read().split(b'\r\n')
+
+    def target_line(self, ctx):
+        lines = self.manual(ctx)
+        return next(i for i, l in enumerate(lines) if l.startswith(self.ANCHOR))
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.wait(1.0)
+        t.press('G', mods=['CTRL'])
+        t.wait(1.0)
+        for ch in str(self.target_line(ctx) + 1):
+            t.press(ch)
+        t.wait(0.5)
+        t.press('RETURN')
+        t.wait(1.0)
+        t.snap('accents', vram=True)
+        return t
+
+    def verify(self, ctx, runs):
+        run = runs[None]
+        lines = self.manual(ctx)
+        while lines and lines[-1] == b'':
+            lines.pop()
+        target = self.target_line(ctx)
+        top = run.var('accents', 'TOPLINE')
+        left = run.var('accents', 'LEFTCOL')
+        buf = run.blob('accents', 'vram')
+        font = font_of(ctx)
+        checks = [
+            Check('%s/loaded' % self.tag, run.var('boot', 'TOTLINES') == len(lines),
+                  'TOTLINES = %s, SXED.TXT has %d lines'
+                  % (run.var('boot', 'TOTLINES'), len(lines))),
+            Check('%s/font' % self.tag, bool(run.var('boot', 'FNTOK')),
+                  'drawn with S6ED.FNT, not the ROM charset (FNTOK %s)'
+                  % run.var('boot', 'FNTOK')),
+        ]
+        if buf is None or top is None or not top <= target < top + 24 \
+                or left != 0:
+            checks.append(Check('%s/screen' % self.tag, False,
+                                'section 6.6 not on screen: TOPLINE %s, '
+                                'LEFTCOL %s, line %d' % (top, left, target)))
+            return checks
+        # Every cell of the screenful against the glyph the font holds for
+        # the byte the manual holds there -- accents included.  The cursor
+        # blinks, so its cell is the one that may differ.
+        cursor = (run.var('accents', 'CURX'), run.var('accents', 'CURY'))
+        bad, high = [], 0
+        for row in range(24):
+            n = top + row
+            text = lines[n] if n < len(lines) else b''
+            high += sum(1 for b in text if b >= 0x80)
+            for col in range(80):
+                if (col, row) == cursor:
+                    continue
+                code = text[col] if col < len(text) else 0x20
+                x0, y0, w, h = vram.cell_rect(col, row)
+                got = vram.ink_mask(buf, x0, y0, w, h, ground=vram.COL_BG,
+                                    first_line=vram.TEXT_FIRST_LINE)
+                if got != vram.glyph_mask(font, code):
+                    bad.append((row, col, '#%02X' % code))
+        checks.append(Check('%s/accents-present' % self.tag, high >= 8,
+                            '%d accented letters on screen' % high))
+        checks.append(Check('%s/screen' % self.tag, not bad,
+                            '24 rows from line %d match S6ED.FNT cell for '
+                            'cell' % (top + 1) if not bad else
+                            '%d cells differ, first %s' % (len(bad), bad[:6])))
+        return checks
+
+
+class B6ManualF1xv(B6ManualJp):
+    name = 'B6-manual-f1xv'
+    desc = 'B6 on a stock Sony HB-F1XV with a 512 kB mapper cartridge'
+    tag = 'B6F'
+    machine = MACH_F1XV
 
 
 # --- H30  FILE > NEW ASKS BEFORE DISCARDING ---------------------------
@@ -7716,9 +7986,9 @@ CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G
          Q4SettingsBorders(), Q5SettingsShadow(), Q6VdpWaitJiffy(),
          V1ViLeader(), V2WrapSelRoom(), V3InsDelimRoom(), V4ViColonBig(), W1TabRun(), W2SettingsFocus(),
          X1ViLineBreak(), X2CuaLineBreak(), Z1CtrlStop(),
-         B2Font(), B3Rom(), B4CfgStream(), B5ShippedDisk(), F1Scroll(), F2Keyrun(),
+         B2Font(), B3Rom(), B4CfgStream(), B5ShippedDisk(), B6ManualJp(), B6ManualF1xv(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
-         D7Tabs(), D8Accents(), D9Kana(), D10Markup(), D11Margin(), D12LongLine(),
+         D7Tabs(), D8Accents(), D9Kana(), D10Markup(), D11Margin(), D12LongLine(), D13Overwrite(),
          E1Cut(), E2Paste(), E3SelScroll(), E4SelAllDel(), E5Replace(), E6SelWordPage(), E7ClipLimit(),
          I1UnixAuto(), I2DosAuto(), I3ConvertDosToUnix(), I4ConvertUnixToDos(),
          U1UndoMod(), U2UndoDel(), U3UndoSplit(), U4UndoJoin(), U5UndoSel(),

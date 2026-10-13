@@ -4227,6 +4227,193 @@ class S247RightMargin(S2Case):
         return checks
 
 
+# --- S2-49  OVERWRITE MODE ------------------------------------------
+
+
+class S249Overwrite(S2Case):
+    name = 'S2-49-overwrite'
+    desc = ('INS, then typing replaces the characters under the cursor: the '
+            'screen equals the table computed from the new line, and the '
+            'saved file holds it')
+    origin = ('2026-10-13: EDOVRCHR was a stub that called EDINSCHR, so [OVR] '
+              'on the status bar inserted all the same')
+    LINES = ['ABCDEFGH', 'SECOND LINE', 'THIRD LINE']
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.press('INS')
+        t.wait(0.5)
+        t.text('xyz')
+        t.wait(1.0)
+        t.snap('typed', vram='pat')
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        lines = ['xyzDEFGH'] + self.LINES[1:]
+        dump = run.blob('typed', 'pat')
+        checks = [Check('S2-49/mode', run.var('typed', 'INSMODE') == 0,
+                        'INS: INSMODE %s' % run.var('typed', 'INSMODE'))]
+        if dump is None:
+            checks.append(Check('S2-49/rows', False, 'no dump'))
+        else:
+            bad = pattern.mismatched_rows(
+                dump, font(ctx), lines, run.var('typed', 'TOPLINE'),
+                cursor=(pattern.TXRFIRST + run.var('typed', 'CURY'),
+                        run.var('typed', 'CURX')))
+            checks.append(Check('S2-49/rows', not bad,
+                                'the screen shows xyzDEFGH, nothing shifted'
+                                if not bad else 'rows differ: %s' % bad[:4]))
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        checks.append(Check('S2-49/content', got == crlf(lines),
+                            'saved byte for byte' if got == crlf(lines) else
+                            'got %r' % got))
+        return checks
+
+
+# --- S2-48  SHADOW SURVIVES A SETTINGS ROUND TRIP -----------------------
+
+
+class S248ShadowRoundTrip(S2Case):
+    name = 'S2-48-shadow-roundtrip'
+    desc = ('Settings opens on SHADOW=OFF, ON and a colour with the right '
+            'value painted, OK saves back what was loaded, and the About '
+            'drop shadow still wears it afterwards')
+    origin = ('2026-10-13, real hardware (a V9958, earlier a TMS9918): '
+              'garbage in the Shadow field.  CFGSAVE wrote SHADOW=OFF '
+              'whatever the setting (LD A,1 / OR (HL) is never zero), and '
+              'DOSETT copied SHDWOFF = #FF into STTSHD, so the next time '
+              'Settings opened it indexed entry 255 of a 3-entry table.  '
+              'S2-31 only ever toggled ON -> OFF, the one direction the save '
+              'got right by accident; S2-45 never loaded SHADOW=OFF.  A '
+              'colour was flattened into VCOLSHDW at parse time, where a '
+              'later THEME= line or Settings OK overwrote it.')
+    WINR, WINC, WINNR, WINNC = 6, 9, 11, 13     # DOABT, in cells
+    variants = ('off', 'on', 'colour')
+    SAVED = {'off': 'SHADOW=OFF', 'on': 'SHADOW=ON', 'colour': 'SHADOW=4'}
+    SHOWN = {'off': 'OFF', 'on': 'ON', 'colour': 'ON'}
+    ROW, LABEL, VALUE = 14, 22, 34              # Shadow row in DOSETT
+    STT = [('STTPRF', 9)]
+    VARS = [('SHDWOFF', 1), ('SHDWCUS', 1), ('VCOLSHDW', 1)]
+
+    def fixture(self, ctx, variant=None):
+        return crlf(numbered(5))
+
+    def config(self, ctx, variant=None):
+        if variant == 'colour':
+            # The colour BEFORE the theme: the theme loads the role block
+            # and used to wipe it.
+            return 'SHADOW=4\n' + self.cfg + 'THEME=AMBER\n'
+        return self.cfg + 'SHADOW=%s\n' % self.SHOWN[variant]
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot', vram='patcol')
+        t.press('F3')
+        t.snap('menu', at='WINPOLL')
+        t.press('RETURN')
+        t.snap('open', at='WINPOLL', vram='pat', bytes_=self.STT)
+        t.press('DOWN', repeat=9)               # nine rows down: [ OK ]
+        t.snap('foc_ok', at='WINPOLL')
+        t.press('RETURN')
+        t.wait(10.0)                            # the save takes ~8 s on the
+        t.snap('saved', vars_=self.VARS)        # MSX1 floppy; the timeline is
+        t.wait(1.0)                             # absolute, keys would land in it
+        t.press('F5')                           # Help menu
+        t.snap('help', at='WINPOLL')            # gate on THIS window first:
+        t.wait(1.0)                             # every modal polls WINPOLL,
+        t.press('A')                            # and a key inside a snap is lost
+        t.wait(1.0)
+        t.snap('about', vram='patcol', at='WINPOLL')
+        return t
+
+    def margin(self):
+        return ([(r, self.WINC + self.WINNC)
+                 for r in range(self.WINR + 1, self.WINR + self.WINNR + 1)] +
+                [(self.WINR + self.WINNR, c)
+                 for c in range(self.WINC + 1, self.WINC + self.WINNC + 1)])
+
+    def is_about(self, run):
+        return tuple(run.var('about', k) for k in
+                     ('WINR', 'WINC', 'WINNR', 'WINNC')) == \
+            (self.WINR, self.WINC, self.WINNR, self.WINNC)
+
+    def verify(self, ctx, runs):
+        fnt = font(ctx)
+        checks = []
+        for variant, run in sorted(runs.items()):
+            tag = 'S2-48/%s' % variant
+            stt = run.var('open', 'STTPRF')
+            idx = stt[8] if stt else None
+            want = 0 if variant == 'off' else 1
+            checks.append(Check(tag + '/index', idx == want,
+                                'STTSHD = %s on opening (expected %d)'
+                                % (idx, want)))
+            dump = run.blob('open', 'pat')
+            if dump is None:
+                checks.append(Check(tag + '/field', False, 'no dump'))
+            else:
+                text = (' ' * self.LABEL + 'Shadow:    ').ljust(self.VALUE) \
+                    + self.SHOWN[variant].ljust(5)
+                dif = [c for c in pattern.differing_columns(
+                    pattern.row_of(dump, self.ROW),
+                    pattern.compose_row(fnt, text))
+                    if self.LABEL <= c < self.VALUE + 5]
+                checks.append(Check(tag + '/field', not dif,
+                                    'the field reads %s' % self.SHOWN[variant]
+                                    if not dif else 'columns differ: %s' % dif))
+            cfg = (run.session.extract_path(run.dsk, 'DEV\\S2ED.CFG') or
+                   run.session.extract(run.dsk, 'S2ED.CFG') or b'')
+            lines = [l for l in cfg.decode('ascii', 'replace').splitlines()
+                     if l.startswith('SHADOW=')]
+            checks.append(Check(tag + '/saved', lines == [self.SAVED[variant]],
+                                'OK saved %s' % self.SAVED[variant]
+                                if lines == [self.SAVED[variant]] else
+                                'saved %s, expected %s'
+                                % (lines, self.SAVED[variant])))
+            off = run.var('saved', 'SHDWOFF')
+            checks.append(Check(tag + '/state',
+                                off == (0xFF if variant == 'off' else 0),
+                                'SHDWOFF = %s after OK' % off))
+            boot, about = run.blob('boot', 'patcol'), run.blob('about', 'patcol')
+            if boot is None or about is None:
+                checks.append(Check(tag + '/shadow', False, 'no dump'))
+                continue
+            if not self.is_about(run):
+                checks.append(Check(tag + '/shadow', False,
+                                    'the About is not the window on screen'))
+                continue
+            role = run.var('saved', 'VCOLSHDW')
+            colour = {'on': role, 'colour': 0x44}.get(variant)
+            if variant == 'colour' and role == 0x44:
+                checks.append(Check(tag + '/shadow', False,
+                                    'the theme shadow is #44 too: the check '
+                                    'could not tell them apart'))
+                continue
+            bad = []
+            for r, c in self.margin():
+                sl = slice(c * 8, (c + 1) * 8)
+                got = pattern.colour_row(about[0x2000:], r)[sl]
+                if colour is None:
+                    if got != pattern.colour_row(boot[0x2000:], r)[sl]:
+                        bad.append((r, c))
+                elif set(got) != {colour}:
+                    bad.append((r, c, sorted('#%02X' % b for b in set(got))))
+            checks.append(Check(tag + '/shadow', not bad,
+                                'the About margin after OK: %s'
+                                % ('document colours' if colour is None
+                                   else '#%02X' % colour)
+                                if not bad else 'cells differ: %s' % bad[:6]))
+        return checks
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
          S210Theme(), S211About(), S212DialogUndo(),
@@ -4242,7 +4429,8 @@ CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S238ReflowAttrs(), S239BrowseTitle(),
          S240ColDigits(), S241BrowseCaret(),
          S242ScrollNoDup(), S243ClockHz(), S244MenuStrips(),
-         S245SettingsValues(), S246ViVisualWalk(), S247RightMargin()]
+         S245SettingsValues(), S246ViVisualWalk(), S247RightMargin(),
+         S248ShadowRoundTrip(), S249Overwrite()]
 
 
 def run(ctx, cases=None):

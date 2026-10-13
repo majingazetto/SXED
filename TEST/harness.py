@@ -25,6 +25,10 @@ SEGSIZE = 16384
 MACH_128K = ('Philips_NMS_8250', 'msxdos2')
 MACH_2MB = ('Boosted_MSX2_EN', 'msxdos2')
 MACH_JP = ('Boosted_MSX2+_JP', 'msxdos2')
+# A stock Japanese MSX2+ as owners have one: 64 kB on board is too few
+# segments for DOS 2 plus the editor, so a 512 kB mapper cartridge.  See
+# `m2d2 f1xv` in ~/.local/bin.
+MACH_F1XV = ('Sony_HB-F1XV', 'ram512k', 'msxdos2')
 # S2ED's target: a real TMS9918-class VDP.  MSX-DOS 2 does not run on an MSX1
 # (measured: the kernel halts with PC pinned at #4005), so the DOS 2-class
 # kernel is Nextor, whose standalone ASCII16 ROM adopts the machine's own disk
@@ -45,7 +49,7 @@ DEFAULT_VARS = [
     ('TXTWIDTH', 1), ('SAVETW', 1),
     ('TABWIDTH', 1), ('AUTOALGN', 1), ('KMAPID', 1), ('MKUPMD', 1),
     ('SAVEEOL', 1), ('CLKPH', 1), ('CLKHZ', 1), ('SCRRDY', 1),
-    ('SHOWCLK', 1), ('CLKMIN', 1), ('KMAPID', 1), ('VIMODE', 1),
+    ('SHOWCLK', 1), ('CLKMIN', 1), ('KMAPID', 1), ('VIMODE', 1), ('INSMODE', 1),
     ('FNTOK', 1), ('FNTROMD', 1), ('BLNKPH', 1), ('BLNKCNT', 1),
     ('SAVSCRMD', 1), ('SAVL40', 1), ('SAVLLEN', 1),
     ('SAVFORC', 1), ('SAVBAKC', 1), ('SAVBDRC', 1), ('SAVRG8', 1),

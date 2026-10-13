@@ -248,6 +248,8 @@ KMAPVIN         ; VI NORMAL MOVEMENT
                 DEFB    'd',     MODNONE, ACVILED
                 DEFB    'D',     MODANY,  ACVIKIL
                 DEFB    'g',     MODNONE, ACVILEG
+                DEFB    'r',     MODNONE, ACVILER
+                DEFB    'R',     MODANY,  ACVIREP
                 DEFB    'v',     MODNONE, ACVIVIS
                 DEFB    'V',     MODANY,  ACVILIN
                 DEFB    'y',     MODNONE, ACCOPY

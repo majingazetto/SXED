@@ -66,7 +66,11 @@ DISPKEY         PUSH    AF              ; PRESERVE KEYCODE ACROSS READMOD
                 CP      'd'
                 JP      Z, ACTDELLN
                 JR      .NOLEAD
-.NOTVD          CP      'g'
+.NOTVD          CP      'r'
+                JR      NZ, .NOTVR
+                LD      A, C            ; VI r<c>
+                JP      ACTVIRPL
+.NOTVR          CP      'g'
                 JR      NZ, .NOLEAD
                 LD      A, C
                 CP      'g'
@@ -122,7 +126,9 @@ DISPKEY         PUSH    AF              ; PRESERVE KEYCODE ACROSS READMOD
                 PUSH    BC
                 CALL    ACTDLS          ; DELETE ACTIVE SELECTION FIRST
                 POP     BC
-
+                LD      A, C            ; AND TYPE INTO THE GAP IT LEFT, IN
+                JP      EDINSCHR        ; EITHER MODE: THERE IS NOTHING TO
+                                        ; OVERWRITE THERE
 .NOSELDL        LD      A, (INSMODE)
                 CP      INS_MODE
                 LD      A, C

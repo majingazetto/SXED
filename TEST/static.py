@@ -701,6 +701,98 @@ def check_manual_width(ctx):
                  % (limit, over[:6]))
 
 
+MSXTOP = 0xAF                   # LAST CODE THE MSX SHARES WITH CODE PAGE 437
+
+
+def _msx_text_faults(data):
+    """Why `data` is not a text an MSX of any region can read, or None.
+
+    Above #AF the international and Japanese charsets hold different
+    glyphs, and every UTF-8 lead byte is #C2 or higher -- so one bound
+    rejects both a UTF-8 file and a stray code no MSX font agrees on.
+    """
+    high = [i for i, b in enumerate(data) if b > MSXTOP]
+    if high:
+        return '%d bytes above #%02X (first at offset %d: %s)' % (
+            len(high), MSXTOP, high[0],
+            data[high[0]:high[0] + 4].hex(' ').upper())
+    if b'\n' in data.replace(b'\r\n', b''):
+        return 'bare LF line endings'
+    return None
+
+
+def check_manual_charset(ctx):
+    """Every SXED.TXT that ships is in the MSX charset, with CR LF.
+
+    DOC/SXED.TXT is UTF-8 so it reads and diffs on the host; utf8msx
+    converts it on the way to the disks.  The v0.1 bundle was assembled by
+    hand and carried the UTF-8 source as SXED.TXT, so every accented letter
+    came out as two glyphs -- reported from a Japanese machine on 2026-10-13.
+    The disks were right all along, which is why nothing noticed: the shape
+    of the Makefile is checked (every SXED.TXT it ships is $(MANUAL), and
+    $(MANUAL) is made by utf8msx), the conversion of today's manual is run,
+    and whatever images and bundle are already built are read back.
+    """
+    bad = []
+    text = open(os.path.join(ctx.code_dir, 'Makefile'),
+                errors='replace').read()
+    m = re.search(r'^\$\(MANUAL\):.*\n\t(.*)$', text, re.M)
+    if m is None or '$(UTF8MSX)' not in m.group(1):
+        bad.append('$(MANUAL) is not made by utf8msx')
+    ships = re.findall(r'(\S+)=SXED\.TXT', text)
+    for src in ships:
+        if src != '$(MANUAL)':
+            bad.append('a disk ships %s as SXED.TXT' % src)
+    if len(ships) < 3:
+        bad.append('only %d disks ship SXED.TXT' % len(ships))
+    dist = re.search(r'^dist:(.*?)(?=^\S|\Z)', text, re.M | re.S)
+    if dist is None:
+        bad.append('Makefile has no dist target')
+    else:
+        body = dist.group(1)
+        if not re.search(r'cp \$\(MANUAL\) \S+/SXED\.TXT', body):
+            bad.append('dist does not ship $(MANUAL) as SXED.TXT')
+        if 'MANUAL.md' not in body:
+            bad.append('dist does not ship MANUAL.md')
+        if '$(MANUALSRC)' in body or 'DOC/SXED.TXT' in body:
+            bad.append('dist ships the UTF-8 source')
+
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        'utf8msx', os.path.join(ctx.project_dir, 'tools', 'utf8msx.py'))
+    utf8msx = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(utf8msx)
+    with open(os.path.join(ctx.project_dir, 'DOC', 'SXED.TXT'),
+              encoding='utf-8') as fh:
+        data, errors = utf8msx.convert(fh.read().replace('\r\n', '\n'))
+    if errors:
+        bad.append('utf8msx refuses the manual: %s' % '; '.join(errors[:3]))
+
+    shipped = []
+    for img in ('S6ED.DSK', 'S2ED.DSK', 'S61ED.DSK'):
+        path = os.path.join(ctx.code_dir, img)
+        if not os.path.exists(path):
+            continue
+        out = os.path.join(ctx.out_dir, 'manual_%s.txt' % img[:-4])
+        r = subprocess.run(['python3', ctx.dskfat, path, 'get',
+                            'DEV/SXED.TXT', out], capture_output=True)
+        if r.returncode != 0:
+            bad.append('%s has no DEV\\SXED.TXT' % img)
+            continue
+        shipped.append((img, open(out, 'rb').read()))
+    bundle = os.path.join(ctx.project_dir, 'dist', 'SXED.TXT')
+    if os.path.exists(bundle):
+        shipped.append(('dist/SXED.TXT', open(bundle, 'rb').read()))
+    for where, blob in shipped:
+        fault = _msx_text_faults(blob)
+        if fault:
+            bad.append('%s: %s' % (where, fault))
+    return Check('manual-charset', not bad, '; '.join(bad) if bad else
+                 'every SXED.TXT shipped is $(MANUAL) from utf8msx; read '
+                 'back from %s' % (', '.join(w for w, _ in shipped) or
+                                   'nothing built yet'))
+
+
 ALL = [check_build_clean, check_image_end, check_vars_block, check_init_clear,
        check_layout_asserts, check_record_exclusive, check_target_params,
        check_data_placement, check_statbuf_term,
@@ -709,7 +801,7 @@ ALL = [check_build_clean, check_image_end, check_vars_block, check_init_clear,
        check_page1_hooks,
        check_assets, check_feature_discipline, check_window_discipline,
        check_ftr_budget, check_tpa_chain, check_build_symmetry,
-       check_manual_width]
+       check_manual_width, check_manual_charset]
 
 
 def run(ctx):

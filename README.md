@@ -82,6 +82,7 @@ The project builds using [sjasmplus](https://github.com/z00m128/sjasmplus) and s
 cd CODE
 make            # Builds S6ED.COM, S61ED.COM, S2ED.COM and data files
 make check      # Runs static invariant quality gates (~0.2s)
+make dist       # Release bundle in ../dist: binaries, disks, SXED.TXT (MSX charset) and MANUAL.md (UTF-8)
 ```
 
 Automated headless verification (requires [openMSX](https://openmsx.org/)):

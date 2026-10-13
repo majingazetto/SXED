@@ -328,9 +328,9 @@ MUTATIONS = [
         'expect': ['S2-39/title'],
     },
     {
-        'name': 's62-name-label',
-        'target': 'S62ED',
-        'why': 'the S62ED name field box starts at 40 and paints over the label colon',
+        'name': 's61-name-label',
+        'target': 'S61ED',
+        'why': 'the S61ED name field box starts at 40 and paints over the label colon',
         'file': 'BROWSER.Z8A',
         'old': """                LD      A, 60           ; THE BOX STARTS AT 56, CLEAR OF "Name:" (8..47)""",
         'new': """                LD      A, 44           ; MUTATION: S6 GEOMETRY""",
@@ -1451,12 +1451,180 @@ MUTATIONS = [
         'file': 'WINDOW.Z8A',
         'old': """.RSNC           LD      DE, COLMAP
                 ADD     HL, DE
-                LD      A, (VCOLSHDW)""",
+                CALL    SHDCOL          ; THE THEME'S, OR SHADOW=<HEX>""",
         'new': """.RSNC           LD      DE, COLMAP
                 ADD     HL, DE
                 LD      A, #11          ; MUTATION: HARDCODED BLACK SHADOW""",
         'filter': 'S2-11',
         'expect': ['S2-11/shadow'],
+    },
+    {
+        'name': 's2-sett-shd-init',
+        'target': 'S2ED',
+        'why': 'Settings copies SHDWOFF = #FF into STTSHD again: entry 255 of '
+               'a 3-entry table is printed as the Shadow value',
+        'file': 'WINDOW.Z8A',
+        'old': """                LD      A, (SHDWOFF)
+                INC     A               ; #FF (OFF) -> 0, 0 (ON) -> 1
+                LD      (STTSHD), A""",
+        'new': """                LD      A, (SHDWOFF)
+                OR      A               ; MUTATION: THE #FF GOES STRAIGHT IN
+                LD      (STTSHD), A""",
+        'filter': 'S2-48',
+        'expect': ['S2-48/off/index', 'S2-48/off/field'],
+    },
+    {
+        'name': 's2-shdval-on',
+        'target': 'S2ED',
+        'why': 'CFGSAVE writes SHADOW=OFF whatever the setting, as it did '
+               'before 2026-10-13',
+        'file': 'VDP.Z8A',
+        'old': """SHDVAL          LD      DE, .SVOFF
+                LD      A, (SHDWOFF)
+                OR      A
+                RET     NZ""",
+        'new': """SHDVAL          LD      DE, .SVOFF
+                LD      A, (SHDWOFF)
+                OR      A
+                RET                     ; MUTATION: ALWAYS OFF""",
+        'filter': 'S2-48',
+        'expect': ['S2-48/on/saved', 'S2-48/colour/saved'],
+    },
+    {
+        'name': 's2-shdval-digit',
+        'target': 'S2ED',
+        'why': 'CFGSAVE writes SHADOW=ON for a colour: saving the settings '
+               'loses the digit',
+        'file': 'VDP.Z8A',
+        'old': """                LD      DE, .SVON
+                LD      A, (SHDWCUS)
+                OR      A
+                RET     Z""",
+        'new': """                LD      DE, .SVON
+                RET                     ; MUTATION: NO DIGIT""",
+        'filter': 'S2-48',
+        'expect': ['S2-48/colour/saved'],
+    },
+    {
+        'name': 's2-shdcol-theme',
+        'target': 'S2ED',
+        'why': 'the shadow always wears the theme role: SHADOW=<hex> is lost to '
+               'a THEME= line after it, and to Settings OK',
+        'file': 'VDP.Z8A',
+        'old': """SHDCOL          LD      A, (SHDWCUS)
+                OR      A""",
+        'new': """SHDCOL          XOR     A               ; MUTATION: NEVER A DIGIT
+                OR      A""",
+        'filter': 'S2-48',
+        'expect': ['S2-48/colour/shadow'],
+    },
+    {
+        'name': 'ovr-stub',
+        'why': 'EDOVRCHR routes to EDINSCHR again: [OVR] on the status bar, '
+               'and every character inserted',
+        'file': 'EDIT.Z8A',
+        'old': """EDOVRCHR        PUSH    AF
+                LD      HL, (DOCLINE)""",
+        'new': """EDOVRCHR        JP      EDINSCHR        ; MUTATION: THE OLD STUB
+                LD      HL, (DOCLINE)""",
+        'filter': 'D13',
+        'expect': ['D13/std/content', 'D13/vi/content'],
+    },
+    {
+        'name': 's2-ovr-stub',
+        'target': 'S2ED',
+        'why': 'the same stub on S2ED: typing over shifts the line right',
+        'file': 'EDIT.Z8A',
+        'old': """EDOVRCHR        PUSH    AF
+                LD      HL, (DOCLINE)""",
+        'new': """EDOVRCHR        JP      EDINSCHR        ; MUTATION: THE OLD STUB
+                LD      HL, (DOCLINE)""",
+        'filter': 'S2-49',
+        'expect': ['S2-49/rows', 'S2-49/content'],
+    },
+    {
+        'name': 'ovr-sel-overwrite',
+        'why': 'typing over a selection in OVR deletes it and then overwrites '
+               'the character that closed the gap',
+        'file': 'DISP.Z8A',
+        'old': """                LD      A, C            ; AND TYPE INTO THE GAP IT LEFT, IN
+                JP      EDINSCHR        ; EITHER MODE: THERE IS NOTHING TO
+""",
+        'new': """                ; MUTATION: FALL THROUGH TO THE MODE
+""",
+        'filter': 'D13',
+        'expect': ['D13/sel/content'],
+    },
+    {
+        'name': 'vi-r-cursor',
+        'why': 'Vi r leaves the cursor one past the replaced character',
+        'file': 'ACTION.Z8A',
+        'old': """                LD      (CURX), A       ; BACK ON THE REPLACED CHARACTER
+""",
+        'new': """                ; MUTATION: THE CURSOR STAYS ADVANCED
+""",
+        'filter': 'D13',
+        'expect': ['D13/vi/r'],
+    },
+    {
+        'name': 'vi-rep-esc',
+        'why': 'ESC leaves Vi R in overwrite: the next i overwrites too',
+        'file': 'ACTION.Z8A',
+        'old': """ACTVINRM        LD      A, INS_MODE     ; ESC ENDS R
+                LD      (INSMODE), A
+""",
+        'new': """ACTVINRM        ; MUTATION: ESC KEEPS OVR
+""",
+        'also': [('ACTION.Z8A', """ACTVIINS        LD      A, INS_MODE     ; i, a, o... INSERT, WHATEVER R LEFT
+                LD      (INSMODE), A
+""", """ACTVIINS        ; MUTATION: i KEEPS OVR
+""")],
+        'filter': 'D13',
+        'expect': ['D13/vi/esc', 'D13/vi/content'],
+    },
+    {
+        'name': 'vi-rep-tag',
+        'why': 'Vi R says [INS] on the status bar',
+        'file': 'UI.Z8A',
+        'old': """                LD      HL, .STRVIR     ; "[REP] "
+""",
+        'new': """                LD      HL, .STRVII     ; MUTATION: "[INS] "
+""",
+        'filter': 'D13',
+        'expect': ['D13/vi/rep-shown'],
+    },
+    {
+        # v0.1 shipped the UTF-8 source as SXED.TXT next to the disks, and a
+        # tester on a Japanese machine read every accent as two glyphs.  Here
+        # the disk itself carries it: the editor must show the wrong glyphs.
+        'name': 'b6-manual-utf8',
+        'why': 'the S6ED disk carries the UTF-8 source of the manual, so '
+               'every accented letter shows as two glyphs',
+        'file': 'Makefile',
+        'old': 'add DEV $(MANUAL)=SXED.TXT TEST.TXT',
+        'new': 'add DEV $(MANUALSRC)=SXED.TXT TEST.TXT',
+        'filter': 'B6',
+        'expect': ['B6/screen', 'B6F/screen'],
+        'expect_static': ['manual-charset'],
+    },
+    {
+        'name': 't0-dist-utf8',
+        'why': 'the release bundle ships the UTF-8 source as SXED.TXT, which '
+               'is exactly what v0.1 did by hand',
+        'file': 'Makefile',
+        'old': '\t@cp $(MANUAL) $(DISTDIR)/SXED.TXT\n',
+        'new': '\t@cp $(MANUALSRC) $(DISTDIR)/SXED.TXT\n',
+        'filter': 'T0',
+        'expect_static': ['manual-charset'],
+    },
+    {
+        'name': 't0-dsk-s2-utf8',
+        'why': 'the S2ED disk carries the UTF-8 source of the manual',
+        'file': 'Makefile',
+        'old': 'add DEV $(MANUAL)=SXED.TXT TEST_S2.TXT=TEST.TXT',
+        'new': 'add DEV $(MANUALSRC)=SXED.TXT TEST_S2.TXT=TEST.TXT',
+        'filter': 'T0',
+        'expect_static': ['manual-charset'],
     },
     {
         'name': 't0-dsk-s6only',
@@ -1469,12 +1637,12 @@ MUTATIONS = [
         'expect_static': ['build-symmetry'],
     },
     {
-        'name': 't0-dsk-nos62',
-        'why': 'the S6ED disk stops carrying S62ED, so the image that compares '
+        'name': 't0-dsk-nos61',
+        'why': 'the S6ED disk stops carrying S61ED, so the image that compares '
                'the three editors on an MSX2 goes out with two',
         'file': 'Makefile',
-        'old': '\t\t\t  $(OUTPUT_S62) $(DATFILE_S62) $(FNTFILE_S62) $(CFGFILE_S62)\n',
-        'new': '\t\t\t  $(DATFILE_S62) $(FNTFILE_S62) $(CFGFILE_S62)\n',
+        'old': '\t\t\t  $(OUTPUT_S61) $(DATFILE_S61) $(FNTFILE_S61) $(CFGFILE_S61)\n',
+        'new': '\t\t\t  $(DATFILE_S61) $(FNTFILE_S61) $(CFGFILE_S61)\n',
         'filter': 'T0',
         'expect_static': ['build-symmetry'],
     },
@@ -1486,17 +1654,17 @@ MUTATIONS = [
         'why': 'make build assembles S6ED alone again while clean removes '
                'both, so clean+build leaves the tree half built',
         'file': 'Makefile',
-        'old': 'build: build-s6 build-s2 build-s62\n',
-        'new': 'build: build-s6 build-s62\n',
+        'old': 'build: build-s6 build-s2 build-s61\n',
+        'new': 'build: build-s6 build-s61\n',
         'filter': 'T0',
         'expect_static': ['build-symmetry'],
     },
     {
-        'name': 't0-build-nos62',
-        'why': 'make build stops assembling S62ED while clean removes it, so '
+        'name': 't0-build-nos61',
+        'why': 'make build stops assembling S61ED while clean removes it, so '
                'clean+build leaves the tree without the third editor',
         'file': 'Makefile',
-        'old': 'build: build-s6 build-s2 build-s62\n',
+        'old': 'build: build-s6 build-s2 build-s61\n',
         'new': 'build: build-s6 build-s2\n',
         'filter': 'T0',
         'expect_static': ['build-symmetry'],
@@ -1874,9 +2042,9 @@ MUTATIONS = [
                'shape the COLOR_* keys had on S2ED before they were removed',
         'target': 'S2ED',
         'file': 'CFG.Z8A',
-        'old': """                OR      C               ; FLATTEN: N << 4 | N
-                LD      (VCOLSHDW), A""",
-        'new': """                OR      C               ; FLATTEN: N << 4 | N
+        'old': """.S2SET          INC     A               ; KEPT APART FROM THE THEME'S VCOLSHDW:
+                LD      (SHDWCUS), A    ; A THEME= LINE OR SETTINGS OK RELOADS""",
+        'new': """.S2SET          INC     A               ; KEPT APART FROM THE THEME'S VCOLSHDW:
                                         ; MUTATION: VALUE NEVER STORED""",
         'filter': 'S2-13',
         'expect': ['S2-13/colour/margin'],
@@ -2906,10 +3074,10 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'expect_any': ['S2-36/busy', 'S2-36-browse-busy'],
     },
     {
-        'name': 's62-cell-nx6',
-        'target': 'S62ED',
-        'why': 'ROWSET presets the glyph blit 6 px wide, the S6ED cell: every S62 cell loses its last two pixel columns',
-        'file': 'S62/RENDER.Z8A',
+        'name': 's61-cell-nx6',
+        'target': 'S61ED',
+        'why': 'ROWSET presets the glyph blit 6 px wide, the S6ED cell: every S61 cell loses its last two pixel columns',
+        'file': 'S61/RENDER.Z8A',
         'old': """                LD      HL, CELLH
                 LD      (VDP_NY), HL
                 LD      HL, CELLW
@@ -2922,24 +3090,24 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'expect': ['S62-1/text'],
     },
     {
-        'name': 's62-scroll-dx16',
-        'target': 'S62ED',
-        'why': 'the scroll blit starts at x 16, the S6ED margin: the first text column never moves',
-        'file': 'S62/SCROLL.Z8A',
+        'name': 's61-scroll-dx1cell',
+        'target': 'S61ED',
+        'why': 'the scroll blit starts one cell right of the text origin: the first text column never moves',
+        'file': 'S61/SCROLL.Z8A',
         'old': """                LD      HL, TXORG_X
                 LD      (VDP_DX), HL
                 XOR     A               ; ARG = 0 (TOP-TO-BOTTOM)""",
-        'new': """                LD      HL, 16          ; MUTATION: THE S6 MARGIN
+        'new': """                LD      HL, TXORG_X + CELLW ; MUTATION: ONE CELL IN
                 LD      (VDP_DX), HL
                 XOR     A               ; ARG = 0 (TOP-TO-BOTTOM)""",
         'filter': 'S62-3',
         'expect': ['S62-3/down/text'],
     },
     {
-        'name': 's62-title-inset6',
-        'target': 'S62ED',
+        'name': 's61-title-inset6',
+        'target': 'S61ED',
         'why': 'window titles go back to WINX + 6, two pixels off the body text and off the byte grid',
-        'file': 'S62/WINDOW.Z8A',
+        'file': 'S61/WINDOW.Z8A',
         'old': """                LD      HL, (WINX)
                 LD      DE, 8
                 ADD     HL, DE
@@ -2954,10 +3122,10 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'expect': ['S62-5/about/title'],
     },
     {
-        'name': 's62-menu-inset6',
-        'target': 'S62ED',
+        'name': 's61-menu-inset6',
+        'target': 'S61ED',
         'why': 'unselected dropdown items go back to WINX + 6',
-        'file': 'S62/MENU.Z8A',
+        'file': 'S61/MENU.Z8A',
         'old': """                LD      DE, 8
                 ADD     HL, DE
                 EX      DE, HL          ; DE = DX = WINX + 8
@@ -2972,31 +3140,31 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'expect': ['S62-5/file/items'],
     },
     {
-        'name': 's62-menu-22',
-        'target': 'S62ED',
+        'name': 's61-menu-22',
+        'target': 'S61ED',
         'why': 'a 22-character item reaches the right border at 8 px and WINCLIPX drops its last glyph ("Ctrl+")',
-        'file': 'S62/MENU.Z8A',
+        'file': 'S61/MENU.Z8A',
         'old': '.S01            DEFM    "Open...       Ctrl+O", 0',
         'new': '.S01            DEFM    "Open...         Ctrl+O", 0',
         'filter': 'S62-5',
         'expect': ['S62-5/file/items'],
     },
     {
-        'name': 's62-bic56',
-        'target': 'S62ED',
+        'name': 's61-bic56',
+        'target': 'S61ED',
         'why': 'the information line is 56 characters again: its last column falls past the clip and the count loses a digit',
-        'file': 'S62/CONST_S62.Z8A',
+        'file': 'S61/CONST_S61.Z8A',
         'old': 'BICCNTE         EQU     55',
         'new': 'BICCNTE         EQU     56',
-        'also': [('S62/CONST_S62.Z8A', 'BICLEN          EQU     55', 'BICLEN          EQU     56')],
+        'also': [('S61/CONST_S61.Z8A', 'BICLEN          EQU     55', 'BICLEN          EQU     56')],
         'filter': 'S62-6',
         'expect': ['S62-6/info'],
     },
     {
-        'name': 's62-col-2digit',
-        'target': 'S62ED',
+        'name': 's61-col-2digit',
+        'target': 'S61ED',
         'why': "the status bar's column goes back to two digits: Col 21 at column 121",
-        'file': 'S62/UI.Z8A',
+        'file': 'S61/UI.Z8A',
         'old': """                INC     HL              ; 1..256: CURX 255 MUST NOT WRAP
                 LD      B, 3""",
         'new': """                INC     HL              ; 1..256: CURX 255 MUST NOT WRAP
@@ -3005,20 +3173,20 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'expect': ['S62-4/col'],
     },
     {
-        'name': 's62-dat-magic',
-        'target': 'S62ED',
-        'why': "S62ED takes S6ED's container magic again, so a renamed S6ED.DAT is loaded and FCALLed",
-        'file': 'S62ED.Z8A',
-        'old': 'DEFINE  DATMAG  "S62E"',
+        'name': 's61-dat-magic',
+        'target': 'S61ED',
+        'why': "S61ED takes S6ED's container magic again, so a renamed S6ED.DAT is loaded and FCALLed",
+        'file': 'S61ED.Z8A',
+        'old': 'DEFINE  DATMAG  "S61E"',
         'new': 'DEFINE  DATMAG  "S6ED"',
         'filter': 'S62-7',
         'expect_any': ['S62-7/corrupt-printed', 'S62-7-dat-foreign'],
     },
     {
-        'name': 's62-rescan-silent',
-        'target': 'S62ED',
-        'why': 'a rescan with the S62ED browser up no longer marks the information line',
-        'file': 'S62/BROWSER.Z8A',
+        'name': 's61-rescan-silent',
+        'target': 'S61ED',
+        'why': 'a rescan with the S61ED browser up no longer marks the information line',
+        'file': 'S61/BROWSER.Z8A',
         'old': '.RESCAN         CALL    .BUSY           ; THE WINDOW IS UP: SAY SO IN IT',
         'new': """.RESCAN         NOP                     ; MUTATION: SILENT RESCAN
                 NOP
@@ -3029,12 +3197,12 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'expect_any': ['S62-9/busy', 'S62-9-browse-busy'],
     },
     {
-        'name': 's62-autoexec-lf',
-        'target': 'S62ED',
-        'why': 'AUTOEXEC_S62.BAT with bare LF: COMMAND2.COM ignores it and the disk boots to the prompt',
-        'file': 'AUTOEXEC_S62.BAT',
-        'old': 'MODE 80\r\nPATH A:\\TOOLS\r\nCD \\DEV\r\nS62ED TEST.TXT\r\n',
-        'new': 'MODE 80\nPATH A:\\TOOLS\nCD \\DEV\nS62ED TEST.TXT\n',
+        'name': 's61-autoexec-lf',
+        'target': 'S61ED',
+        'why': 'AUTOEXEC_S61.BAT with bare LF: COMMAND2.COM ignores it and the disk boots to the prompt',
+        'file': 'AUTOEXEC_S61.BAT',
+        'old': 'MODE 80\r\nPATH A:\\TOOLS\r\nCD \\DEV\r\nS61ED TEST.TXT\r\n',
+        'new': 'MODE 80\nPATH A:\\TOOLS\nCD \\DEV\nS61ED TEST.TXT\n',
         'filter': 'S62-10',
         'expect_any': ['S62-10-shipped-disk', 'S62-10/booted'],
     },

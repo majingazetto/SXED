@@ -3,7 +3,7 @@
 #	* (c) 2024 - 2025 Armando Pérez            						    	*
 #	*************************************************************************
 
-.PHONY: build build-s6 build-s2 build-s61 dsk dsk-s2 dsk-s61 s6 s2 s61 clean check gate test \
+.PHONY: build build-s6 build-s2 build-s61 dsk dsk-s2 dsk-s61 dist s6 s2 s61 clean check gate test \
         test-s2 test-s61 selftest testall \
         run run-s6 run128 run-s6-128 run-nextor debug \
         run-s2 run-s2-1mb run-s2-msx2 run-s2-msx2-128 \
@@ -150,8 +150,31 @@ MANUALSRC		= ../DOC/SXED.TXT
 MANUAL			= SXED_MSX.TXT
 UTF8MSX			= python3 ../tools/utf8msx.py
 
-$(MANUAL): $(MANUALSRC)
+# The disks list their contents here, so a change to the Makefile rebuilds
+# them; and a change to the converter rebuilds the manual.
+$(MANUAL): $(MANUALSRC) ../tools/utf8msx.py
 	@$(UTF8MSX) $< $@
+
+# The release bundle, built here instead of by hand: v0.1's was put together
+# by hand and shipped the UTF-8 source as SXED.TXT, which an MSX shows as two
+# glyphs per accented letter (reported on a Japanese machine).  Two manuals
+# with two names, so they cannot collide: SXED.TXT in the MSX charset with
+# CR LF for the machine, MANUAL.md in UTF-8 for a modern screen.  The
+# version comes from the same constants the About dialogs print.
+DISTDIR			= ../dist
+VERMAJOR		:= $(shell sed -n "s/^\.MAJOR.*'\(.\)'.*/\1/p" $(SRC_DIR)/CORE/CONST_CORE.Z8A)
+VERMINOR		:= $(shell sed -n "s/^\.MINOR.*'\(.\)'.*/\1/p" $(SRC_DIR)/CORE/CONST_CORE.Z8A)
+DISTZIP			= SXED-v$(VERMAJOR).$(VERMINOR).zip
+DISTBIN			= $(DSKTOOLS) $(FONTS61) $(DSKFILE) $(DSKFILE_S2) $(DSKFILE_S61)
+
+dist: $(DISTBIN) $(MANUAL)
+	@mkdir -p $(DISTDIR)
+	@cp $(DISTBIN) $(DISTDIR)/
+	@cp $(MANUAL) $(DISTDIR)/SXED.TXT
+	@cp ../DOC/MANUAL.md $(DISTDIR)/MANUAL.md
+	@$(RM) $(DISTDIR)/$(DISTZIP)
+	@cd $(DISTDIR) && zip -q -X $(DISTZIP) $(notdir $(DISTBIN)) SXED.TXT MANUAL.md
+	@echo "$(DISTDIR)/$(DISTZIP)"
 
 DSKTOOLS		= $(OUTPUT) $(DATFILE) $(FNTFILE) S6ED.CFG \
 			  $(OUTPUT_S2) $(DATFILE_S2) $(FNTFILE_S2) $(CFGFILE_S2) \
@@ -159,7 +182,7 @@ DSKTOOLS		= $(OUTPUT) $(DATFILE) $(FNTFILE) S6ED.CFG \
 DSKCONT			= $(DSKTOOLS) $(MANUAL) TEST.TXT TEST_S2.TXT TEST_S61.TXT \
 			  LOCAL_S6.CFG LOCAL_S2.CFG LOCAL_S61.CFG AUTOEXEC.BAT
 
-$(DSKFILE): $(DSKCONT) $(FONTS61)
+$(DSKFILE): $(DSKCONT) $(FONTS61) Makefile
 	@cp $(DSKBASE) $(DSKFILE)
 	@$(DSKFAT) $(DSKFILE) add . AUTOEXEC.BAT
 	@$(DSKFAT) $(DSKFILE) add TOOLS $(DSKTOOLS)
@@ -194,7 +217,7 @@ DSKCONT_S2		= $(OUTPUT_S2) $(DATFILE_S2) $(FNTFILE_S2) $(CFGFILE_S2)
 # Same layout as the S6ED disk.  The S2 sample document talks about 64 columns
 # and Screen 2, so it goes in as \DEV\TEST.TXT, and the S2 AUTOEXEC as the
 # root AUTOEXEC.BAT: dskfat takes the on-disk name after the '='.
-$(DSKFILE_S2): $(DSKCONT_S2) $(MANUAL) TEST_S2.TXT AUTOEXEC_S2.BAT LOCAL_S2.CFG
+$(DSKFILE_S2): $(DSKCONT_S2) $(MANUAL) TEST_S2.TXT AUTOEXEC_S2.BAT LOCAL_S2.CFG Makefile
 	@cp $(DSKBASE) $(DSKFILE_S2)
 	@$(DSKFAT) $(DSKFILE_S2) add . AUTOEXEC_S2.BAT=AUTOEXEC.BAT
 	@$(DSKFAT) $(DSKFILE_S2) add TOOLS $(DSKCONT_S2)
@@ -238,7 +261,7 @@ dsk-s61: $(DSKFILE_S61)
 
 DSKCONT_S61		= $(OUTPUT_S61) $(DATFILE_S61) $(FNTFILE_S61) $(CFGFILE_S61)
 
-$(DSKFILE_S61): $(DSKCONT_S61) $(FONTS61) $(MANUAL) TEST_S61.TXT AUTOEXEC_S61.BAT LOCAL_S61.CFG
+$(DSKFILE_S61): $(DSKCONT_S61) $(FONTS61) $(MANUAL) TEST_S61.TXT AUTOEXEC_S61.BAT LOCAL_S61.CFG Makefile
 	@cp $(DSKBASE) $(DSKFILE_S61)
 	@$(DSKFAT) $(DSKFILE_S61) add . AUTOEXEC_S61.BAT=AUTOEXEC.BAT
 	@$(DSKFAT) $(DSKFILE_S61) add TOOLS $(DSKCONT_S61)
