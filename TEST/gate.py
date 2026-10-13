@@ -6340,99 +6340,6 @@ class H28TextWidth(Case):
 
 
 
-# --- U10  UNDO BACK TO THE FILE CLEARS MODIFIED ------------------------
-
-
-class U10UndoClean(Case):
-    name = 'U10-undo-clean'
-    desc = 'undoing back to the state on disk clears MODIFIED, redo sets it again'
-    origin = ('reported on real hardware: Ctrl+Z back to the loaded text left the '
-              'asterisk on.  SAVEPTR remembers the history head the file matches '
-              '(load, save, new); UNDOPNT compares it once per group.  It must '
-              'die with the record it names (eviction) and with the empty '
-              'history once anything is evicted, or a full undo of a wrapped '
-              'ring reports a clean document that is not the file')
-    cfg = UNDO_CFG
-    variants = ('back', 'saved', 'evict')
-    LINES = ['C%02d %s' % (i, 'LINE OF THE CLEAN TEST') for i in range(40)]
-    EDITS = 26          # wraps the 23-record ring: the three oldest evicted
-
-    def fixture(self, ctx, variant=None):
-        return crlf(self.LINES)
-
-    def timeline(self, ctx, variant=None):
-        t = Timeline()
-        t.wait(1.0)
-        if variant == 'back':
-            t.text('X')
-            t.wait(1.0)
-            t.snap('typed')
-            t.press('Z', mods=['CTRL'])
-            t.wait(1.0)
-            t.snap('undone')
-            t.press('Z', mods=['SHIFT', 'CTRL'])
-            t.wait(1.0)
-            t.snap('redone')
-        elif variant == 'saved':
-            t.text('X')
-            t.press('S', mods=['CTRL'])
-            t.wait(3.0)
-            t.snap('saved')
-            # Typed straight after the save, on the same line: it must start
-            # its own record, not extend the burst the save point names
-            t.text('Y')
-            t.wait(1.0)
-            t.snap('typed')
-            t.press('Z', mods=['CTRL'])
-            t.wait(1.0)
-            t.snap('back')
-            t.press('Z', mods=['CTRL'])
-            t.wait(1.0)
-            t.snap('before')
-            t.press('Z', mods=['SHIFT', 'CTRL'])
-            t.wait(1.0)
-            t.snap('redone')
-        else:
-            for i in range(self.EDITS):     # one record per line
-                t.text('Q')
-                t.press('LEFT')
-                t.press('DOWN')
-            t.wait(1.0)
-            t.snap('typed')
-            t.press('Z', mods=['CTRL'], repeat=self.EDITS)
-            t.wait(1.0)
-            t.snap('undone')
-        return t
-
-    def verify(self, ctx, runs):
-        def mod(v, label):
-            return runs[v].var(label, 'MODIFIED')
-
-        def expect(cid, v, label, want, what):
-            got = mod(v, label)
-            return Check(cid, got == want,
-                         what if got == want else
-                         'MODIFIED = %r, want %r' % (got, want))
-
-        return [
-            expect('U10/back/typed', 'back', 'typed', 0xFF, 'a typed key marks the document'),
-            expect('U10/back/undone', 'back', 'undone', 0,
-                   'Ctrl+Z back to the loaded text clears MODIFIED'),
-            expect('U10/back/redone', 'back', 'redone', 0xFF, 'redo marks it again'),
-            expect('U10/saved/saved', 'saved', 'saved', 0, 'Ctrl+S clears MODIFIED'),
-            expect('U10/saved/back', 'saved', 'back', 0,
-                   'undoing the key typed after the save is clean again: '
-                   'the save closed the typing burst'),
-            expect('U10/saved/before', 'saved', 'before', 0xFF,
-                   'undoing past the save point is a change against the file'),
-            expect('U10/saved/redone', 'saved', 'redone', 0,
-                   'redoing up to the save point is clean'),
-            expect('U10/evict/undone', 'evict', 'undone', 0xFF,
-                   'after the ring evicted the oldest edits a full undo does not '
-                   'reach the file: still modified'),
-        ]
-
-
 # --- U6..U9  EDITS THAT USED TO ESCAPE THE HISTORY -------------------
 #
 # Before 2026-09-23 only typing, in-line Backspace/Delete, Ctrl+Y, Enter and
@@ -6894,6 +6801,99 @@ class U9UndoLineEdits(Case):
                             'styled %s, undo diff %d px, redo %s, undo2 diff '
                             '%d px' % (changed, len(d1), again, len(d2))))
         return checks
+
+# --- U10  UNDO BACK TO THE FILE CLEARS MODIFIED ------------------------
+
+
+class U10UndoClean(Case):
+    name = 'U10-undo-clean'
+    desc = 'undoing back to the state on disk clears MODIFIED, redo sets it again'
+    origin = ('reported on real hardware: Ctrl+Z back to the loaded text left the '
+              'asterisk on.  SAVEPTR remembers the history head the file matches '
+              '(load, save, new); UNDOPNT compares it once per group.  It must '
+              'die with the record it names (eviction) and with the empty '
+              'history once anything is evicted, or a full undo of a wrapped '
+              'ring reports a clean document that is not the file')
+    cfg = UNDO_CFG
+    variants = ('back', 'saved', 'evict')
+    LINES = ['C%02d %s' % (i, 'LINE OF THE CLEAN TEST') for i in range(40)]
+    EDITS = 26          # wraps the 23-record ring: the three oldest evicted
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.wait(1.0)
+        if variant == 'back':
+            t.text('X')
+            t.wait(1.0)
+            t.snap('typed')
+            t.press('Z', mods=['CTRL'])
+            t.wait(1.0)
+            t.snap('undone')
+            t.press('Z', mods=['SHIFT', 'CTRL'])
+            t.wait(1.0)
+            t.snap('redone')
+        elif variant == 'saved':
+            t.text('X')
+            t.press('S', mods=['CTRL'])
+            t.wait(3.0)
+            t.snap('saved')
+            # Typed straight after the save, on the same line: it must start
+            # its own record, not extend the burst the save point names
+            t.text('Y')
+            t.wait(1.0)
+            t.snap('typed')
+            t.press('Z', mods=['CTRL'])
+            t.wait(1.0)
+            t.snap('back')
+            t.press('Z', mods=['CTRL'])
+            t.wait(1.0)
+            t.snap('before')
+            t.press('Z', mods=['SHIFT', 'CTRL'])
+            t.wait(1.0)
+            t.snap('redone')
+        else:
+            for i in range(self.EDITS):     # one record per line
+                t.text('Q')
+                t.press('LEFT')
+                t.press('DOWN')
+            t.wait(1.0)
+            t.snap('typed')
+            t.press('Z', mods=['CTRL'], repeat=self.EDITS)
+            t.wait(1.0)
+            t.snap('undone')
+        return t
+
+    def verify(self, ctx, runs):
+        def mod(v, label):
+            return runs[v].var(label, 'MODIFIED')
+
+        def expect(cid, v, label, want, what):
+            got = mod(v, label)
+            return Check(cid, got == want,
+                         what if got == want else
+                         'MODIFIED = %r, want %r' % (got, want))
+
+        return [
+            expect('U10/back/typed', 'back', 'typed', 0xFF, 'a typed key marks the document'),
+            expect('U10/back/undone', 'back', 'undone', 0,
+                   'Ctrl+Z back to the loaded text clears MODIFIED'),
+            expect('U10/back/redone', 'back', 'redone', 0xFF, 'redo marks it again'),
+            expect('U10/saved/saved', 'saved', 'saved', 0, 'Ctrl+S clears MODIFIED'),
+            expect('U10/saved/back', 'saved', 'back', 0,
+                   'undoing the key typed after the save is clean again: '
+                   'the save closed the typing burst'),
+            expect('U10/saved/before', 'saved', 'before', 0xFF,
+                   'undoing past the save point is a change against the file'),
+            expect('U10/saved/redone', 'saved', 'redone', 0,
+                   'redoing up to the save point is clean'),
+            expect('U10/evict/undone', 'evict', 'undone', 0xFF,
+                   'after the ring evicted the oldest edits a full undo does not '
+                   'reach the file: still modified'),
+        ]
+
 
 # --- H40 / H41  DISK ACTIVITY ON THE STATUS BAR ------------------------
 
