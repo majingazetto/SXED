@@ -169,6 +169,7 @@ BRWMAX          EQU     64              ; FILE BROWSER ENTRY CAPACITY
 BRWCOLS         EQU     4               ; FILE BROWSER GRID: COLUMNS...
 BRWROWS         EQU     12              ; ...AND ROWS ON SCREEN
 BRWSLOT         EQU     14              ; CHARACTERS PER GRID SLOT (7 CELLS)
+BRWGC0          EQU     2               ; FIRST GRID CELL (SLOT 0 STARTS HERE)
 BRWRLST         EQU     3               ; FIRST GRID ROW ON SCREEN (ROWS 3..14)
 BRWSEPR         EQU     15              ; SEPARATOR SCREEN ROW
 BRWINFR         EQU     16              ; INFORMATION LINE SCREEN ROW

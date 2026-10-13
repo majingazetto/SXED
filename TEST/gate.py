@@ -5614,7 +5614,21 @@ class H35BrowseMany(Case):
         moved = (slot_shows(0, 0, 'F034.TXT', vram.COL_UI) and
                  slot_shows(13, 4, 'F103.TXT', vram.COL_UI) and
                  slot_shows(13, 0, 'F099.TXT', vram.COL_HI))
+        # The information line is repainted as a span (BRWIDIF): after 20
+        # steps, scrolls among them, every cell must be BRWINF's glyph --
+        # a span cut short leaves the previous file's characters behind.
+        line = asciiz(run, 'down', 'BRWINF') or ''
+        iy = 10 + 16 + 8 * 15                   # BRWY + BRWLSTY + BRWINFR * 8
+        info_bad = [i for i, ch in enumerate(line)
+                    if not buf or not font or
+                    vram.ink_mask(buf, 46 + 6 * i, iy, w=6, h=8,
+                                  ground=vram.COL_UI, first_line=0)
+                    != vram.glyph_mask(font, ch, width=6)]
         return [
+            Check('H35/info', bool(line) and not info_bad,
+                  'the information line on screen is BRWINF, %d columns'
+                  % len(line) if line and not info_bad else
+                  'columns that differ: %s' % info_bad[:8]),
             Check('H35/scroll-paint', moved,
                   'after 13 one-row scrolls the grid shows F034 at the top, '
                   'F103 bottom right and F099 under the bar'),

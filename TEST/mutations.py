@@ -4326,6 +4326,41 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'filter': 'H35',
         'expect': ['H35/drives'],
     },
+    {
+        'name': 'brw-info-never',
+        'why': 'a keystroke never repaints the information line: it keeps '
+               'describing the file selected before',
+        'file': 'BROWSER.Z8A',
+        'old': """                CALL    BRWIDIF
+                RET     Z               ; THE LINE ON SCREEN IS STILL RIGHT""",
+        'new': """                CALL    BRWIDIF
+                RET                     ; MUTATION: NEVER PAINTED""",
+        'filter': 'H35',
+        'expect': ['H35/info'],
+    },
+    {
+        'name': 's2-brw-info-never',
+        'target': 'S2ED',
+        'why': 'a keystroke never repaints the S2ED information line',
+        'file': 'RENDER.Z8A',
+        'old': """BRWIS2          CALL    BRWIDIF
+                RET     Z               ; THE ROW ON SCREEN IS STILL RIGHT""",
+        'new': """BRWIS2          CALL    BRWIDIF
+                RET                     ; MUTATION: NEVER PAINTED""",
+        'filter': 'S2-29',
+        'expect': ['S2-29/info'],
+    },
+    {
+        'name': 's2-brw-gsh-dir',
+        'target': 'S2ED',
+        'why': 'the browser grid is shifted the wrong way on a one-row scroll',
+        'file': 'RENDER.Z8A',
+        'old': """.UP             CALL    GRDSCRL         ; A = 0""",
+        'new': """.UP             INC     A               ; MUTATION: THE OTHER WAY
+                CALL    GRDSCRL""",
+        'filter': 'S2-29',
+        'expect': ['S2-29/grid'],
+    },
 ]
 
 

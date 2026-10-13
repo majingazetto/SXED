@@ -207,7 +207,7 @@ DOBRW           XOR     A
                 LD      BC, BRWIW
                 LD      A, BRWROWS * 8
                 CALL    WINUPD
-.SELFLD         CALL    .INFO
+.SELFLD         CALL    .INFOX
                 LD      A, (BRWMODE)
                 OR      A
                 JP      NZ, .KEYLP      ; SAVE AS: THE TYPED NAME STAYS
@@ -795,7 +795,8 @@ DOBRW           XOR     A
                 ; .INFOC: FORMAT AND COMPOSE THE INFORMATION LINE;
                 ; .INFOP: COMPOSE WHAT BRWINF ALREADY HOLDS
 .INFOC          CALL    BRWINFO
-.INFOP          LD      A, COL_UI
+.INFOP          CALL    BRWIQS          ; THE WHOLE LINE: WHAT .INFOX DIFFS
+                LD      A, COL_UI
                 LD      (VDP_CLR), A
                 LD      HL, 4
                 LD      DE, BRWLSTY + BRWINFR * 8
@@ -821,6 +822,76 @@ DOBRW           XOR     A
                 LD      BC, BRWIW
                 LD      A, 8
                 JP      WINUPD
+
+                ; .INFOX: A KEYSTROKE'S INFORMATION LINE. ONLY THE SPAN THAT
+                ; CHANGED IS CLEARED, PRINTED AND BLITTED (BRWIDIF), AND
+                ; WITHOUT A VBLANK WAIT OF ITS OWN: THE GRID HAS JUST HAD
+                ; ONE. COLUMN C SITS AT X = CELLW * (C + 1) (WINPCO).
+.INFOX          CALL    BRWINFO
+                CALL    BRWIDIF
+                RET     Z               ; THE LINE ON SCREEN IS STILL RIGHT
+                CALL    BRWISPN         ; HL = THE SPAN, IN BRWNAME
+                PUSH    BC
+                LD      A, C
+                INC     A
+                CALL    .CWPX           ; HL = X OF THE FIRST COLUMN
+                PUSH    HL
+                LD      A, B
+                CALL    .CWPX
+                LD      B, H
+                LD      C, L            ; BC = WIDTH
+                POP     HL
+                PUSH    HL
+                PUSH    BC
+                LD      A, COL_UI
+                LD      (VDP_CLR), A
+                LD      DE, BRWLSTY + BRWINFR * 8
+                LD      A, 8
+                CALL    .RECT
+                POP     BC
+                POP     HL
+                EX      (SP), HL        ; KEEP X; HL = THE OLD BC (B, C)
+                PUSH    BC              ; KEEP THE WIDTH
+                LD      C, L            ; C = FIRST COLUMN
+                LD      B, BRWINFR
+                LD      HL, BRWNAME
+                XOR     A
+                CALL    WINPRN
+                POP     BC              ; BC = WIDTH
+                POP     HL              ; HL = X
+                ; WINUPD IS AN HMMM: BYTE UNITS, 4 PX. ROUND THE BLIT OUT TO
+                ; THEM (X DOWN, END UP); THE EXTRA PIXELS COME FROM THE
+                ; COMPOSITION BUFFER, WHICH IS ALREADY RIGHT THERE
+                PUSH    HL
+                ADD     HL, BC          ; HL = END
+                LD      DE, 3
+                ADD     HL, DE
+                LD      A, L
+                AND     #FC
+                LD      L, A            ; END, ROUNDED UP
+                POP     DE
+                LD      A, E
+                AND     #FC
+                LD      E, A            ; DE = X, ROUNDED DOWN
+                OR      A
+                SBC     HL, DE
+                LD      B, H
+                LD      C, L            ; BC = WIDTH
+                EX      DE, HL          ; HL = X
+                LD      DE, BRWLSTY + BRWINFR * 8
+                LD      A, 8
+                JP      WINUPD
+
+                ; .CWPX: A = CHARACTERS -> HL = A * CELLW
+.CWPX           LD      L, A
+                LD      H, 0
+                LD      D, H
+                LD      E, L
+                LD      A, CELLW - 1
+.CWLP           ADD     HL, DE
+                DEC     A
+                JR      NZ, .CWLP
+                RET
 
                 ; .FIELD: THE NAME FIELD, WITH THE CARET WHEN FOCUSED
                 ; (EDFLD DRAWS IT WHEN WINSEL IS 0)

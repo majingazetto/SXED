@@ -3084,7 +3084,32 @@ class S229BrowseMany(S2Case):
                      prow14[16:48] == want_p14_0[16:48] and
                      prow14[23 * 8:27 * 8] == want_p14_3[23 * 8:27 * 8])
 
+        # The whole grid after the scroll steps: BRWGSH shifts its rows in
+        # the shadows and paints the new one, so every row is checked, not
+        # just three slots. Position p (p >= 1) is F(p-1); 4 slots of 14.
+        top = b1('down', 'BRWTOP') or 0
+        grid_bad = []
+        for r in range(12):
+            names = []
+            for c in range(4):
+                p = (top + r) * 4 + c
+                names.append(('F%03d.TXT' % (p - 1)).ljust(14))
+            want = pattern.compose_row(font(ctx), '    ' + ''.join(names))
+            grow = pattern.row_of(buf[:0x2000], 3 + r) if buf else b''
+            if grow[16:240] != want[16:240]:
+                grid_bad.append(3 + r)
+        # The information line, repainted as a span of whole cells (BRWIS2)
+        line = asciiz(run, 'down', 'BRWINF') or ''
+        want_i = pattern.compose_row(font(ctx), '    ' + line)
+        got_i = pattern.row_of(buf[:0x2000], 16) if buf else b''
+        info_ok = bool(line) and got_i[16:240] == want_i[16:240]
         return [
+            Check('S2-29/grid', bool(buf) and not grid_bad,
+                  'all 12 grid rows show their files after the scroll'
+                  if buf and not grid_bad else 'rows off: %s' % grid_bad),
+            Check('S2-29/info', info_ok,
+                  'the information line on screen is BRWINF' if info_ok
+                  else 'the information row differs from %r' % line[:20]),
             Check('S2-29/start-dir',
                   asciiz(run, 'open', 'BRWPATH') == 'A:\\BIG\\' and
                   got[:3] == ['..\\', 'F000.TXT', 'F001.TXT'],
