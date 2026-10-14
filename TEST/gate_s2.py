@@ -1416,6 +1416,8 @@ class S215Quit(S2Case):
         t.press('ESC')                          # reopen
         t.snap('exit', at='TERM.TERMDON')       # armed before the key that quits
         t.press('Y')
+        if variant == 'dirty':
+            t.press('Y')                        # answer "Save changes?" with YES (save & exit)
         t.wait(1.0)
         return t
 

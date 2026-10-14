@@ -1,6 +1,6 @@
 # SXED User Manual & Reference Guide
 
-**SXED Screen X Text Editor v0.4 (2026-10-13)**  
+**SXED Screen X Text Editor v0.5 (2026-10-14)**  
 *(c) 2024 - 2026 Armando Pérez Abad*  
 *Fonts by Miguel A. Fernandez*
 
@@ -688,7 +688,9 @@ RETURN / SPACE          Accept the focused button
 ESC                     Same as NO
 ```
 
-With a dirty document the warning "Unsaved changes!" is shown. Note: ESC with an active selection only drops the selection; it does not quit.
+With a dirty document the warning "Unsaved changes!" is shown. Confirming exit asks whether to save first ("Save changes?"). If yes, a named file is written directly, or the Save As browser opens for an untitled file; if no, it exits discarding changes. Cancelling the Save As dialog or encountering a write error returns safely to the editor.
+
+Note: ESC with an active selection only drops the selection; it does not quit.
 
 ### 10.10.- ABOUT
 

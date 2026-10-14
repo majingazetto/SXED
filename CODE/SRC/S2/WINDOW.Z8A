@@ -958,6 +958,11 @@ DOQIT           LD      HL, DOASK.TITQIT
                 LD      DE, DOASK.STRQIT
                 JR      DOASK
 
+DOSAVQ          LD      HL, DOASK.TITQIT
+                LD      DE, STRSVQ
+                XOR     A               ; DO NOT SHOW UNSAVED WARNING
+                JR      DOASK.ASKGO
+
 DOOPN           LD      HL, DOASK.TITOPN
                 LD      DE, DOASK.STRNEW
                 JR      DOASK

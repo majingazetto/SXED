@@ -6,17 +6,34 @@ Newest first. The manual is SXED.TXT.
 -------------------------------------------------------------
 
 
+ -------- v0.5 (2026-10-14)
+
+New
+- Quitting with unsaved changes asks whether to save before
+  exiting. If confirmed, a named file is written directly;
+  an untitled document opens Save As to enter a name.
+  Cancelling Save As or an I/O error returns safely to the
+  editor. If the user chooses not to save, a second prompt
+  confirms discarding changes before leaving.
+
+Changed
+- S6ED / S61ED: dialog buttons match the visual language of
+  menus and settings: an unfocused button rests on the
+  window background with plain text in the text colour, and
+  the focused button is highlighted with a blue body (CLR_UI)
+  and bold yellow text (COL_HI).
+- S6ED / S61ED: Help > About opens with the lone OK button
+  focused by default.
+
+
  -------- v0.4 (2026-10-13)
 
 Changed
 - S6ED / S61ED: buttons lose their brackets and the label is
   centred in the button. A 9-letter "[  YES  ]" ran past the
   button onto its border.
-- S6ED / S61ED: buttons match the visual language of menus
-  and settings: an unfocused button rests on the window
-  background with plain text in the text colour, and the
-  focused button is highlighted with a blue body (CLR_UI)
-  and bold yellow text (COL_HI).
+- S6ED / S61ED: a button without the focus is drawn in the
+  text colour, so only the focused one looks highlighted.
 - S6ED / S61ED: the status bar is as tall as the menu bar
   (8 px instead of 12).
 

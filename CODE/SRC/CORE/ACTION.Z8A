@@ -912,14 +912,39 @@ ACTQUIT         LD      A, (SELACT)
                 OR      A
                 JR      Z, .ASKQ
                 JP      ACTDSEL
-.ASKQ           ; FTR-BUDGET: S6ED 11,501 B FREE, S2ED 1,688 B (2026-09-22)
+.ASKQ           ; FTR-BUDGET: S6ED ~2,176 B FREE, S2ED 132 B >= 128 (2026-10-14)
                 LD      A, (FTRSEG)
                 LD      HL, DOQIT
                 CALL    FCALL
                 LD      A, (WINRES)
                 OR      A
                 RET     Z               ; CANCELLED: RESUME EDITING
-                JP      TERM
+
+                ; CONFIRMED EXIT: IF NOT MODIFIED, EXIT DIRECTLY TO DOS
+                LD      A, (MODIFIED)
+                OR      A
+                JP      Z, TERM
+
+                ; MODIFIED BUFFER: ASK "Save changes?" (YES / NO)
+                ; FTR-BUDGET: S6ED ~2,176 B FREE, S2ED 132 B >= 128 (2026-10-14)
+                LD      A, (FTRSEG)
+                LD      HL, DOSAVQ
+                CALL    FCALL
+                LD      A, (WINRES)
+                OR      A
+                JP      Z, TERM         ; NO: EXIT TO DOS DISCARDING CHANGES
+
+                ; YES: SAVE (OR SAVE AS IF UNTITLED)
+                LD      A, (FILENAME)
+                OR      A
+                JR      Z, .SAVAS
+                CALL    FILESAVE
+                JR      .SAVRES
+.SAVAS          CALL    ACTSAVAS
+.SAVRES         RET     C               ; SAVE CANCELLED OR ERROR: STAY IN EDITOR
+                JP      TERM            ; SAVED: EXIT TO DOS
+
+STRSVQ          DEFM    "Save changes?", 0
 
 
 ; --- ACTHELP                   ----------------------------------------
@@ -1630,6 +1655,7 @@ ACTSAVAS        LD      A, BRW_SAVE
                 LD      A, #FF
                 LD      (STATPRV), A
                 CALL    DRWSTAT
+                SCF
                 RET
 
 .REOPEN         ; REOPEN BROWSER AFTER "NO" TO OVERWRITE

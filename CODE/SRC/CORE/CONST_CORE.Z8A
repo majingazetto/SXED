@@ -8,7 +8,7 @@
 
 VERSION
 .MAJOR          EQU     '0'
-.MINOR          EQU     '4'
+.MINOR          EQU     '5'
 
 
 ; --- CHARACTER ATTRIBUTES      ----------------------------------------
