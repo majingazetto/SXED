@@ -19,6 +19,10 @@ New
   confirms discarding changes before leaving.
 
 Changed
+- Autoalign now reliably inherits the indentation (leading
+  whitespace) of the previous line on Enter, instead of the
+  legacy assembly heuristic that jumped to the second word
+  on lines starting at column 0.
 - Navigation in STD profile: Ctrl+Up / Ctrl+Down now pages
   up and down, and GRAPH+Up / GRAPH+Down jumps to the top
   and bottom of the document (along with their Shift

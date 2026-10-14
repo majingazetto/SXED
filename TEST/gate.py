@@ -694,8 +694,8 @@ class G10Autoalign(Case):
               'CURX == length gate and took the classic split, whose .TRUNC '
               'stretched the head to SPLCOL: the blank line came back holding '
               '13 spaces and the cursor dropped to column 0')
-    SOURCE = 'LABEL   LD      A, 1'
-    ALIGN = 8                   # the column of the token after the label
+    SOURCE = '        LD      A, 1'
+    ALIGN = 8                   # leading whitespace indentation
 
     def fixture(self, ctx, variant=None):
         return crlf([self.SOURCE])

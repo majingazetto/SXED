@@ -274,14 +274,9 @@ The margin is the text width: the screen width by default (80 / 61 / 61) or the 
 
 ### 6.5.- AUTOALIGN
 
-AUTOALIGN (OFF by default, or AUTOALIGN=ON / DEV) is an assembly layout aid: pressing RETURN at the end of a line places the cursor of the new line under the first token of the line just split (the mnemonic column), so
+AUTOALIGN (OFF by default, or AUTOALIGN=ON / DEV) maintains the indentation of the previous line: pressing RETURN at the end of a line places the cursor of the new line at the exact indentation level (leading whitespace) of the line just split, so indented code blocks and lists chain naturally without retyping spaces. If the previous line starts at column 0 (unindented), the new line starts at column 0.
 
-```text
-LABEL   LD  A,10
-        JP  SUBRT
-```
-
-chains naturally without typing spaces. Nothing is written until you type: blank lines stay blank. DEV means "only when WRAP=DEV".
+Nothing is written until you type: blank lines stay blank. DEV means "only when WRAP=DEV".
 
 ### 6.6.- ACCENTS & DEAD KEYS
 
