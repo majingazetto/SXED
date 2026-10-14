@@ -349,7 +349,12 @@ ERRMSG          LD      A, (SCRRDY)
 ; - CLOBBERS: ALL
 ; -
 
-SCRINIT         CALL    INITVDP
+SCRINIT         ; ERASE FUNCTION KEYS BEFORE ENTERING GRAPHICS MODE
+                ; (BIOS ERAFNK IN SCREEN 2 WRITES TEXT-MODE BLANKS INTO VRAM)
+                LD      IX, ERAFNK
+                CALL    BIOSCALL
+
+                CALL    INITVDP
                 LD      A, #FF
                 LD      (SCRRDY), A
 
@@ -357,9 +362,7 @@ SCRINIT         CALL    INITVDP
                 XOR     A
                 LD      (CLIKSW), A
 
-                ; ERASE FUNCTION KEYS AND MAP THEM
-                LD      IX, ERAFNK
-                CALL    BIOSCALL
+                ; MAP FUNCTION KEYS
                 CALL    SETFNKY
 
                 ; FLUSH KEYBOARD BUFFER

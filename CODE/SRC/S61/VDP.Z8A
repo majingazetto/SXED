@@ -11,19 +11,23 @@
 ; -
 
 VDPWAIT         PUSH    AF
+                PUSH    BC
+                LD      A, (VDPCTRL)
+                LD      C, A
 .WAIT           LD      A, 2
                 DI
-                OUT     (VDPCT), A
+                OUT     (C), A
                 LD      A, #8F          ; SELECT STATUS REG S#2 (R#15=2)
-                OUT     (VDPCT), A
-                IN      A, (VDPST)
+                OUT     (C), A
+                IN      A, (C)
                 RRA                     ; CE INTO CARRY
                 LD      A, 0            ; RESTORE S#0 SELECTION (KEEPS CARRY)
-                OUT     (VDPCT), A
+                OUT     (C), A
                 LD      A, #8F
-                OUT     (VDPCT), A
+                OUT     (C), A
                 EI                      ; ONE POLL PER DI: THE VBLANK IS SERVED
                 JR      C, .WAIT        ; BETWEEN POLLS, NOT HELD OFF FOR THE
+                POP     BC
                 POP     AF              ; WHOLE COMMAND (A 128 MS YMMM LOST ~6)
                 RET
 
@@ -40,21 +44,25 @@ VDPWAIT         PUSH    AF
 ; - PREVIOUS OWNER OF THE VDP HAPPENED TO LEAVE R#14.
 ; -
 
-SETWRT          DI
+SETWRT          PUSH    BC
+                LD      A, (VDPCTRL)
+                LD      C, A
+                DI
                 LD      A, H
                 RLCA
                 RLCA
                 AND     %00000011       ; A15-A14 -> R#14 BITS 1-0
-                OUT     (VDPCT), A
+                OUT     (C), A
                 LD      A, #8E          ; REG 14 | #80
-                OUT     (VDPCT), A
+                OUT     (C), A
                 LD      A, L
-                OUT     (VDPCT), A
+                OUT     (C), A
                 LD      A, H
                 AND     #3F
                 OR      #40
-                OUT     (VDPCT), A
+                OUT     (C), A
                 EI
+                POP     BC
                 RET
 
 
@@ -70,12 +78,15 @@ SETWRT          DI
 
 VDPCMD          CALL    VDPWAIT
                 DI
+                LD      A, (VDPCTRL)
+                LD      C, A
                 LD      A, 32           ; START AT R#32
-                OUT     (VDPCT), A
+                OUT     (C), A
                 LD      A, #91          ; R#17 (INDIRECT REGISTER POINTER)
-                OUT     (VDPCT), A
+                OUT     (C), A
                 
-                LD      C, VDPIND       ; PORT #9B (R#17 AUTO-INCS R#32-46)
+                LD      A, (VDPIND)     ; PORT #9B (R#17 AUTO-INCS R#32-46)
+                LD      C, A
                 REPT    15
                 OUTI
                 ENDR

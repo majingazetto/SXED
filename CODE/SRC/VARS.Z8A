@@ -45,8 +45,12 @@ APPSEG          DEFB    0               ; SEGMENT THE APPEND CURSOR WRITES INTO
 DIRSEG          DEFB    0               ; DIRECTORY SEGMENT (ALWAYS SEGTBL ENTRY 0)
 FTRSEG          DEFB    0               ; FEATURE SEGMENT (ALWAYS SEGTBL ENTRY 1)
 VIDSEG          DEFB    0               ; S2: VIDEO SHADOW SEGMENT (SEGTBL ENTRY 1)
-VDPDATA         DEFB    0               ; VDP DATA PORT (DERIVED FROM #0006)
-VDPCTRL         DEFB    0               ; VDP CONTROL PORT (DATA + 1)
+VDPDR           DEFB    0               ; VDP DATA READ PORT (DERIVED FROM #0006)
+VDPDW           DEFB    0               ; VDP DATA WRITE PORT (DERIVED FROM #0007)
+VDPCTRL         DEFB    0               ; VDP CONTROL PORT (VDPDW + 1)
+VDPPAL          DEFB    0               ; VDP PALETTE PORT (VDPDW + 2)
+VDPIND          DEFB    0               ; VDP INDIRECT/CMD PORT (VDPDW + 3)
+VDPDATA         EQU     VDPDW           ; S2 ALIAS FOR BACKWARD COMPATIBILITY
 HOMESEG         DEFB    0               ; FEATURE SEGMENT CURRENTLY EXECUTING
 SEGSP           DEFB    0               ; INTER-SEGMENT CALL STACK POINTER (0..8)
 SEGSTK          DEFS    8               ; 4-DEEP STACK OF {TXSEG, HOMESEG} PAIRS

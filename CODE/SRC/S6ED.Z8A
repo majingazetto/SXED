@@ -346,12 +346,15 @@ ERRMSG          LD      A, (SCRRDY)
 ; -
 
 SETPAL          DI
+                LD      A, (VDPCTRL)
+                LD      C, A
                 XOR     A
-                OUT     (VDPCT), A      ; PALETTE 0
+                OUT     (C), A          ; PALETTE 0
                 LD      A, #90          ; REG 16 | #80
-                OUT     (VDPCT), A
+                OUT     (C), A
                 LD      B, 8            ; 4 COLORS * 2 BYTES
-                LD      C, VDPPAL       ; PORT #9A
+                LD      A, (VDPPAL)     ; PORT (DYNAMIC)
+                LD      C, A
                 OTIR
                 EI
                 RET
@@ -368,21 +371,26 @@ SETPAL          DI
 ; -
 
 RSTPAL          DI
+                LD      A, (VDPCTRL)
+                LD      C, A
                 XOR     A
-                OUT     (VDPCT), A      ; PALETTE 0
+                OUT     (C), A          ; PALETTE 0
                 LD      A, #90          ; REG 16 | #80
-                OUT     (VDPCT), A
+                OUT     (C), A
                 LD      B, 32           ; 16 COLORS * 2 BYTES
-                LD      C, VDPPAL       ; PORT #9A
+                LD      A, (VDPPAL)     ; PORT (DYNAMIC)
+                LD      C, A
                 LD      HL, DEFPLT
                 OTIR
                 ; R#8: CHGMOD DOES NOT RESTORE IT, SO WITHOUT THIS DOS KEEPS
                 ; SPD=1 (NO SPRITES) AND TP=1 FOR WHATEVER RUNS NEXT
+                LD      A, (VDPCTRL)
+                LD      C, A
                 LD      A, (SAVRG8)
                 LD      (RG8SAV), A
-                OUT     (VDPCT), A
+                OUT     (C), A
                 LD      A, #88          ; REG 8 | #80
-                OUT     (VDPCT), A
+                OUT     (C), A
                 EI
                 RET
 
@@ -397,7 +405,13 @@ RSTPAL          DI
 ; - CLOBBERS: ALL
 ; -
 
-SCRINIT         LD      A, 6
+SCRINIT         ; ERASE FUNCTION KEYS BEFORE ENTERING GRAPHICS MODE
+                ; (BIOS ERAFNK IN SCREEN 6 WRITES TEXT-MODE BLANKS INTO VRAM)
+                LD      IX, ERAFNK
+                CALL    BIOSCALL
+
+                CALL    VDPPORTS
+                LD      A, 6
                 LD      IX, CHGMOD
                 CALL    BIOSCALL
                 LD      A, #FF
@@ -451,9 +465,7 @@ SCRINIT         LD      A, 6
                 XOR     A
                 LD      (CLIKSW), A
                 
-                ; ERASE FUNCTION KEYS, THEN MAKE THEM DELIVER F1KEY.. TO THE KEYMAP
-                LD      IX, ERAFNK
-                CALL    BIOSCALL
+                ; MAP FUNCTION KEYS TO DELIVER F1KEY.. TO THE KEYMAP
                 CALL    SETFNKY
 
                 ; FLUSH KEYBOARD BUFFER

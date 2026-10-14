@@ -23,6 +23,57 @@ BIOSCALL        PUSH    AF
                 RET
 
 
+; --- RDBIOS                    ----------------------------------------
+
+
+; - RDBIOS -----------------------------
+; - READ ONE BYTE FROM THE MAIN BIOS ROM SLOT
+; - IN:  HL = ADDRESS
+; - OUT: A  = BYTE READ
+; - CLOBBERS: AF
+; - NOTE: RUNS WITH DI TO PROTECT RDSLT SLOT SWITCHING
+; -
+
+RDBIOS          PUSH    BC
+                PUSH    DE
+                PUSH    HL
+                LD      A, (EXPTBL)     ; MAIN BIOS ROM SLOT ID
+                CALL    RDSLT
+                POP     HL
+                POP     DE
+                POP     BC
+                RET
+
+
+; --- VDPPORTS                  ----------------------------------------
+
+
+; - VDPPORTS ---------------------------
+; - INITIALIZE DYNAMIC VDP PORT NUMBERS FROM MAIN BIOS
+; - READS #0006 (VDP.DR) AND #0007 (VDP.DW)
+; - DERIVES VDPCTRL (DW+1), VDPPAL (DW+2), VDPIND (DW+3)
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: AF, HL
+; -
+
+VDPPORTS        DI
+                LD      HL, #0006
+                CALL    RDBIOS
+                LD      (VDPDR), A
+                LD      HL, #0007
+                CALL    RDBIOS
+                LD      (VDPDW), A
+                INC     A
+                LD      (VDPCTRL), A
+                INC     A
+                LD      (VDPPAL), A
+                INC     A
+                LD      (VDPIND), A
+                EI
+                RET
+
+
 ; --- READROW                   ----------------------------------------
 
 

@@ -28,12 +28,8 @@ REGTBL          DEFB    #02             ; R#0: M2=1 (SCREEN 2)
 ; - CLOBBERS: ALL
 ; -
 
-INITVDP         ; READ VDP PORTS FROM BIOS ROM (#0006)
-                LD      HL, #0006
-                CALL    RDBIOS
-                LD      (VDPDATA), A
-                INC     A
-                LD      (VDPCTRL), A
+INITVDP         ; INITIALIZE DYNAMIC VDP PORTS
+                CALL    VDPPORTS
 
                 ; SET REGISTERS 0..7 (DISPLAY OFF INITIALLY)
                 LD      HL, REGTBL
@@ -66,6 +62,12 @@ INITVDP         ; READ VDP PORTS FROM BIOS ROM (#0006)
 
                 ; INITIALIZE COLOR TABLE WITH DEFAULT COLORS
                 CALL    INITCOL
+
+                ; DISABLE SPRITES IN TMS9918 (TERMINATE SPRITE LIST AT SPRITE 0)
+                LD      A, #D0
+                LD      HL, SATBASE
+                LD      BC, 128
+                CALL    VDPFILL
 
                 ; ENABLE DISPLAY (R#1 = #E0: 16K, BLANK=1, IE=1)
                 LD      A, #E0
@@ -595,23 +597,5 @@ VDPFILL         PUSH    AF
 
 
 
-; --- RDBIOS                    ----------------------------------------
 
-
-; - RDBIOS -----------------------------
-; - READS ONE BYTE FROM THE MAIN BIOS ROM
-; - IN:  HL = ADDRESS
-; - OUT: A  = BYTE READ
-; - CLOBBERS: AF
-; -
-
-RDBIOS          PUSH    BC
-                PUSH    DE
-                PUSH    HL
-                LD      A, (EXPTBL)
-                CALL    RDSLT
-                POP     HL
-                POP     DE
-                POP     BC
-                RET
 

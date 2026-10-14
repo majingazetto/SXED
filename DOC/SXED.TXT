@@ -418,10 +418,10 @@ the current selection.
 
  -------- 7.- KEYMAP PROFILES.
 
-Four keyboard profiles are built in. Ctrl+K cycles them
-(STD -> TED -> EMC -> VI), the Settings dialog selects one,
-and PROFILE= sets it in the CFG. The active profile is
-remembered when you save Settings.
+Four keyboard profiles are built in: Standard, TED
+(WordStar), Emacs, and Vi. The Settings dialog selects
+one, and PROFILE= sets it in the CFG. The active profile
+is remembered when you save Settings.
 
 The full tables follow. Unless noted, "the editor" means all
 three editors. In all profiles any unmapped printable key is
@@ -437,7 +437,6 @@ Common to ALL profiles:
     TAB                 Insert to next tab stop
     BS / DEL            Delete backward / forward
     INSERT              Toggle insert / overwrite
-    Ctrl+K              Cycle keymap profile
     Ctrl+G              Go to line...
     Ctrl+S              Save
     Ctrl+Q / ESC        Quit (ESC first drops a selection)
@@ -577,7 +576,7 @@ Miscellaneous:
 
     :    Ex command line (see 8.4)
     Ctrl+G  Go to line...    Ctrl+S  Save    Ctrl+Q  Quit
-    Ctrl+K  Cycle profile    Ctrl+T  Cycle markup mode
+    Ctrl+T  Cycle markup mode
 
 Leader sequences: after "d" or "g" the editor waits for the
 next key ("dd", "gg"). Any other key cancels the leader and

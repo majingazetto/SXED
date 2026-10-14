@@ -144,13 +144,15 @@ FONTINIT        XOR     A
                 PUSH    HL              ; VRAM LINE ADDRESS
                 CALL    SETWRT
                 DI                      ; SETWRT ENDS WITH AN UNCONDITIONAL EI
+                LD      A, (VDPDW)
+                LD      C, A
                 LD      B, 32           ; 32 GLYPHS SHARE THIS VRAM LINE
 .UIGLP          LD      A, (DE)         ; 1BPP ROW BYTE
                 CALL    EXPSTAT         ; H = PIXELS 0-3, L = PIXELS 4-5
                 LD      A, H
-                OUT     (VDPDR), A
+                OUT     (C), A
                 LD      A, L
-                OUT     (VDPDR), A
+                OUT     (C), A
                 LD      HL, 8           ; SAME SCANLINE OF THE NEXT GLYPH
                 ADD     HL, DE
                 EX      DE, HL
@@ -182,13 +184,15 @@ FONTINIT        XOR     A
                 CALL    SETWRT
                 DI                      ; SETWRT ENDS WITH AN UNCONDITIONAL EI;
                                         ; KEEP THE 64-BYTE BURST ATOMIC
+                LD      A, (VDPDW)
+                LD      C, A
                 LD      B, 32           ; 32 GLYPHS SHARE THIS VRAM LINE
 .GLYPHLP        LD      A, (DE)         ; 1BPP ROW BYTE
                 CALL    EXPNORM         ; H = PIXELS 0-3, L = PIXELS 4-5
                 LD      A, H
-                OUT     (VDPDR), A
+                OUT     (C), A
                 LD      A, L
-                OUT     (VDPDR), A
+                OUT     (C), A
                 LD      HL, 8           ; SAME SCANLINE OF THE NEXT GLYPH
                 ADD     HL, DE
                 EX      DE, HL
@@ -206,7 +210,7 @@ FONTINIT        XOR     A
                 POP     DE              ; GLYPH ROW BASE
                 INC     D               ; + 256 BYTES = NEXT GLYPH ROW
                 DEC     C
-                JR      NZ, .ROWLP
+                JP      NZ, .ROWLP
 
                 LD      A, (FNTOK)
                 OR      A
@@ -293,28 +297,6 @@ FNTROMI         DI
                 LD      D, A            ; DE = CHARSET ADDRESS
                 LD      (FNTCGA), DE
                 EI
-                RET
-
-
-; --- RDBIOS                    ----------------------------------------
-
-
-; - RDBIOS -----------------------------
-; - READ ONE BYTE FROM THE MAIN BIOS SLOT
-; - IN:  HL = ADDRESS
-; - OUT: A  = BYTE READ
-; - CLOBBERS: AF
-; - NOTE: CALLER MUST HAVE INTERRUPTS DISABLED
-; -
-
-RDBIOS          PUSH    BC
-                PUSH    DE
-                PUSH    HL
-                LD      A, (EXPTBL)     ; MAIN BIOS SLOT ID
-                CALL    RDSLT
-                POP     HL
-                POP     DE
-                POP     BC
                 RET
 
 

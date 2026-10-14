@@ -130,16 +130,7 @@ MJPUTP3       EQU     #2A            ; NOP
 MJGETP3       EQU     #2D
 
 
-; --- VDP PORTS                 ----------------------------------------
-
-
-VDPDR           EQU     #98             ; VDP DATA PORT (READ/WRITE)
-VDPCT           EQU     #99             ; VDP CONTROL PORT (REGISTER/STATUS)
-VDPST           EQU     #99             ; VDP STATUS PORT (READ)
-VDPPAL          EQU     #9A             ; PALETTE DATA
-VDPPALC         EQU     #9B             ; PALETTE REGISTER
-VDPIND          EQU     #9B             ; VDP INDIRECT REGISTER PORT (PORT 3)
-
+; --- VDP PORTS (NOW DYNAMIC IN VARS.Z8A: VDPDR, VDPDW, VDPCTRL, VDPPAL, VDPIND)
 
 
 ; --- VDP COMMAND REGISTER VALUES   -----------------------------------
