@@ -614,10 +614,10 @@ class S28RenderPure(S2Case):
         t.press('S', mods=['CTRL'])
         t.wait(3.0)
         t.snap('edited', vram='patcol')
-        # GRAPH+DOWN / GRAPH+UP page down and back: the viewport returns to
+        # CTRL+DOWN / CTRL+UP page down and back: the viewport returns to
         # where it was and the screen is repainted wholesale on the way.
-        t.press('DOWN', mods=['GRAPH'])
-        t.press('UP', mods=['GRAPH'])
+        t.press('DOWN', mods=['CTRL'])
+        t.press('UP', mods=['CTRL'])
         t.snap('redrawn', vram='patcol')
         return t
 

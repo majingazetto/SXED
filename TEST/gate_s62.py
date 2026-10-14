@@ -189,7 +189,7 @@ class S623Scroll(S62Case):
         t.press('DOWN', repeat=30)
         t.wait(1.0)
         t.snap('down', vram='screen')
-        t.press('DOWN', mods=['CTRL'])
+        t.press('DOWN', mods=['GRAPH'])
         t.wait(1.0)
         t.snap('bottom', vram='screen')
         t.press('UP', repeat=3)

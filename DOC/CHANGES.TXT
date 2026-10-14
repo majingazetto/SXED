@@ -9,6 +9,8 @@ Newest first. The manual is SXED.TXT.
  -------- v0.5 (2026-10-14)
 
 New
+- HOME and Shift+HOME jump directly to the top and bottom of
+  the document in the STD profile.
 - Quitting with unsaved changes asks whether to save before
   exiting. If confirmed, a named file is written directly;
   an untitled document opens Save As to enter a name.
@@ -17,6 +19,11 @@ New
   confirms discarding changes before leaving.
 
 Changed
+- Navigation in STD profile: Ctrl+Up / Ctrl+Down now pages
+  up and down, and GRAPH+Up / GRAPH+Down jumps to the top
+  and bottom of the document (along with their Shift
+  selection equivalents), matching the ergonomic default
+  of the TED profile.
 - S6ED / S61ED: dialog buttons match the visual language of
   menus and settings: an unfocused button rests on the
   window background with plain text in the text colour, and

@@ -9,42 +9,45 @@
 ; --- KMAPSTD                   ----------------------------------------
 
 
-KMAPSTD         ; UNMODIFIED CURSORS
+KMAPSTD         ; UNMODIFIED CURSORS & HOME
                 DEFB    CLEFT,   MODNONE, ACMVL
                 DEFB    CRIGHT,  MODNONE, ACMVR
                 DEFB    CUP,     MODNONE, ACMVU
                 DEFB    CDOWN,   MODNONE, ACMVD
+                DEFB    HOMEKEY, MODNONE, ACTOP
 
-                ; CTRL + CURSORS (LINE & DOCUMENT)
+                ; CTRL + CURSORS (LINE & PAGING)
                 DEFB    CLEFT,   MODCTRL, ACBOL
                 DEFB    CRIGHT,  MODCTRL, ACEOL
-                DEFB    CUP,     MODCTRL, ACTOP
-                DEFB    CDOWN,   MODCTRL, ACBOT
+                DEFB    CUP,     MODCTRL, ACPGUP
+                DEFB    CDOWN,   MODCTRL, ACPGDN
 
-                ; GRAPH + CURSORS (WORDS & PAGING)
+                ; GRAPH + CURSORS (WORDS & DOCUMENT)
                 DEFB    CLEFT,   MODGRPH, ACWLFT
                 DEFB    CRIGHT,  MODGRPH, ACWRGT
                 DEFB    BS,      MODGRPH, ACDWLFT
-                DEFB    CUP,     MODGRPH, ACPGUP
-                DEFB    CDOWN,   MODGRPH, ACPGDN
+                DEFB    CUP,     MODGRPH, ACTOP
+                DEFB    CDOWN,   MODGRPH, ACBOT
 
-                ; SHIFT + CURSORS (TEXT SELECTION)
+                ; SHIFT + CURSORS (TEXT SELECTION) & SHIFT + HOME
                 DEFB    CLEFT,   MODSHFT, ACSLML
                 DEFB    CRIGHT,  MODSHFT, ACSLMR
                 DEFB    CUP,     MODSHFT, ACSLMU
                 DEFB    CDOWN,   MODSHFT, ACSLMD
+                DEFB    CLSKEY,  MODSHFT, ACBOT
+                DEFB    CLSKEY,  MODNONE, ACBOT
 
                 ; SHIFT + CTRL + CURSORS
                 DEFB    CLEFT,   MODSHFT | MODCTRL, ACSLBOL
                 DEFB    CRIGHT,  MODSHFT | MODCTRL, ACSLEOL
-                DEFB    CUP,     MODSHFT | MODCTRL, ACSLTOP
-                DEFB    CDOWN,   MODSHFT | MODCTRL, ACSLBOT
+                DEFB    CUP,     MODSHFT | MODCTRL, ACSLPGU
+                DEFB    CDOWN,   MODSHFT | MODCTRL, ACSLPGD
 
                 ; SHIFT + GRAPH + CURSORS
                 DEFB    CLEFT,   MODSHFT | MODGRPH, ACSLWLF
                 DEFB    CRIGHT,  MODSHFT | MODGRPH, ACSLWRT
-                DEFB    CUP,     MODSHFT | MODGRPH, ACSLPGU
-                DEFB    CDOWN,   MODSHFT | MODGRPH, ACSLPGD
+                DEFB    CUP,     MODSHFT | MODGRPH, ACSLTOP
+                DEFB    CDOWN,   MODSHFT | MODGRPH, ACSLBOT
 
                 ; EDITING & SYSTEM
                 DEFB    CTRL_A,  MODCTRL, ACSELAL

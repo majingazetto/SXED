@@ -224,9 +224,10 @@ These keys work the same in the STD, TED and EMC profiles (Vi has its own set, s
 | `Left / Right` | One character left / right |
 | `Up / Down` | One line up / down |
 | `Ctrl+Left/Right` | Beginning / end of line |
-| `Ctrl+Up / Ctrl+Down` | Top / bottom of the document |
+| `Ctrl+Up / Ctrl+Down` | Page up / down |
 | `GRAPH+Left/Right` | One word left / right |
-| `` | GRAPH+Up / GRAPH+Down One page up / down |
+| `GRAPH+Up / GRAPH+Down` | Top / bottom of the document |
+| `HOME / Shift+HOME` | Top / bottom of the document |
 
 Lines can be up to 255 characters long. When the cursor moves past the right edge the window scrolls horizontally in 8 column steps, so long lines are never cut.
 
@@ -343,14 +344,15 @@ Classic CUA-style editing (the default):
 |:---|:---|
 | `Left/Right/Up/Down` | Move cursor |
 | `Ctrl+Left / Ctrl+Right` | Beginning / end of line |
-| `Ctrl+Up / Ctrl+Down` | Top / bottom of document |
+| `Ctrl+Up / Ctrl+Down` | Page up / down |
 | `GRAPH+Left/Right` | Word left / right |
-| `GRAPH+Up / GRAPH+Down` | Page up / down |
+| `GRAPH+Up / GRAPH+Down` | Top / bottom of document |
+| `HOME / Shift+HOME` | Top / bottom of document |
 | `` | Shift+Left/Right/Up/Down Extend selection |
 | `Shift+Ctrl+Left/Right` | Select to line start / end |
-| `Shift+Ctrl+Up/Down` | Select to doc top / bottom |
+| `Shift+Ctrl+Up/Down` | Select page up / down |
 | `Shift+GRAPH+Left/Right` | Select word left / right |
-| `Shift+GRAPH+Up/Down` | Select page up / down |
+| `Shift+GRAPH+Up/Down` | Select to doc top / bottom |
 | `Ctrl+A` | Select all |
 | `` | Ctrl+X / Ctrl+C / Ctrl+V Cut / copy / paste |
 | `Ctrl+Y` | Delete current line |

@@ -78,11 +78,11 @@ class G1Image(Case):
             t.press('RETURN')
             t.press('BS')
         t.text('STRESS')
-        t.press('DOWN', mods=['GRAPH'])
-        t.press('UP', mods=['GRAPH'])
+        t.press('DOWN', mods=['CTRL'])
+        t.press('UP', mods=['CTRL'])
         t.press('DOWN', mods=['SHIFT'], repeat=4)
         t.press('C', mods=['CTRL'])
-        t.press('DOWN', mods=['CTRL'])
+        t.press('DOWN', mods=['GRAPH'])
         t.press('V', mods=['CTRL'])
         t.snap('after', image=True)
         return t
@@ -440,8 +440,8 @@ class G7Selection(Case):
         t.snap('deselected', vram=True)
         # A full REDRAW repaints from the document alone.  Whatever the
         # differential painters left behind shows up as a difference here.
-        t.press('DOWN', mods=['GRAPH'])
-        t.press('UP', mods=['GRAPH'])
+        t.press('DOWN', mods=['CTRL'])
+        t.press('UP', mods=['CTRL'])
         t.snap('redrawn', vram=True)
         return t
 
@@ -2402,8 +2402,8 @@ class F1Scroll(Case):
         t.snap('scrolled_up', vram=True)
         t.press('UP', repeat=5)           # top bound
         t.snap('top_limit', vram=True)
-        t.press('DOWN', mods=['GRAPH'])   # PgDn
-        t.press('UP', mods=['GRAPH'])     # PgUp -> clean REDRAW
+        t.press('DOWN', mods=['CTRL'])    # PgDn
+        t.press('UP', mods=['CTRL'])      # PgUp -> clean REDRAW
         t.snap('redrawn', vram=True)
         t.press('DOWN', repeat=65)        # bottom bound
         t.snap('bottom_limit', vram=True)
@@ -2477,9 +2477,15 @@ class F2Keyrun(Case):
         t.at('keymatrixup 8 0x40')
         t.t += 0.5
         t.snap('burst', vram=True)
-        # Ctrl+UP returns to top with clean REDRAW
-        t.press('UP', mods=['CTRL'])
+        # Graph+UP returns to top with clean REDRAW
+        t.press('UP', mods=['GRAPH'])
         t.snap('top', vram=True)
+        # Shift+HOME jumps to document bottom
+        t.press('HOME', mods=['SHIFT'])
+        t.snap('shift_home')
+        # HOME returns to document top
+        t.press('HOME')
+        t.snap('home_top')
         return t
 
     def verify(self, ctx, runs):
@@ -2496,8 +2502,16 @@ class F2Keyrun(Case):
                   'CURY clamped at 23 (got %s)' % cury),
             Check('F2/return-top',
                   run.var('top', 'TOPLINE') == 0 and run.var('top', 'DOCLINE') == 0,
-                  'TOPLINE %s / DOCLINE %s after Ctrl+UP'
+                  'TOPLINE %s / DOCLINE %s after Graph+UP'
                   % (run.var('top', 'TOPLINE'), run.var('top', 'DOCLINE'))),
+            Check('F2/shift-home-bottom',
+                  run.var('shift_home', 'DOCLINE') == self.LINES - 1,
+                  'DOCLINE %s at document bottom after Shift+HOME'
+                  % run.var('shift_home', 'DOCLINE')),
+            Check('F2/home-top',
+                  run.var('home_top', 'TOPLINE') == 0 and run.var('home_top', 'DOCLINE') == 0,
+                  'TOPLINE %s / DOCLINE %s at document top after HOME'
+                  % (run.var('home_top', 'TOPLINE'), run.var('home_top', 'DOCLINE'))),
         ]
         font = font_of(ctx)
         lines = vram.render_text(run.blob('burst', 'vram'), font=font)
@@ -3206,8 +3220,8 @@ class D13Overwrite(Case):
                     t.wait(0.5)
                     t.snap('undone')
                 else:
-                    t.press('DOWN', mods=['GRAPH'])     # page down...
-                    t.press('UP', mods=['GRAPH'])       # ...and back: REDRAW
+                    t.press('DOWN', mods=['CTRL'])      # page down...
+                    t.press('UP', mods=['CTRL'])        # ...and back: REDRAW
                     t.wait(0.5)
                     t.snap('redrawn', vram=True)
                     t.press('RIGHT', repeat=5)          # end of line, col 8
@@ -3311,8 +3325,8 @@ class E1Cut(Case):
         t.wait(3.0)
         t.snap('cut', vram=True)
         # Full redraw: in a 3-line document, PG_DOWN hits bottom, PG_UP hits top (line 0)
-        t.press('DOWN', mods=['GRAPH'])
-        t.press('UP', mods=['GRAPH'])
+        t.press('DOWN', mods=['CTRL'])
+        t.press('UP', mods=['CTRL'])
         t.snap('redrawn', vram=True)
         return t
 
@@ -3422,8 +3436,8 @@ class E3SelScroll(Case):
         t.press('RIGHT')                           # deselects (CHKUNSEL) and moves col 0 -> 1
         t.press('LEFT')                            # moves col 1 -> 0
         t.snap('deselected', vram=True)
-        t.press('DOWN', mods=['GRAPH'])            # ACTPGDN: DOCLINE 25 + 24 = 49 (no bottom clamp)
-        t.press('UP', mods=['GRAPH'])              # ACTPGUP: DOCLINE 49 - 24 = 25 (pure return)
+        t.press('DOWN', mods=['CTRL'])             # ACTPGDN: DOCLINE 25 + 24 = 49 (no bottom clamp)
+        t.press('UP', mods=['CTRL'])               # ACTPGUP: DOCLINE 49 - 24 = 25 (pure return)
         t.snap('redrawn', vram=True)
         return t
 
@@ -3476,8 +3490,8 @@ class E4SelAllDel(Case):
         t.press('S', mods=['CTRL'])
         t.wait(3.0)
         t.snap('deleted', vram=True)
-        t.press('DOWN', mods=['GRAPH'])
-        t.press('UP', mods=['GRAPH'])
+        t.press('DOWN', mods=['CTRL'])
+        t.press('UP', mods=['CTRL'])
         t.snap('redrawn', vram=True)
         return t
 
@@ -4147,9 +4161,9 @@ class U5UndoSel(Case):
         # 4. Move cursor right: must NOT un-XOR clean text or leave stray pixels
         t.press('RIGHT')
         t.snap('after_arrow', vram=True)
-        # 5. Full pure REDRAW via Graph+Down then Graph+Up to compare screen
-        t.press('DOWN', mods=['GRAPH'])
-        t.press('UP', mods=['GRAPH'])
+        # 5. Full pure REDRAW via Ctrl+Down then Ctrl+Up to compare screen
+        t.press('DOWN', mods=['CTRL'])
+        t.press('UP', mods=['CTRL'])
         t.snap('pure_redraw', vram=True)
         # 6. Save to disk
         t.press('S', mods=['CTRL'])
@@ -7468,8 +7482,8 @@ class P2DeleteLastRow0(Case):
     def timeline(self, ctx, variant=None):
         t = Timeline()
         t.snap('boot')
-        t.press('DOWN', mods=['GRAPH'])
-        t.press('DOWN', mods=['GRAPH'])
+        t.press('DOWN', mods=['CTRL'])
+        t.press('DOWN', mods=['CTRL'])
         t.wait(1.0)
         t.snap('paged')
         t.press('Y', mods=['CTRL'])
@@ -7597,8 +7611,8 @@ class Q1StyleSelection(Case):
         t.press('LEFT')
         t.wait(0.5)
         t.snap('deselected', vram=True)
-        t.press('DOWN', mods=['GRAPH'])
-        t.press('UP', mods=['GRAPH'])
+        t.press('DOWN', mods=['CTRL'])
+        t.press('UP', mods=['CTRL'])
         t.wait(0.5)
         t.snap('redrawn', vram=True)
         return t
@@ -7634,8 +7648,8 @@ class Q2ShiftWrapScroll(Case):
         t.press('LEFT')
         t.wait(0.5)
         t.snap('deselected', vram=True)
-        t.press('DOWN', mods=['GRAPH'])
-        t.press('UP', mods=['GRAPH'])
+        t.press('DOWN', mods=['CTRL'])
+        t.press('UP', mods=['CTRL'])
         t.wait(0.5)
         t.snap('redrawn', vram=True)
         return t
