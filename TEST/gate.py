@@ -1209,10 +1209,10 @@ class H7AboutDialog(Case):
 
         hi_pixels = sum(1 for b in v_d1 for s in (0, 2, 4, 6) if ((b >> s) & 3) == 3)
         checks.append(Check('H7/color-highlight',
-                            # ~789 px since v0.4 (the unfocused OK button
-                            # lost its amber border and text); the 288 px top
-                            # accent band alone is what c3-accent removes
-                            hi_pixels > 650,
+                            # ~982 px since v0.5 (the OK button defaults to
+                            # focused with amber border and bold text); the 288 px
+                            # top accent band alone is what c3-accent removes
+                            hi_pixels > 800,
                             'Color 3 (amber) highlights present (%d px)' % hi_pixels))
 
         cursor = [(run.var('boot', 'CURX') or 0, run.var('boot', 'CURY') or 0)]
@@ -3580,9 +3580,9 @@ class E5Replace(Case):
 
 class E6SelWordPage(Case):
     name = 'E6-sel-word-page'
-    desc = 'Shift+Graph+Right selects words, Shift+Graph+Down selects pages'
+    desc = 'Shift+Graph+Right selects words, Shift+Ctrl+Down selects pages'
     origin = ('ACSLWRT (Shift+Graph+Right) extends selection to next word '
-              'boundaries, ACSLPGD (Shift+Graph+Down) extends selection by 24 rows')
+              'boundaries, ACSLPGD (Shift+Ctrl+Down) extends selection by 24 rows')
     LINES = ['ALPHA BETA GAMMA DELTA'] + ['LINE %02d' % i for i in range(1, 35)]
 
     def fixture(self, ctx, variant=None):
@@ -3592,7 +3592,7 @@ class E6SelWordPage(Case):
         t = Timeline()
         t.press('RIGHT', mods=['SHIFT', 'GRAPH'], repeat=2)
         t.snap('word_sel')
-        t.press('DOWN', mods=['SHIFT', 'GRAPH'], repeat=1)
+        t.press('DOWN', mods=['SHIFT', 'CTRL'], repeat=1)
         t.snap('page_sel')
         return t
 
@@ -8381,13 +8381,13 @@ class H45SelAllPage(Case):
     # scroll exposes a row INSIDE the painted range, which is the one case
     # SELSCRL / SELEXPO have to repaint (extending outward never does).
     STEPS = (('selall', 'A', ['CTRL'], 1), ('shrink', 'UP', ['SHIFT'], 26),
-             ('spgu', 'UP', ['SHIFT', 'GRAPH'], 1),
-             ('spgu2', 'UP', ['SHIFT', 'GRAPH'], 1),
-             ('spgd', 'DOWN', ['SHIFT', 'GRAPH'], 1),
-             ('spgd2', 'DOWN', ['SHIFT', 'GRAPH'], 1),
+             ('spgu', 'UP', ['SHIFT', 'CTRL'], 1),
+             ('spgu2', 'UP', ['SHIFT', 'CTRL'], 1),
+             ('spgd', 'DOWN', ['SHIFT', 'CTRL'], 1),
+             ('spgd2', 'DOWN', ['SHIFT', 'CTRL'], 1),
              ('sup', 'UP', ['SHIFT'], 1),
-             ('pgu', 'UP', ['GRAPH'], 1), ('selall2', 'A', ['CTRL'], 1),
-             ('pgd', 'DOWN', ['GRAPH'], 1))
+             ('pgu', 'UP', ['CTRL'], 1), ('selall2', 'A', ['CTRL'], 1),
+             ('pgd', 'DOWN', ['CTRL'], 1))
     ROWS = 24
 
     def fixture(self, ctx, variant=None):

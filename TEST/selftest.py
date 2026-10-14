@@ -8,6 +8,7 @@ first, and a mutation whose checks were already failing is reported as a
 failure of the self-test, not as a catch.
 """
 
+import subprocess
 import gate
 import gate_s2
 import gate_s62
@@ -64,6 +65,9 @@ def run(ctx, name_filter='', baseline=None):
         except Exception as exc:                          # noqa: BLE001
             checks.append(Check('mut/%s' % mut['name'], False,
                                 'could not apply: %s' % exc))
+        finally:
+            if mut.get('file') == 'Makefile':
+                subprocess.run(['make', '-C', ctx.code_dir, 'dsk'], capture_output=True)
     # The sources are back: rebuild BOTH targets so the tree is left exactly
     # as found.  This matters more than it looks -- a gate run does not build,
     # so a stale .COM from the last mutation is read as if it were the clean
@@ -73,6 +77,7 @@ def run(ctx, name_filter='', baseline=None):
     ctx.reload_symbols()
     static.check_build_clean(ctx.for_target('S2ED'))
     static.check_build_clean(ctx.for_target('S61ED'))
+    subprocess.run(['make', '-C', ctx.code_dir, 'dsk'], capture_output=True)
     return checks
 
 
