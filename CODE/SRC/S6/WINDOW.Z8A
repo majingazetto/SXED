@@ -694,11 +694,10 @@ WINSID          LD      HL, (WINH)
 ; -
 ; - WINBTS -----------------------------
 ; - SAME, WITH EXPLICIT STYLE FOR OPTION SELECTION:
-; - STYLE 0 (NORMAL):   COL_FG BORDER, COL_UI BODY, BOLD TEXT IN TIMP:
-; -   TEXT COLOUR, SO AN UNFOCUSED BUTTON DOES NOT READ AS HIGHLIGHTED
-; - STYLE 1 (SELECTED): COL_HI BORDER, COL_HI BODY, BOLD TEXT IN TXOR:
-; -   %01 INK ^ %11 BODY = %10, COL_UI ON COL_HI, AS THE BROWSER'S FOCUS.
-; -   TIMP GAVE COL_FG ON COL_HI: WHITE ON YELLOW IN DARK, UNREADABLE
+; - STYLE 0 (NORMAL):   COL_FG BORDER, CLR_BG BODY, NORMAL TEXT IN TIMP:
+; -   UNFOCUSED BUTTON RESTS ON WINDOW BACKGROUND, TEXT IN COL_FG
+; - STYLE 1 (SELECTED): COL_HI BORDER, CLR_UI BODY, BOLD TEXT IN TOR:
+; -   MATCHES MENUS AND SETTINGS ROWS: COL_HI INK ON CLR_UI BODY
 ; - THE LABEL CARRIES NO BRACKETS OR PADDING: IT IS CENTRED IN THE BODY
 ; - FROM ITS LENGTH. A 9-CHARACTER "[  YES  ]" RAN 2 PX PAST THE BODY AND
 ; - ITS "]" LANDED ON THE BORDER.
@@ -758,16 +757,16 @@ WINBTS          LD      (WINBST), A
                 LD      A, (WINBST)
                 OR      A
                 JR      Z, .BODYN
-                LD      A, CLR_HI
+                LD      A, CLR_UI
                 JR      .BODYGO
-.BODYN          LD      A, CLR_UI
+.BODYN          LD      A, CLR_BG
 .BODYGO         LD      (VDP_CLR), A
                 XOR     A
                 LD      (VDP_ARG), A
                 LD      HL, VDPCMBLK
                 CALL    HMMV
 
-                ; 3. BUTTON TEXT IN BOLD, CENTRED: TIMP NORMAL, TXOR SELECTED
+                ; 3. BUTTON TEXT IN BOLD, CENTRED: TIMP NORMAL, TOR SELECTED
                 POP     BC              ; BC = REL Y
                 POP     DE              ; DE = REL X
                 POP     HL              ; HL = TEXT
@@ -798,9 +797,10 @@ WINBTS          LD      (WINBST), A
                 POP     HL              ; HL = TEXT
                 LD      A, (WINBST)
                 OR      A
-                LD      A, 1            ; BOLD (VARIANT 1)
-                JP      Z, WINSTR       ; COL_FG INK ON THE COL_UI BODY
-                JP      WINSTRX         ; COL_UI INK ON THE COL_HI BODY
+                LD      A, 0            ; NORMAL (VARIANT 0)
+                JP      Z, WINSTR       ; COL_FG INK ON THE CLR_BG BODY (TIMP)
+                INC     A               ; BOLD (VARIANT 1)
+                JP      WINSTR3         ; COL_HI INK ON THE CLR_UI BODY (TOR)
 
 
 ; --- WINDOW MANAGEMENT         ----------------------------------------
@@ -1027,11 +1027,12 @@ DOABT           LD      HL, 112
                 XOR     A               ; NORMAL
                 CALL    WINPRN
 
-                ; BUTTON [  OK  ] (REL X = 116, REL Y = 84)
+                ; BUTTON OK (REL X = 116, REL Y = 84), FOCUSED
                 LD      HL, .BTNOK
                 LD      DE, 116
                 LD      BC, 84
-                CALL    WINBTN
+                LD      A, 1            ; STYLE 1 (SELECTED / FOCUSED)
+                CALL    WINBTS
 
                 ; POP-UP THE COMPOSED WINDOW IN ONE VBLANK-SYNCED BLIT
                 CALL    WINSHOW

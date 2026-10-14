@@ -1596,22 +1596,21 @@ class H19QuitDialog(Case):
 
         checks.append(Check(
             'H19/default-no',
-            body(v_no, self.YESPX) == vram.COL_UI and
-            body(v_no, self.NOPX) == vram.COL_HI,
+            body(v_no, self.YESPX) == vram.COL_BG and
+            body(v_no, self.NOPX) == vram.COL_UI,
             'NO selected on open (YES body=%s, NO body=%s)'
             % (body(v_no, self.YESPX), body(v_no, self.NOPX))))
 
         checks.append(Check(
             'H19/nav-left',
-            body(v_yes, self.YESPX) == vram.COL_HI and
-            body(v_yes, self.NOPX) == vram.COL_UI,
+            body(v_yes, self.YESPX) == vram.COL_UI and
+            body(v_yes, self.NOPX) == vram.COL_BG,
             'LEFT selects YES (YES body=%s, NO body=%s)'
             % (body(v_yes, self.YESPX), body(v_yes, self.NOPX))))
 
-        # The focused button's text is COL_UI ink on the COL_HI body (TXOR),
-        # the browser's focus colours.  TIMP put COL_FG there: white on
-        # yellow in DARK, unreadable (2026-10-13).  Bodies are 56 x 12 at
-        # WINY + 44 = 118, x 192 (YES) and 264 (NO).
+        # The focused button's text is COL_HI ink on the COL_UI body (TOR),
+        # matching menus and settings rows (2026-10-14).  Bodies are 56 x 12
+        # at WINY + 44 = 118, x 192 (YES) and 264 (NO).
         def focus_inks(buf, x0):
             if buf is None:
                 return None
@@ -1620,7 +1619,7 @@ class H19QuitDialog(Case):
         inks = (focus_inks(v_no, 264), focus_inks(v_yes, 192))
         ok = all(i == {vram.COL_HI, vram.COL_UI} for i in inks)
         checks.append(Check('H19/focus-text', ok,
-                            'focused button text is COL_UI on COL_HI'
+                            'focused button text is COL_HI on COL_UI'
                             if ok else 'colours inside the focused body: %s'
                             % (inks,)))
 

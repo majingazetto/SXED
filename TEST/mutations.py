@@ -4219,10 +4219,10 @@ SELTMPXB        EQU     SELTMPXB2""")],
     },
     {
         'name': 'btn-focus-timp',
-        'why': 'the focused button text goes back to COL_FG on COL_HI: white '
-               'on yellow in DARK',
+        'why': 'the focused button text goes back to TIMP COL_FG: white '
+               'on blue in DARK instead of TOR COL_HI',
         'file': 'WINDOW.Z8A',
-        'old': """                JP      WINSTRX         ; COL_UI INK ON THE COL_HI BODY""",
+        'old': """                JP      WINSTR3         ; COL_HI INK ON THE CLR_UI BODY (TOR)""",
         'new': """                JP      WINSTR          ; MUTATION: TIMP, COL_FG INK""",
         'filter': 'H19',
         'expect': ['H19/focus-text'],
