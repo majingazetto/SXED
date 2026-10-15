@@ -328,11 +328,17 @@ MUTATIONS = [
     {
         'name': 's2-reflow-attr-off',
         'target': 'S2ED',
-        'why': 'REFLOW copies the remainder attributes from the byte count, not the source offset',
+        'why': 'the reflow copies the remainder attributes from the start of the line, not from where the remainder starts',
         'file': 'EDIT.Z8A',
-        'old': """                POP     DE              ; DE = SOURCE OFFSET""",
-        'new': """                POP     DE              ; DE = SOURCE OFFSET
-                LD      E, C            ; MUTATION: THE COUNT AS THE OFFSET""",
+        'old': """                POP     HL
+                LD      BC, WORKATTR
+                ADD     HL, BC
+                LD      DE, WORKBUF + 1 + WORKATTR""",
+        'new': """                POP     HL
+                LD      HL, WORKBUF2 + 1 ; MUTATION: ATTRIBUTES FROM COLUMN 0
+                LD      BC, WORKATTR
+                ADD     HL, BC
+                LD      DE, WORKBUF + 1 + WORKATTR""",
         'filter': 'S2-38',
         'expect': ['S2-38/bold'],
     },
@@ -360,10 +366,10 @@ MUTATIONS = [
     },
     {
         'name': 'p1-reflow-pass',
-        'why': 'REFLOW deletes an empty L+1 on every pass, taking the blank line between paragraphs',
+        'why': 'reflow runs past the blank line between paragraphs and fills it',
         'file': 'EDIT.Z8A',
-        'old': """                RET     NZ              ; PARAGRAPH BOUNDARY: DONE""",
-        'new': """                NOP                     ; MUTATION: DELETED ON ANY PASS""",
+        'old': """                RET     Z               ; REFLOW: THE PARAGRAPH ENDS HERE""",
+        'new': """                NOP                     ; MUTATION: THE PARAGRAPH DOES NOT END""",
         'filter': 'P1',
         'expect': ['P1/bs/content', 'P1/del/content'],
     },
@@ -558,6 +564,83 @@ MUTATIONS = [
                 NOP""",
         'filter': 'S62-13',
         'expect': ['S62-13/undo/content'],
+    },
+    {
+        'name': 'rewrap-split',
+        'why': 'REWRAP never finds a break inside the margin and splits a long '
+               'line at the first space past it, leaving it longer than the margin',
+        'file': 'EDIT.Z8A',
+        'old': """                CP      ' '
+                JR      Z, .BREAK
+                DJNZ    .BKBACK""",
+        'new': """                CP      ' '
+                NOP                     ; MUTATION: NO BREAK INSIDE THE MARGIN
+                NOP
+                DJNZ    .BKBACK""",
+        'filter': 'W4',
+        'expect': ['W4/para/content'],
+    },
+    {
+        'name': 'rewrap-fill',
+        'why': 'REWRAP only splits: a short line never pulls the next one up, '
+               'and the reflow the keys do in WRAP_TXT stops working',
+        'file': 'EDIT.Z8A',
+        'old': """.FILL           LD      HL, (RWLINE)""",
+        'new': """.FILL           JP      .NEXT           ; MUTATION: NO PULL
+                LD      HL, (RWLINE)""",
+        'filter': 'W5',
+        'expect': ['W5/content'],
+    },
+    {
+        'name': 'reflow-first-empty',
+        'why': 'reflow mode treats its own first line, when empty, as the end '
+               'of the paragraph: Backspace below an empty line does nothing',
+        'file': 'EDIT.Z8A',
+        'old': """                LD      A, 2
+                LD      (RWSTOP), A""",
+        'new': """                LD      A, 1            ; MUTATION: FIRST LINE NOT SPECIAL
+                LD      (RWSTOP), A""",
+        'filter': 'W5',
+        'expect': ['W5/content'],
+    },
+    {
+        'name': 'rewrap-ask',
+        'why': 'switching WRAP from DEV to TXT in Settings no longer offers to '
+               'rewrap the document',
+        'file': 'ACTION.Z8A',
+        'old': """                LD      HL, WRAPMODE
+                AND     (HL)
+                JR      Z, .NOWRP""",
+        'new': """                LD      HL, WRAPMODE
+                XOR     A               ; MUTATION: NEVER ASKED
+                JR      Z, .NOWRP""",
+        'filter': 'W3',
+        # no question: the capture gated on WINPOLL never fires and the
+        # session does not finish, so the case itself is what goes red
+        'expect_any': ['W3/yes/asked', 'W3-rewrap-settings'],
+    },
+    {
+        'name': 'rewrap-dev',
+        'why': 'Edit > Rewrap acts in WRAP_DEV, which has no margin, and refills '
+               'the paragraph to TEXTCOLS',
+        'file': 'ACTION.Z8A',
+        'old': """ACTRWRP         LD      A, (WRAPMODE)
+                CP      WRAP_TXT
+                RET     NZ""",
+        'new': """ACTRWRP         LD      A, (WRAPMODE)
+                CP      WRAP_TXT
+                NOP                     ; MUTATION: DEV REWRAPS TOO""",
+        'filter': 'W4',
+        'expect': ['W4/dev/content'],
+    },
+    {
+        'name': 'rewrap-sel-col0',
+        'why': 'a selection ending at column 0 of a line rewraps that line too',
+        'file': 'ACTION.Z8A',
+        'old': """                DEC     HL              ; ENDS AT COLUMN 0: NOT THAT LINE""",
+        'new': """                NOP                     ; MUTATION: THAT LINE TOO""",
+        'filter': 'W4',
+        'expect': ['W4/sel/content'],
     },
     {
         'name': 'undo-long-drop',
@@ -2531,9 +2614,9 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'name': 'd6-reflow',
         'why': 'REFLOW cascade reflow is disabled',
         'file': 'EDIT.Z8A',
-        'old': """REFLOW          LD      (RFLINE), HL""",
+        'old': """REFLOW          PUSH    HL""",
         'new': """REFLOW          RET                     ; MUTATION: REFLOW NO-OP
-                LD      (RFLINE), HL""",
+                PUSH    HL""",
         'filter': 'D6',
         'expect': ['D6/content'],
     },
@@ -3907,9 +3990,10 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'why': 'a reflow that pulls a whole line up keeps the history, whose '
                'records then name lines the reflow shifted',
         'file': 'EDIT.Z8A',
-        'old': """.RFALL          ; ENTIRE LINE L+1 FITS ON LINE L!
-                CALL    UNDOINIT""",
-        'new': """.RFALL          ; ENTIRE LINE L+1 FITS ON LINE L! MUTATION: HISTORY KEPT""",
+        'old': """                LD      (RWCHG), A
+                JP      UNDOINIT""",
+        'new': """                LD      (RWCHG), A
+                RET                     ; MUTATION: HISTORY KEPT""",
         'filter': 'U8',
         'expect': ['U8/reflow/content'],
     },

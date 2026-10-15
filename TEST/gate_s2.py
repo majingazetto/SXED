@@ -20,7 +20,8 @@ import os
 import pattern
 from gate import (BRW_BYTES, H30NewDocument, H36BrowseSaveAs,
                   H43CursorShape, H44SelScroll, H45SelAllPage,
-                  asciiz, brw_drives, full_ent_bytes)
+                  asciiz, brw_drives, full_ent_bytes,
+                  REWRAP_LINES, rewrap_model, settings_to_txt)
 from cases import (Case, DEFAULT_CFG, HomePathCase, LongPathCase,
                    ShippedDiskCase, crlf, io_fixture, numbered)
 from harness import MACH_MSX1, Session
@@ -4645,6 +4646,57 @@ class S253UndoLongJoin(S2Case):
         return checks
 
 
+
+
+# --- S2-54  REWRAP OFFERED ON DEV -> TXT ---------------------------------
+
+
+class S254RewrapSettings(S2Case):
+    name = 'S2-54-rewrap-settings'
+    desc = ('switching WRAP from DEV to TXT in Settings asks "Rewrap document?" '
+            'and Yes rewraps every paragraph to the margin; No leaves it alone')
+    origin = ('2026-10-15, as W3 on S6ED: the question goes through DOASKX, '
+              'this target\'s own window code, and the margin is its TEXTCOLS')
+    cfg = S2_CFG.replace('WRAP=TXT', 'WRAP=DEV')
+    variants = ('yes', 'no')
+    WIDTH = 61
+
+    def fixture(self, ctx, variant=None):
+        return crlf(REWRAP_LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.wait(1.0)
+        settings_to_txt(t)
+        t.press('Y' if variant == 'yes' else 'N')
+        t.wait(3.0)
+        t.snap('done')
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        checks = []
+        for variant, run in sorted(runs.items()):
+            pre = 'S2-54/%s' % variant
+            got = run.session.extract(run.dsk, 'DOC.TXT')
+            lines = (rewrap_model(REWRAP_LINES, self.WIDTH) if variant == 'yes'
+                     else REWRAP_LINES)
+            want = crlf(lines)
+            checks.append(Check(
+                '%s/state' % pre,
+                run.var('done', 'WRAPMODE') == 1 and
+                run.var('done', 'TOTLINES') == len(lines) and
+                run.var('done', 'MODIFIED') == (0xFF if variant == 'yes' else 0),
+                'WRAPMODE %s, TOTLINES %s (want %d), MODIFIED %s'
+                % (run.var('done', 'WRAPMODE'), run.var('done', 'TOTLINES'),
+                   len(lines), run.var('done', 'MODIFIED'))))
+            checks.append(Check('%s/content' % pre, got == want,
+                                'byte for byte' if got == want else
+                                'got %r, want %r' % (got, want)))
+        return checks
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
          S210Theme(), S211About(), S212DialogUndo(),
@@ -4663,7 +4715,7 @@ CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S245SettingsValues(), S246ViVisualWalk(), S247RightMargin(),
          S248ShadowRoundTrip(), S249Overwrite(), S250CursorShape(),
          S251SelScroll(), S252SelAllPage(),
-         S253UndoLongJoin()]
+         S253UndoLongJoin(), S254RewrapSettings()]
 
 
 def run(ctx, cases=None):

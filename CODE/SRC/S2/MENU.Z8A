@@ -230,7 +230,7 @@ DOMNU           LD      A, (MNUID)
 .STBL1          DEFW    .S10, .S11, .S12, .S13, 0, .S15, .S16, 0
                 DEFW    .S18, .S19
 .ACC1           DEFB    'X', #00, 'C', #01, 'V', #02, 'Y', #03
-                DEFB    'A', #05, 'D', #06, 'G', #08, 'F', #09
+                DEFB    'A', #05, 'R', #06, 'G', #08, 'F', #09
                 DEFB    #00
 
 .S10            DEFM    "Cut               ^X", 0
@@ -238,7 +238,7 @@ DOMNU           LD      A, (MNUID)
 .S12            DEFM    "Paste             ^V", 0
 .S13            DEFM    "Delete Line       ^Y", 0
 .S15            DEFM    "Select All        ^A", 0
-.S16            DEFM    "Deselect", 0
+.S16            DEFM    "Rewrap", 0
 .S18            DEFM    "Go to Line...     ^G", 0
 .S19            DEFM    "Find...           ^F", 0
 

@@ -13,7 +13,8 @@ import os
 
 import screen62
 from cases import Case, ShippedDiskCase, crlf, numbered
-from gate import H36BrowseSaveAs, H43CursorShape, asciiz
+from gate import (H36BrowseSaveAs, H43CursorShape, REWRAP_LINES, asciiz,
+                  rewrap_model, settings_to_txt)
 from harness import MACH_128K, MACH_2MB
 from keys import Timeline
 from result import Check
@@ -631,10 +632,61 @@ class S6213UndoLongJoin(S62Case):
         return checks
 
 
+
+
+# --- S62-14  REWRAP OFFERED ON DEV -> TXT ---------------------------------
+
+
+class S6214RewrapSettings(S62Case):
+    name = 'S62-14-rewrap-settings'
+    desc = ('switching WRAP from DEV to TXT in Settings asks "Rewrap document?" '
+            'and Yes rewraps every paragraph to the margin; No leaves it alone')
+    origin = ('2026-10-15, as W3 on S6ED: the question goes through DOASKX, '
+              'this target\'s own window code, and the margin is its TEXTCOLS')
+    cfg = S62_CFG
+    variants = ('yes', 'no')
+    WIDTH = 61
+
+    def fixture(self, ctx, variant=None):
+        return crlf(REWRAP_LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.wait(1.0)
+        settings_to_txt(t)
+        t.press('Y' if variant == 'yes' else 'N')
+        t.wait(3.0)
+        t.snap('done')
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        checks = []
+        for variant, run in sorted(runs.items()):
+            pre = 'S62-14/%s' % variant
+            got = run.session.extract(run.dsk, 'DOC.TXT')
+            lines = (rewrap_model(REWRAP_LINES, self.WIDTH) if variant == 'yes'
+                     else REWRAP_LINES)
+            want = crlf(lines)
+            checks.append(Check(
+                '%s/state' % pre,
+                run.var('done', 'WRAPMODE') == 1 and
+                run.var('done', 'TOTLINES') == len(lines) and
+                run.var('done', 'MODIFIED') == (0xFF if variant == 'yes' else 0),
+                'WRAPMODE %s, TOTLINES %s (want %d), MODIFIED %s'
+                % (run.var('done', 'WRAPMODE'), run.var('done', 'TOTLINES'),
+                   len(lines), run.var('done', 'MODIFIED'))))
+            checks.append(Check('%s/content' % pre, got == want,
+                                'byte for byte' if got == want else
+                                'got %r, want %r' % (got, want)))
+        return checks
+
 CASES = [S621Render(), S622Edit(), S623Scroll(), S624HScroll(),
          S625Windows(), S626Browse(), S627DatForeign(), S628LoadProgress(),
          S629BrowseBusy(), S6210ShippedDisk(), S6211SaveAsAfterOpen(),
-         S6212CursorShape(), S6213UndoLongJoin()]
+         S6212CursorShape(), S6213UndoLongJoin(), S6214RewrapSettings()]
 
 
 def run(ctx, cases=None):

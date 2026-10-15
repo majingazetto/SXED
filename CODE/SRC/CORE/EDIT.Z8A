@@ -726,342 +726,402 @@ EDOVRCHR        PUSH    AF
 
 
 ; - REFLOW -----------------------------
-; - CASCADE PARAGRAPH REFLOW STARTING AT LINE HL
-; - PULLS WORDS UPWARDS ACROSS SUBSEQUENT LINES UNTIL AN EMPTY LINE OR EOF
-; - IN:  HL = START LINE NUMBER (0-BASED)
+; - THE KEY'S JOIN IN WRAP_TXT: BACKSPACE AT COLUMN 0 OF LINE L + 1, OR
+; - DELETE AT THE END OF L. AN EMPTY L + 1 IS THE LINE THE KEY JOINS AND
+; - GOES. OTHERWISE REWRAP RUNS IN ITS REFLOW MODE FROM L: WORDS ARE
+; - PULLED UP, AN EMPTY L TAKES THEM TOO, AND THE CASCADE STOPS AT THE
+; - END OF THE PARAGRAPH OR WHERE A WORD DOES NOT FIT. IT WAS A 500-BYTE
+; - ENGINE OF ITS OWN UNTIL REWRAP, WHICH DOES THE SAME AND MORE.
+; - IN:  HL = LINE L (L + 1 EXISTS: BOTH CALLERS CHECKED)
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; -
 
-REFLOW          LD      (RFLINE), HL
-                XOR     A               ; THE FIRST PASS
-                JR      .RFSET
-.RFAGN          LD      A, 1            ; EVERY LATER ONE
-.RFSET          LD      (RFPASS), A
-
-.RFLOOP         ; 1. CHECK IF NEXT LINE EXISTS (L + 1 < TOTLINES)
-                LD      HL, (RFLINE)
-                INC     HL              ; HL = L + 1
-                LD      DE, (TOTLINES)
-                CALL    CMPHLDE
-                RET     NC              ; L + 1 >= TOTLINES: EOF REACHED, DONE!
-
-                ; 2. LOAD LINE L + 1 INTO WORKBUF2
-                CALL    LINEREAD        ; READS LINE L+1 INTO WORKBUF
-                LD      A, (WORKBUF)
-                OR      A
-                JR      NZ, .NOTEMP
-
-                ; LINE L+1 IS EMPTY (LEN == 0). ON THE FIRST PASS IT IS THE
-                ; LINE THE KEY JOINS (BACKSPACE AT ITS COLUMN 0, DELETE AT THE
-                ; END OF L), SO IT GOES. ON A LATER ONE IT IS THE BLANK LINE
-                ; BETWEEN PARAGRAPHS, WHERE THE CASCADE STOPS -- AND IT STAYS:
-                ; DELETING IT THERE MERGED THE NEXT PARAGRAPH'S SEPARATOR AWAY.
-                LD      A, (RFPASS)
-                OR      A
-                RET     NZ              ; PARAGRAPH BOUNDARY: DONE
-                ; DELETE THE EMPTY LINE AND STOP.
-                ; A REFLOW MOVES TEXT ACROSS LINES AND IS NOT RECORDED: EACH
-                ; BRANCH THAT WRITES DROPS THE HISTORY FIRST, WHICH WOULD
-                ; OTHERWISE NAME LINES THIS IS ABOUT TO SHIFT
-                CALL    UNDOINIT
-                LD      HL, (RFLINE)
+REFLOW          PUSH    HL
                 INC     HL
-                CALL    LINEDEL
+                PUSH    HL
+                CALL    LINELEN
+                POP     HL
+                OR      A
+                JR      NZ, .PARA
+                POP     DE
+                PUSH    HL
+                CALL    UNDOINIT        ; TEXT MOVES ACROSS LINES: NOT RECORDED
+                POP     HL
+                CALL    LINEDEL         ; THE EMPTY LINE THE KEY JOINS
                 LD      HL, (TOTLINES)
                 DEC     HL
                 LD      (TOTLINES), HL
-                LD      A, #FF
+                JR      .MODSET
+
+.PARA           LD      DE, (TOTLINES)
+                DEC     DE
+                POP     HL
+                LD      A, 2
+                LD      (RWSTOP), A
+                CALL    REWRAP
+                XOR     A
+                LD      (RWSTOP), A
+                LD      A, (RWCHG)
+                OR      A
+                RET     Z
+.MODSET         LD      A, #FF
                 LD      (MODIFIED), A
                 RET
 
-.NOTEMP         ; COPY LINE L+1 RECORD TO WORKBUF2
+
+; --- REWRAP                    ----------------------------------------
+
+
+; - REWRAP -----------------------------
+; - REWRAP LINES FIRST..LAST TO THE MARGIN (TXTWIDTH, OR TEXTCOLS WHEN IT
+; - IS 0). A LINE PAST THE MARGIN SPLITS AT ITS LAST SPACE THAT FITS (OR,
+; - FOR A WORD LONGER THAN THE MARGIN, AT THE FIRST SPACE AFTER IT); A
+; - SHORTER ONE PULLS WHOLE WORDS UP FROM THE NEXT LINE OF ITS PARAGRAPH.
+; - AN EMPTY LINE ENDS A PARAGRAPH AND IS KEPT. PULLED WORDS JOIN WITH ONE
+; - SPACE; THE SPACES AT A BREAK GO.
+; - RWSTOP SELECTS THE REFLOW MODE THE KEYS USE (SEE REFLOW): 2 WHILE ON
+; - THE FIRST LINE, WHICH PULLS EVEN WHEN EMPTY, 1 AFTER IT; IN THAT MODE
+; - AN EMPTY LINE OR A WORD THAT DOES NOT FIT ENDS THE CASCADE.
+; - IN:  HL = FIRST LINE, DE = LAST LINE (INCLUSIVE), RWSTOP
+; - OUT: RWCHG NON-ZERO WHEN THE DOCUMENT CHANGED. THE HISTORY IS THEN
+; -      DROPPED: TEXT MOVES ACROSS LINES AND THE RING STORES LINE NUMBERS.
+; -      A FULL DIRECTORY OR MAPPER STOPS IT WHERE IT IS, EVERY LINE WHOLE.
+; - CLOBBERS: ALL
+; -
+
+REWRAP          LD      (RWLINE), HL
+                LD      (RWEND), DE
+                XOR     A
+                LD      (RWCHG), A
+                LD      A, (TXTWIDTH)
+                OR      A
+                JR      NZ, .HAVW
+                LD      A, TEXTCOLS
+.HAVW           LD      (RWW), A
+
+.LOOP           LD      HL, (RWEND)
+                LD      DE, (RWLINE)
+                CALL    CMPHLDE
+                RET     C               ; PAST THE LAST LINE OF THE RANGE
+                EX      DE, HL          ; HL = LINE
+                LD      DE, (TOTLINES)
+                CALL    CMPHLDE
+                RET     NC              ; PAST THE END OF THE DOCUMENT
+                CALL    LINEREAD
+                LD      A, (WORKBUF)
+                OR      A
+                JR      NZ, .NOTMT
+                LD      A, (RWSTOP)
+                OR      A
+                JP      Z, .NEXT        ; EMPTY: BETWEEN TWO PARAGRAPHS
+                DEC     A
+                RET     Z               ; REFLOW: THE PARAGRAPH ENDS HERE
+                JP      .FILL           ; REFLOW'S FIRST LINE TAKES THE WORDS
+.NOTMT          LD      HL, RWW
+                CP      (HL)
+                JP      C, .FILL        ; SHORTER THAN THE MARGIN: PULL WORDS
+                JP      Z, .NEXT        ; EXACTLY FULL
+
+                ;               - SPLIT: THE LAST SPACE AT COLUMN 1..MARGIN
+                LD      B, (HL)         ; B = MARGIN, A COLUMN THE LINE HAS
+.BKBACK         CALL    .CHAR1
+                CP      ' '
+                JR      Z, .BREAK
+                DJNZ    .BKBACK
+                LD      A, (RWW)        ; A WORD LONGER THAN THE MARGIN: THE
+                LD      B, A            ; FIRST SPACE PAST IT, IF ANY
+.BKFWD          INC     B
+                LD      A, (WORKBUF)
+                CP      B
+                JP      Z, .NEXT        ; NO SPACE TO THE END: LEFT AS IT IS
+                CALL    .CHAR1
+                CP      ' '
+                JR      NZ, .BKFWD
+
+.BREAK          LD      C, B            ; C = THE SPACE THE BREAK IS AT
+.HDTRM          DEC     B               ; THE HEAD LOSES ITS TRAILING SPACES
+                CALL    .CHAR1
+                INC     B
+                CP      ' '
+                JR      NZ, .HDOK
+                DJNZ    .HDTRM
+                JP      .NEXT           ; ONLY SPACES BEFORE IT: LEFT AS IT IS
+.HDOK           LD      A, B
+                LD      (RWHEAD), A
+.TLSKP          INC     C               ; THE TAIL LOSES ITS LEADING ONES
+                LD      A, (WORKBUF)
+                CP      C
+                JR      Z, .TLSET       ; ONLY SPACES TO THE END: NO TAIL
+                LD      B, C
+                CALL    .CHAR1
+                CP      ' '
+                JR      Z, .TLSKP
+.TLSET          LD      A, C
+                LD      (RWTAIL), A
+                LD      B, A
+                LD      A, (WORKBUF)
+                SUB     B
+                LD      (RWTLEN), A
+                JR      Z, .HEAD        ; ONLY TRAILING SPACES TO DROP
+
+                ; RESERVE THE TAIL'S RECORD BEFORE ANYTHING IS WRITTEN, AS
+                ; EDNWLIN DOES: A REFUSAL THEN CHANGES NOTHING
+                LD      HL, (TOTLINES)
+                LD      DE, MAXLINES
+                CALL    CMPHLDE
+                RET     NC              ; DIRECTORY FULL: STOP HERE
+                LD      A, (RWTLEN)
+                LD      C, A
+                CALL    NEWREC
+                RET     C               ; NO MAPPER MEMORY: STOP HERE
+                LD      (NRSEG), A
+                LD      (NROFF), DE
+                LD      HL, (RWLINE)    ; NEWREC MAY HAVE COMPACTED THE
+                CALL    LINEREAD        ; SEGMENT: READ THE LINE AGAIN
+                LD      A, (RWTAIL)
+                CALL    SPLITLA         ; WORKBUF2 = THE TAIL
+
+.HEAD           CALL    .MOD
+                LD      A, (RWHEAD)
+                LD      (WORKBUF), A
+                CALL    RECBL80
+                LD      HL, (RWLINE)
+                CALL    LINEWRT         ; SHORTER: IN PLACE, CANNOT FAIL
+                LD      A, (RWTLEN)
+                OR      A
+                JP      Z, .NEXT
+                LD      A, (NRSEG)
+                LD      DE, (NROFF)
+                LD      HL, WORKBUF2
+                CALL    PUTREC
+                LD      HL, (RWLINE)
+                INC     HL
+                PUSH    HL
+                CALL    LINEINS
+                POP     HL
+                LD      DE, (NROFF)
+                LD      A, (NRSEG)
+                CALL    DIRWRITE
+                LD      HL, (TOTLINES)
+                INC     HL
+                LD      (TOTLINES), HL
+                LD      HL, (RWEND)
+                INC     HL
+                LD      (RWEND), HL
+                JP      .NEXT           ; THE TAIL IS NEXT: IT MAY SPLIT AGAIN
+
+                ;               - FILL: PULL WORDS UP FROM THE NEXT LINE
+.FILL           LD      HL, (RWLINE)
+                INC     HL
+                LD      DE, (RWEND)
+                CALL    CMPHLDE
+                JR      Z, .FILLIN
+                JP      NC, .NEXT       ; THE NEXT LINE IS OUTSIDE THE RANGE
+.FILLIN         LD      DE, (TOTLINES)
+                CALL    CMPHLDE
+                JP      NC, .NEXT       ; NO NEXT LINE
+                CALL    LINEREAD
+                LD      A, (WORKBUF)
+                OR      A
+                JP      Z, .NEXT        ; EMPTY: THE PARAGRAPH ENDS
                 LD      HL, WORKBUF
                 LD      DE, WORKBUF2
                 LD      BC, WORKSIZ
-                LDIR
+                LDIR                    ; WORKBUF2 = THE NEXT LINE
+                LD      HL, (RWLINE)
+                CALL    LINEREAD        ; WORKBUF = THIS ONE
 
-                ; 3. LOAD LINE L INTO WORKBUF
-                LD      HL, (RFLINE)
-                CALL    LINEREAD
-                LD      A, (TXTWIDTH)
-                OR      A
-                JR      NZ, .RFHAVTW
-                LD      A, TEXTCOLS
-.RFHAVTW        LD      C, A            ; C = TARGET WIDTH
+                ; ROOM = MARGIN - LENGTH - ONE SPACE UNLESS IT ENDS IN ONE
                 LD      A, (WORKBUF)
+                LD      B, A
+                OR      A
+                JR      Z, .NOSEP       ; EMPTY: NOTHING TO SEPARATE FROM
+                CALL    .CHAR           ; THE LAST CHARACTER
+                SUB     ' '
+                JR      Z, .NOSEP
+                LD      A, 1
+.NOSEP          LD      (RWSEP), A
+                LD      C, A
+                LD      A, (RWW)
+                SUB     B
+                SUB     C
+                JP      Z, .NEXT        ; NO ROOM
+                LD      C, A            ; C = ROOM
+
+                LD      B, 0            ; THE NEXT LINE'S INDENT IS DROPPED
+.LDSKP          LD      A, (WORKBUF2)
+                CP      B
+                JP      Z, .NEXT        ; NOTHING BUT SPACES: LEFT AS IT IS
+                CALL    .CHAR2
+                CP      ' '
+                JR      NZ, .LDOK
+                INC     B
+                JR      .LDSKP
+.LDOK           LD      A, B
+                LD      (RWS0), A
+                LD      A, (WORKBUF2)
+                SUB     B               ; A = WHAT IS LEFT OF IT
                 CP      C
-                JP      NC, .RFNEXT     ; LINE L >= TARGET WIDTH, ADVANCE TO L+1
-
-                ; 4. CALCULATE AVAILABLE SPACE ON LINE L
-                LD      E, A            ; E = LEN_A
-                LD      A, C
-                SUB     E               ; A = TARGET WIDTH - LEN_A
-                LD      (RFSPACE), A
+                JR      Z, .ALL
+                JR      C, .ALL
+                LD      A, C            ; PART OF IT: THE LAST SPACE AT
+                ADD     A, B            ; S0 + 1 .. S0 + ROOM
+                LD      B, A
+.PTLP           CALL    .CHAR2
+                CP      ' '
+                JR      Z, .PTFND
+                DEC     B
+                LD      A, (RWS0)
+                CP      B
+                JP      Z, .NOFIT       ; ITS FIRST WORD DOES NOT FIT
+                JR      .PTLP
+.PTFND          LD      A, (RWS0)
+                LD      C, A
+                LD      A, B
+                SUB     C               ; WORDS BEFORE THE SPACE
+                LD      (RWCNT), A
                 XOR     A
-                LD      (RFSEP), A
+                JR      .SETALL
+.ALL            LD      (RWCNT), A
+                LD      A, 1
+.SETALL         LD      (RWALL), A
 
-                ; DOES LINE L NEED A SEPARATOR SPACE?
-                ; ONLY IF LEN_A > 0 AND LAST CHAR IS NOT ' '
-                LD      A, (WORKBUF)
+                CALL    .MOD
+                LD      A, (RWSEP)
                 OR      A
-                JR      Z, .CHECKAL
-
+                JR      Z, .APPEND
+                LD      A, (WORKBUF)
                 LD      E, A
                 LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                LD      (HL), ' '
+                LD      HL, WORKBUF + 1 + WORKATTR
+                ADD     HL, DE
+                LD      (HL), 0
                 LD      HL, WORKBUF
-                ADD     HL, DE          ; HL = WORKBUF + LEN_A (LAST CHAR)
-                LD      A, (HL)
-                CP      ' '
-                JR      Z, .CHECKAL
-
-                ; NEED SEPARATOR SPACE
-                LD      A, 1
-                LD      (RFSEP), A
-                LD      A, (RFSPACE)
-                DEC     A
-                JP      Z, .RFNEXT      ; ONLY 1 SPACE LEFT, CANNOT FIT ANY WORD
-                LD      (RFSPACE), A
-
-.CHECKAL        ; 5. CAN ENTIRE LINE L+1 FIT?
-                LD      A, (WORKBUF2)   ; LEN_B
-                LD      HL, RFSPACE
-                CP      (HL)
-                JP      Z, .RFALL       ; EXACT FIT
-                JP      C, .RFALL       ; FITS ENTIRELY
-
-                ; 6. PARTIAL FIT: FIND LONGEST WORD BOUNDARY <= RFSPACE
-                ; SCAN WORKBUF2 BACKWARDS FROM (RFSPACE) DOWN TO 1
-                LD      A, (RFSPACE)
-                LD      B, A            ; B = OFFSET IN LINE B (1..RFSPACE)
-.RFPART         LD      E, B
+                INC     (HL)
+.APPEND         LD      A, (WORKBUF)    ; TEXT AND ATTRIBUTES OF THE WORDS
+                LD      E, A
                 LD      D, 0
-                LD      HL, WORKBUF2
-                ADD     HL, DE          ; HL = WORKBUF2 + B
-                LD      A, (HL)
-                CP      ' '
-                JR      Z, .RFFND       ; FOUND SPACE!
-                DJNZ    .RFPART
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                EX      DE, HL          ; DE = DESTINATION TEXT
+                LD      A, (RWS0)
+                LD      C, A
+                LD      B, 0
+                LD      HL, WORKBUF2 + 1
+                ADD     HL, BC          ; HL = SOURCE TEXT
+                LD      A, (RWCNT)
+                LD      C, A
+                PUSH    BC
+                PUSH    HL
+                PUSH    DE
+                LDIR
+                POP     DE
+                POP     HL
+                LD      BC, WORKATTR
+                ADD     HL, BC
+                EX      DE, HL
+                ADD     HL, BC
+                EX      DE, HL
+                POP     BC
+                LDIR
+                LD      A, (WORKBUF)
+                LD      HL, RWCNT
+                ADD     A, (HL)
+                LD      (WORKBUF), A
+                LD      HL, (RWLINE)
+                CALL    LINEWRT
+                RET     C               ; NO MEMORY FOR THE LONGER LINE: STOP
 
-                ; NO WORD BOUNDARY FOUND WITHIN RFSPACE: STOP REFLOW
+                LD      A, (RWALL)
+                OR      A
+                JR      Z, .REST
+.DELNX          LD      HL, (RWLINE)    ; ALL OF IT WENT UP
+                INC     HL
+                CALL    LINEDEL
+                LD      HL, (TOTLINES)
+                DEC     HL
+                LD      (TOTLINES), HL
+                LD      HL, (RWEND)
+                DEC     HL
+                LD      (RWEND), HL
+                JP      .LOOP           ; SAME LINE: IT MAY TAKE MORE
+
+.REST           LD      A, (RWS0)       ; THE NEXT LINE KEEPS WHAT FOLLOWS
+                LD      HL, RWCNT       ; THE BREAK, ITS SPACES DROPPED
+                ADD     A, (HL)
+                LD      B, A            ; B = THE SPACE THE BREAK IS AT
+.RSKP           INC     B
+                LD      A, (WORKBUF2)
+                CP      B
+                JR      Z, .DELNX       ; ONLY SPACES WERE LEFT
+                CALL    .CHAR2
+                CP      ' '
+                JR      Z, .RSKP
+                LD      A, (WORKBUF2)
+                SUB     B
+                LD      (WORKBUF), A
+                LD      E, B
+                LD      D, 0
+                LD      C, A
+                LD      B, D
+                LD      HL, WORKBUF2 + 1
+                ADD     HL, DE
+                LD      DE, WORKBUF + 1
+                PUSH    BC
+                PUSH    HL
+                LDIR
+                POP     HL
+                LD      BC, WORKATTR
+                ADD     HL, BC
+                LD      DE, WORKBUF + 1 + WORKATTR
+                POP     BC
+                LDIR
+                CALL    RECBL80
+                LD      HL, (RWLINE)
+                INC     HL
+                CALL    LINEWRT         ; SHORTER: IN PLACE, CANNOT FAIL
+
+.NOFIT          LD      A, (RWSTOP)
+                OR      A
+                RET     NZ              ; REFLOW: THE CASCADE STOPS HERE
+
+.NEXT           LD      HL, RWSTOP      ; PAST REFLOW'S FIRST LINE
+                LD      A, (HL)
+                OR      A
+                JR      Z, .NEXTLN
+                LD      (HL), 1
+.NEXTLN         LD      HL, (RWLINE)
+                INC     HL
+                LD      (RWLINE), HL
+                JP      .LOOP
+
+                ;               - HELPERS
+.CHAR           DEC     B               ; A = WORKBUF TEXT AT 1-BASED B
+                CALL    .CHAR1
+                INC     B
                 RET
 
-.RFFND          ; B = INDEX IN LINE B WHERE SPACE WAS FOUND
-                CALL    UNDOINIT        ; KEEPS B
-                LD      A, B
-                LD      (RFCNT), A
+.CHAR1          LD      HL, WORKBUF + 1 ; A = WORKBUF TEXT AT COLUMN B
+                JR      .CHARHL
 
-                ; APPEND SEPARATOR SPACE TO LINE L IF NEEDED
-                LD      A, (RFSEP)
-                OR      A
-                JR      Z, .NOPSEP
-
-                LD      A, (WORKBUF)    ; LEN_A
-                LD      E, A
+.CHAR2          LD      HL, WORKBUF2 + 1 ; A = WORKBUF2 TEXT AT COLUMN B
+.CHARHL         LD      E, B
                 LD      D, 0
-                LD      HL, WORKBUF + 1
-                ADD     HL, DE
-                LD      (HL), ' '
-                LD      HL, WORKBUF + 1 + WORKATTR
-                ADD     HL, DE
-                LD      (HL), 0
-                LD      A, (WORKBUF)
-                INC     A
-                LD      (WORKBUF), A
-
-.NOPSEP         ; APPEND RFCNT BYTES FROM WORKBUF2 TO WORKBUF
-                LD      A, (WORKBUF)    ; CURRENT LEN_A
-                LD      E, A
-                LD      D, 0
-                LD      HL, WORKBUF + 1
-                ADD     HL, DE          ; DEST TEXT
-                EX      DE, HL          ; DE = DEST TEXT
-                LD      HL, WORKBUF2 + 1 ; HL = SOURCE TEXT
-                LD      A, (RFCNT)
-                LD      C, A
-                LD      B, 0
-                PUSH    BC
-                LDIR
-                POP     BC
-
-                ; APPEND ATTRIBUTES
-                LD      A, (WORKBUF)
-                LD      E, A
-                LD      D, 0
-                LD      HL, WORKBUF + 1 + WORKATTR
-                ADD     HL, DE          ; DEST ATTR
-                EX      DE, HL          ; DE = DEST ATTR
-                LD      HL, WORKBUF2 + 1 + WORKATTR
-                LDIR
-
-                ; UPDATE LINE L LENGTH: LEN_A + RFCNT
-                LD      A, (WORKBUF)
-                LD      HL, RFCNT
-                ADD     A, (HL)
-                LD      (WORKBUF), A
-
-                CALL    RECBL80
-
-                ; PERSIST UPDATED LINE L
-                LD      HL, (RFLINE)
-                CALL    LINEWRT
-
-                ; 7. UPDATE LINE L+1 FROM WORKBUF2 (SHIFT REMAINDER LEFT)
-                ; REMAINDER STARTS AFTER RFCNT IN WORKBUF2
-                LD      A, (WORKBUF2)   ; OLD LEN_B
-                LD      HL, RFCNT
-                SUB     (HL)
-                LD      B, A            ; B = INITIAL REMAINING CHARS
-                LD      A, (RFCNT)
-                INC     A               ; SKIP THE SPACE WE SPLIT AT
-                LD      C, A            ; C = 1-BASED SOURCE OFFSET IN WORKBUF2
-
-                ; SKIP ANY CONSECUTIVE LEADING SPACES IN THE REMAINDER
-.SKPPRE         LD      A, B
-                OR      A
-                JR      Z, .REMZERO
-                LD      E, C
-                LD      D, 0
-                LD      HL, WORKBUF2
                 ADD     HL, DE
                 LD      A, (HL)
-                CP      ' '
-                JR      NZ, .SKPDONE
-                INC     C
-                DEC     B
-                JR      .SKPPRE
+                RET
 
-.SKPDONE        ; B = REMAINING CHAR COUNT (1..TEXTCOLS)
-                ; C = 1-BASED SOURCE OFFSET IN WORKBUF2
-                ; CONSTRUCT SHORTENED LINE L+1 IN WORKBUF
-                LD      A, B
-                LD      (WORKBUF), A    ; NEW LENGTH
-
-                ; COPY REMAINING TEXT FROM WORKBUF2 TO WORKBUF
-                LD      E, C
-                LD      D, 0
-                PUSH    DE              ; [SP] = SOURCE OFFSET, FOR THE ATTRIBUTES
-                LD      HL, WORKBUF2
-                ADD     HL, DE          ; HL = WORKBUF2 + C
-                LD      DE, WORKBUF + 1
-                LD      C, B            ; (C NOW THE COUNT: THE OFFSET IS STACKED)
-                LD      B, 0
-                LDIR
-
-                ; COPY REMAINING ATTRIBUTES FROM WORKBUF2 TO WORKBUF
-                POP     DE              ; DE = SOURCE OFFSET
-                LD      HL, WORKBUF2 + WORKATTR
-                ADD     HL, DE          ; HL = WORKBUF2 + WORKATTR + C
-                LD      DE, WORKBUF + 1 + WORKATTR
-                LD      A, (WORKBUF)
-                LD      C, A
-                LD      B, 0
-                LDIR
-
-                CALL    RECBL80
-
-                ; PERSIST SHORTENED LINE L+1
-                LD      HL, (RFLINE)
-                INC     HL
-                CALL    LINEWRT
-
-                LD      A, #FF
-                LD      (MODIFIED), A
-
-                ; ADVANCE RFLINE TO L + 1 AND CONTINUE CASCADE
-                JP      .RFNEXT
-
-.REMZERO        ; REMAINDER WAS EMPTY: DELETE LINE L+1
-                LD      HL, (RFLINE)
-                INC     HL
-                CALL    LINEDEL
-                LD      HL, (TOTLINES)
-                DEC     HL
-                LD      (TOTLINES), HL
-                LD      A, #FF
-                LD      (MODIFIED), A
-                JP      .RFAGN
-
-.RFALL          ; ENTIRE LINE L+1 FITS ON LINE L!
-                CALL    UNDOINIT
-                LD      A, (RFSEP)
+.MOD            LD      A, (RWCHG)      ; THE FIRST CHANGE DROPS THE HISTORY
                 OR      A
-                JR      Z, .NOPSEP2
-
-                LD      A, (WORKBUF)    ; LEN_A
-                LD      E, A
-                LD      D, 0
-                LD      HL, WORKBUF + 1
-                ADD     HL, DE
-                LD      (HL), ' '
-                LD      HL, WORKBUF + 1 + WORKATTR
-                ADD     HL, DE
-                LD      (HL), 0
-                LD      A, (WORKBUF)
+                RET     NZ
                 INC     A
-                LD      (WORKBUF), A
+                LD      (RWCHG), A
+                JP      UNDOINIT
 
-.NOPSEP2        LD      A, (WORKBUF2)   ; LEN_B
-                OR      A
-                JR      Z, .DELL1
-
-                LD      A, (WORKBUF)    ; CURRENT LEN_A
-                LD      E, A
-                LD      D, 0
-                LD      HL, WORKBUF + 1
-                ADD     HL, DE          ; DEST TEXT
-                EX      DE, HL          ; DE = DEST TEXT
-                LD      HL, WORKBUF2 + 1 ; HL = SOURCE TEXT
-                LD      A, (WORKBUF2)
-                LD      C, A
-                LD      B, 0
-                PUSH    BC
-                LDIR
-                POP     BC
-
-                ; APPEND ATTRIBUTES
-                LD      A, (WORKBUF)
-                LD      E, A
-                LD      D, 0
-                LD      HL, WORKBUF + 1 + WORKATTR
-                ADD     HL, DE          ; DEST ATTR
-                EX      DE, HL          ; DE = DEST ATTR
-                LD      HL, WORKBUF2 + 1 + WORKATTR
-                LDIR
-
-                ; UPDATE LINE L LENGTH: LEN_A + LEN_B
-                LD      A, (WORKBUF)
-                LD      HL, WORKBUF2
-                ADD     A, (HL)
-                LD      (WORKBUF), A
-
-.DELL1          CALL    RECBL80
-
-                ; PERSIST UPDATED LINE L
-                LD      HL, (RFLINE)
-                CALL    LINEWRT
-
-                ; DELETE LINE L+1 FROM DIRECTORY
-                LD      HL, (RFLINE)
-                INC     HL
-                CALL    LINEDEL
-
-                ; DECREMENT TOTLINES
-                LD      HL, (TOTLINES)
-                DEC     HL
-                LD      (TOTLINES), HL
-
-                LD      A, #FF
-                LD      (MODIFIED), A
-
-                ; DO NOT INCREMENT RFLINE; REPEAT FOR SAME RFLINE
-                JP      .RFAGN
-
-.RFNEXT         ; ADVANCE TO NEXT LINE (L = L + 1)
-                LD      HL, (RFLINE)
-                INC     HL
-                LD      (RFLINE), HL
-                JP      .RFAGN
 
 ; --- RECBL80                   ----------------------------------------
 

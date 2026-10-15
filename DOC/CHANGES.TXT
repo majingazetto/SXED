@@ -21,8 +21,16 @@ New
   BIOS #0006/#0007, and 19T VRAM font bus upload pacing.
 - S2ED: clean boot without text mode residual artifacts
   (ERAFNK before INITVDP) and sprite suppression (#D0).
+- Edit > Rewrap (R) refills the selection, or the paragraph
+  around the cursor, to the margin (TXT mode). It replaces
+  Deselect: ESC already drops a selection.
+- Switching WRAP from DEV to TXT in Settings asks "Rewrap
+  document?" (default No) and rewraps every paragraph.
 
 Changed
+- Backspace / DEL reflow in TXT mode uses the rewrap engine:
+  the joined line's indent is dropped, and a line already
+  past the margin is split.
 - Removed legacy Ctrl+K shortcut; profile cycling is managed
   exclusively via the Settings dialog.
 - Removed Ctrl+W (wrap mode) and Ctrl+T (markup mode): both

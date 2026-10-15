@@ -945,7 +945,7 @@ DOABT           LD      A, 6
 ; --- DOQIT                     ----------------------------------------
 
 
-; - DOQIT / DOOPN / DONEW --------------
+; - DOQIT / DOOPN / DONEW / DOASKX ---
 ; - THE YES / NO QUESTIONS THE EDITOR ASKS TODAY: QUIT TO DOS, AND
 ; - DISCARD THE DOCUMENT FOR A NEW ONE OR AN OPENED ONE. ALL ARE DOASK
 ; - WITH THEIR TEXT.
@@ -953,6 +953,11 @@ DOABT           LD      A, 6
 ; - OUT: AS DOASK
 ; - CLOBBERS: ALL
 ; -
+
+DOASKX          LD      H, B            ; TITLE IN BC, QUESTION IN DE, FOR A
+                LD      L, C            ; PAGE 1 CALLER WHOSE HL FCALL TAKES.
+                XOR     A               ; NO UNSAVED-CHANGES LINE
+                JR      DOASK.ASKGO
 
 DOQIT           LD      HL, DOASK.TITQIT
                 LD      DE, DOASK.STRQIT

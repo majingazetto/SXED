@@ -272,6 +272,8 @@ WRAP=TXT   Text mode: typing past the right margin pushes
 
 The margin is the text width: the screen width by default (80 / 61 / 61) or the TEXTWIDTH= value (0 = no margin, i.e. DEV mode). In Vi mode: ":set wrap", ":set nowrap", ":set tw=N".
 
+Rewrap: Edit > Rewrap (R) refills the selected lines, or the paragraph around the cursor, to the margin: long lines are split at their last space that fits, short ones take words from the next line, and an empty line ends a paragraph. It works in TXT mode only. Switching from DEV to TXT in Settings asks "Rewrap document?" (default No): Yes rewraps every paragraph. Either clears the undo history.
+
 ### 6.5.- AUTOALIGN
 
 AUTOALIGN (OFF by default, or AUTOALIGN=ON / DEV) maintains the indentation of the previous line: pressing RETURN at the end of a line places the cursor of the new line at the exact indentation level (leading whitespace) of the line just split, so indented code blocks and lists chain naturally without retyping spaces. If the previous line starts at column 0 (unindented), the new line starts at column 0.
@@ -528,7 +530,7 @@ ESC                      Cancel, back to Normal
 
 ## 9.- SELECTION, CLIPBOARD & UNDO
 
-Selection: Shift+cursor keys (STD), Shift+Ctrl / Shift+GRAPH combos (STD and TED), or Visual mode (VI). Ctrl+A selects the whole document; Edit > Deselect (or ESC in STD) drops the selection. Typing, pasting or RETURN over a selection replaces it.
+Selection: Shift+cursor keys (STD), Shift+Ctrl / Shift+GRAPH combos (STD and TED), or Visual mode (VI). Ctrl+A selects the whole document; ESC (STD) drops the selection. Typing, pasting or RETURN over a selection replaces it.
 
 Clipboard: Ctrl+X cut, Ctrl+C copy, Ctrl+V paste (Vi: d/x, y, p). Multi-line selections copy and paste whole lines with their line breaks. In Vi visual mode a selection that reaches the end of a line with $ takes its line break too, and V always takes whole lines with their breaks, so pasting either opens a new line.
 
@@ -544,7 +546,9 @@ Undo covers typing (a continuous run of edits on one line is ONE undo step), lin
 
 Undoing back to the text last loaded or saved clears the modified mark (*), and redoing away from it sets it again. Once the ring has forgotten that point, the mark stays.
 
-The undo history lives in a 4 KB ring (about 23 operations on S6ED, 30 on S61ED and S2ED); the oldest operations are forgotten as it fills. A single operation touching more lines than the ring can hold (a huge selection delete, for example) cannot be recorded half-way: then the whole history is dropped instead of restoring a partial, wrong state.
+The undo history lives in a 4 KB ring (about 23 operations on S6ED, 30 on S61ED and S2ED); the oldest operations are forgotten as it fills. Lines longer than the screen are recorded too, but each such operation takes the room of about three; a line split or join takes almost none. A single operation touching more lines than the ring can hold (a huge selection delete, for example) cannot be recorded half-way: then the whole history is dropped instead of restoring a partial, wrong state.
+
+In TXT mode, moving text across lines also clears the history: Rewrap, the reflow done by BS / DEL, and the word wrap that pushes a word down while typing.
 
 ## 10.- MENUS & DIALOGS
 
@@ -582,7 +586,7 @@ Paste        Ctrl+V   Paste clipboard
 Delete Line  Ctrl+Y   Delete the current line
 ----
 Select All   Ctrl+A   Select the whole document
-Deselect              Drop the selection
+Rewrap       (R)      Refill paragraph / selection
 ----
 Go to Line...Ctrl+G   Jump to a line number
 Find...      Ctrl+F   Find & replace dialog

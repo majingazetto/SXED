@@ -361,6 +361,14 @@ The margin is the text width: the screen width by default
 DEV mode). In Vi mode: ":set wrap", ":set nowrap",
 ":set tw=N".
 
+Rewrap: Edit > Rewrap (R) refills the selected lines, or
+the paragraph around the cursor, to the margin: long lines
+are split at their last space that fits, short ones take
+words from the next line, and an empty line ends a
+paragraph. It works in TXT mode only. Switching from DEV to
+TXT in Settings asks "Rewrap document?" (default No): Yes
+rewraps every paragraph. Either clears the undo history.
+
 
  ---- 6.5.- AUTOALIGN.
 
@@ -641,9 +649,8 @@ an empty line or ESC cancels). Commands are case insensitive:
 
 Selection: Shift+cursor keys (STD), Shift+Ctrl / Shift+GRAPH
 combos (STD and TED), or Visual mode (VI). Ctrl+A selects the
-whole document; Edit > Deselect (or ESC in STD) drops the
-selection. Typing, pasting or RETURN over a selection
-replaces it.
+whole document; ESC (STD) drops the selection. Typing,
+pasting or RETURN over a selection replaces it.
 
 Clipboard: Ctrl+X cut, Ctrl+C copy, Ctrl+V paste (Vi: d/x, y,
 p). Multi-line selections copy and paste whole lines with
@@ -670,10 +677,17 @@ Once the ring has forgotten that point, the mark stays.
 
 The undo history lives in a 4 KB ring (about 23 operations on
 S6ED, 30 on S61ED and S2ED); the oldest operations are
-forgotten as it fills. A single operation touching more lines
-than the ring can hold (a huge selection delete, for example)
-cannot be recorded half-way: then the whole history is
-dropped instead of restoring a partial, wrong state.
+forgotten as it fills. Lines longer than the screen are
+recorded too, but each such operation takes the room of
+about three; a line split or join takes almost none. A single
+operation touching more lines than the ring can hold (a huge
+selection delete, for example) cannot be recorded half-way:
+then the whole history is dropped instead of restoring a
+partial, wrong state.
+
+In TXT mode, moving text across lines also clears the
+history: Rewrap, the reflow done by BS / DEL, and the word
+wrap that pushes a word down while typing.
 
 
  -------- 10.- MENUS & DIALOGS.
@@ -711,7 +725,7 @@ The three menus are File, Edit and Help.
     Delete Line  Ctrl+Y   Delete the current line
     ----
     Select All   Ctrl+A   Select the whole document
-    Deselect              Drop the selection
+    Rewrap       (R)      Refill paragraph / selection
     ----
     Go to Line...Ctrl+G   Jump to a line number
     Find...      Ctrl+F   Find & replace dialog

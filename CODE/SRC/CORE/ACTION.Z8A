@@ -4446,7 +4446,7 @@ MNUENT          ; FTR-BUDGET: S6ED 11,501 B FREE, S2ED 1,688 B (2026-09-22)
                 CP      5
                 JR      Z, .EALL
                 CP      6
-                JR      Z, .EDSL
+                JR      Z, .ERWR
                 CP      8
                 JR      Z, .EGOTO
                 CP      9
@@ -4474,7 +4474,7 @@ MNUENT          ; FTR-BUDGET: S6ED 11,501 B FREE, S2ED 1,688 B (2026-09-22)
 .EALL           CALL    ACTSELAL
                 JP      DRWSTAT
 
-.EDSL           CALL    ACTDSEL
+.ERWR           CALL    ACTRWRP
                 JP      DRWSTAT
 
 .EGOTO          JP      ACTGOTO
@@ -4505,11 +4505,140 @@ MNUENT          ; FTR-BUDGET: S6ED 11,501 B FREE, S2ED 1,688 B (2026-09-22)
 ; -
 
 ACTSETT         ; FTR-BUDGET: S6ED 2,447 B FREE, S2ED 154 B (2026-10-02)
+                LD      A, (WRAPMODE)
+                PUSH    AF
                 LD      A, (FTRSEG)
                 LD      HL, DOSETT
                 CALL    FCALL
-                CALL    DRWMENU
+                ; DEV -> TXT: OFFER TO REWRAP THE DOCUMENT. ASKED HERE, ONCE
+                ; THE DIALOG IS CLOSED, AND DONE HERE: THE REWRAP BANKS THE
+                ; TEXT SEGMENTS INTO PAGE 2, WHERE THE DIALOG CODE LIVES
+                POP     AF
+                CPL
+                LD      HL, WRAPMODE
+                AND     (HL)
+                JR      Z, .NOWRP
+                LD      BC, STRRWT
+                LD      DE, STRRWQ
+                LD      A, (FTRSEG)     ; FTR-BUDGET: DOASKX IS 5 B (S2ED 129 B
+                LD      HL, DOASKX      ; FREE, 2026-10-15)
+                CALL    FCALL
+                LD      A, (WINRES)
+                OR      A
+                CALL    NZ, RWRPDOC
+.NOWRP          CALL    DRWMENU
                 CALL    DRWSTAT
+                JP      REDRAW
+
+STRRWT          DEFM    "Rewrap", 0
+STRRWQ          DEFM    "Rewrap document?", 0
+
+
+; --- ACTRWRP                   ----------------------------------------
+
+
+; - ACTRWRP ----------------------------
+; - EDIT > REWRAP: THE SELECTED LINES, OR THE PARAGRAPH AROUND THE CURSOR,
+; - TO THE MARGIN. NOTHING IN WRAP_DEV, WHICH HAS NO MARGIN. A SELECTION
+; - ENDING AT COLUMN 0 OF A LINE DOES NOT TAKE THAT LINE.
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTRWRP         LD      A, (WRAPMODE)
+                CP      WRAP_TXT
+                RET     NZ
+                LD      A, (SELACT)
+                OR      A
+                JR      Z, .PARA
+                CALL    SELNORM
+                LD      HL, (SELENDL)
+                LD      DE, (SELSTRL)
+                LD      A, (SELENDX)
+                OR      A
+                JR      NZ, .SELEND
+                CALL    CMPHLDE
+                JR      Z, .SELEND
+                DEC     HL              ; ENDS AT COLUMN 0: NOT THAT LINE
+.SELEND         PUSH    HL
+                PUSH    DE
+                CALL    ACTDSEL
+                POP     HL
+                POP     DE
+                JR      .GO
+
+.PARA           LD      HL, (DOCLINE)
+                PUSH    HL
+                CALL    LINELEN
+                POP     HL
+                OR      A
+                RET     Z               ; ON AN EMPTY LINE: NO PARAGRAPH
+.UP             LD      A, H            ; FIRST LINE: UP TO AN EMPTY ONE
+                OR      L
+                JR      Z, .TOP
+                DEC     HL
+                PUSH    HL
+                CALL    LINELEN
+                POP     HL
+                OR      A
+                JR      NZ, .UP
+                INC     HL
+.TOP            PUSH    HL
+                LD      HL, (DOCLINE)
+.DOWN           INC     HL              ; LAST LINE: DOWN TO AN EMPTY ONE
+                LD      DE, (TOTLINES)
+                CALL    CMPHLDE
+                JR      NC, .BOT
+                PUSH    HL
+                CALL    LINELEN
+                POP     HL
+                OR      A
+                JR      NZ, .DOWN
+.BOT            DEC     HL
+                EX      DE, HL          ; DE = LAST LINE
+                POP     HL              ; HL = FIRST LINE
+
+.GO             PUSH    HL
+                CALL    REWRAP
+                POP     HL
+                JR      RWDONE
+
+
+; - RWRPDOC ----------------------------
+; - REWRAP THE WHOLE DOCUMENT: SETTINGS ASKED FOR IT ON DEV -> TXT
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+RWRPDOC         LD      DE, (TOTLINES)
+                DEC     DE
+                LD      HL, 0
+                PUSH    HL
+                CALL    REWRAP
+                POP     HL
+                ; FALL THROUGH
+
+
+; - RWDONE -----------------------------
+; - AFTER A REWRAP: CURSOR AT COLUMN 0 OF ITS FIRST LINE, ONE REPAINT
+; - IN:  HL = FIRST LINE REWRAPPED, RWCHG
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+RWDONE          LD      (DOCLINE), HL
+                XOR     A
+                LD      (CURX), A
+                LD      (LEFTCOL), A
+                LD      A, (RWCHG)
+                OR      A
+                JR      Z, .SAME
+                LD      A, #FF
+                LD      (MODIFIED), A
+.SAME           LD      HL, (DOCLINE)
+                CALL    SHOWLN
                 JP      REDRAW
 
 

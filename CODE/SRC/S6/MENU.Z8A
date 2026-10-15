@@ -161,9 +161,9 @@ DOMNU           LD      A, (MNUID)
                 JR      Z, .A1A
                 CP      'A'
                 JR      Z, .A1A
-                CP      'd'
+                CP      'r'
                 JR      Z, .A1D
-                CP      'D'
+                CP      'R'
                 JR      Z, .A1D
                 CP      'g'
                 JR      Z, .A1G
@@ -315,7 +315,7 @@ DOMNU           LD      A, (MNUID)
 .S12            DEFM    "Paste           Ctrl+V", 0
 .S13            DEFM    "Delete Line     Ctrl+Y", 0
 .S15            DEFM    "Select All      Ctrl+A", 0
-.S16            DEFM    "Deselect", 0
+.S16            DEFM    "Rewrap", 0
 .S18            DEFM    "Go to Line...   Ctrl+G", 0
 .S19            DEFM    "Find...         Ctrl+F", 0
 

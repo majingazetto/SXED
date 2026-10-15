@@ -8823,6 +8823,8 @@ class U13UndoJoinMargin(Case):
         t.press('DOWN', repeat=8)               # [ OK ]
         t.press('RETURN')
         t.wait(2.0)
+        t.press('N')                            # "Rewrap document?" No
+        t.wait(1.0)
         t.snap('settings')
         t.press('Z', mods=['CTRL'])
         t.wait(1.0)
@@ -8906,6 +8908,217 @@ class U14UndoRingMixed(Case):
             Check('U14/content', got == want, disk_diff(got, want)),
         ]
 
+
+
+# --- W3-W4  REWRAP ------------------------------------------------------
+
+
+def rewrap_model(lines, width):
+    """The rewrap REWRAP does, computed independently: each paragraph (lines
+    up to an empty one) refilled greedily to `width`, words joined by one
+    space, the first line keeping its indent.  A word longer than the width
+    stands on a line of its own.  Fixtures use single spaces between words."""
+    out, par = [], []
+
+    def flush():
+        if not par:
+            return
+        indent = len(par[0]) - len(par[0].lstrip(' '))
+        words = ' '.join(l.strip(' ') for l in par).split()
+        cur = ' ' * indent + words[0]
+        for w in words[1:]:
+            if len(cur) + 1 + len(w) <= width:
+                cur += ' ' + w
+            else:
+                out.append(cur)
+                cur = w
+        out.append(cur)
+        par.clear()
+
+    for line in lines:
+        if line == '':
+            flush()
+            out.append('')
+        else:
+            par.append(line)
+    flush()
+    return out
+
+
+def settings_to_txt(t):
+    """Help > Settings, Wrap DEV -> TXT, OK."""
+    t.press('F3')
+    t.press('RETURN')
+    t.press('DOWN')                     # Wrap
+    t.press('RIGHT')                    # DEV -> TXT
+    t.press('DOWN', repeat=8)           # [ OK ]
+    t.press('RETURN')
+    # OK writes the CFG before the question opens, and the window flushes
+    # the keyboard buffer as it opens: an answer typed earlier is lost.
+    # Measured 8.3 s from OK to the question on S2ED (Nextor, MSX1 floppy)
+    t.wait(12.0)
+
+
+REWRAP_WORDS = ' '.join('word%02d' % i for i in range(30))     # 209 chars
+REWRAP_LINES = [REWRAP_WORDS, '',
+                'short a', 'short b', 'short c', '',
+                'X' * 90 + ' tail of a long word', '',
+                '    indented ' + ' '.join('more%02d' % i for i in range(14))]
+
+
+class W3RewrapSettings(Case):
+    name = 'W3-rewrap-settings'
+    desc = ('switching WRAP from DEV to TXT in Settings asks "Rewrap document?" '
+            'and Yes rewraps every paragraph to the margin; No leaves it alone')
+    origin = ('2026-10-15: with lines longer than the margin, the first key '
+              'typed on one in TXT push-wrapped it on the spot and dropped the '
+              'undo history.  The switch now offers to rewrap the whole '
+              'document, and the default answer is No')
+    cfg = UNDO_CFG
+    variants = ('yes', 'no')
+    WIDTH = 80                          # SAVETW = TEXTCOLS on S6ED
+
+    def fixture(self, ctx, variant=None):
+        return crlf(REWRAP_LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.wait(1.0)
+        settings_to_txt(t)
+        t.snap('asked', at='WINPOLL')
+        t.press('Y' if variant == 'yes' else 'N')
+        t.wait(3.0)
+        t.snap('done')
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        checks = []
+        for variant, run in sorted(runs.items()):
+            pre = 'W3/%s' % variant
+            got = run.session.extract(run.dsk, 'DOC.TXT')
+            lines = (rewrap_model(REWRAP_LINES, self.WIDTH) if variant == 'yes'
+                     else REWRAP_LINES)
+            want = crlf(lines)
+            checks.append(Check(
+                '%s/asked' % pre, run.var('asked', 'WINACTV') == 1 and
+                run.var('asked', 'WRAPMODE') == 1,
+                'WINACTV %s, WRAPMODE %s once Settings closed (want the question '
+                'up, TXT)' % (run.var('asked', 'WINACTV'),
+                              run.var('asked', 'WRAPMODE'))))
+            checks.append(Check(
+                '%s/state' % pre,
+                run.var('done', 'TOTLINES') == len(lines) and
+                run.var('done', 'MODIFIED') == (0xFF if variant == 'yes' else 0),
+                'TOTLINES %s (want %d), MODIFIED %s'
+                % (run.var('done', 'TOTLINES'), len(lines),
+                   run.var('done', 'MODIFIED'))))
+            checks.append(Check('%s/content' % pre, got == want,
+                                disk_diff(got, want)))
+        return checks
+
+
+class W4RewrapMenu(Case):
+    name = 'W4-rewrap-menu'
+    desc = ('Edit > Rewrap (F2, R) rewraps the paragraph around the cursor, or '
+            'only the selected lines; in WRAP_DEV it does nothing')
+    origin = ('2026-10-15: Rewrap replaced Deselect in the Edit menu (ESC '
+              'already drops a selection), so the item count and indices stay '
+              'the same on every target -- the S2ED Edit menu is at the limit '
+              'of its save buffer')
+    variants = ('para', 'sel', 'dev')
+    WIDTH = 30
+    LINES = ['one two three four five six seven', 'eight nine', 'ten', '',
+             'keep this line as it is', 'x']
+
+    def config(self, ctx, variant=None):
+        if variant == 'dev':
+            return UNDO_CFG
+        return UNDO_CFG.replace('WRAP=DEV', 'TEXTWIDTH=%d' % self.WIDTH)
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.wait(1.0)
+        if variant == 'sel':
+            t.press('DOWN', mods=['SHIFT'], repeat=2)   # lines 0..1, 2 col 0
+        else:
+            t.press('DOWN')
+        t.press('F2')                               # Edit
+        t.press('R')                                # Rewrap
+        t.wait(2.0)
+        t.snap('done')
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        checks = []
+        for variant, run in sorted(runs.items()):
+            pre = 'W4/%s' % variant
+            got = run.session.extract(run.dsk, 'DOC.TXT')
+            if variant == 'para':
+                lines = rewrap_model(self.LINES[:3], self.WIDTH) + self.LINES[3:]
+            elif variant == 'sel':
+                lines = rewrap_model(self.LINES[:2], self.WIDTH) + self.LINES[2:]
+            else:
+                lines = self.LINES
+            want = crlf(lines)
+            checks.append(Check(
+                '%s/state' % pre,
+                run.var('done', 'TOTLINES') == len(lines) and
+                run.var('done', 'MODIFIED') == (0 if variant == 'dev' else 0xFF),
+                'TOTLINES %s (want %d), MODIFIED %s'
+                % (run.var('done', 'TOTLINES'), len(lines),
+                   run.var('done', 'MODIFIED'))))
+            checks.append(Check('%s/content' % pre, got == want,
+                                disk_diff(got, want)))
+        return checks
+
+
+
+class W5ReflowEmpty(Case):
+    name = 'W5-reflow-empty'
+    desc = ('WRAP=TXT: Backspace at column 0 of a line below an empty one pulls '
+            'its words up into the empty line, and the paragraph after them')
+    origin = ('2026-10-15: REFLOW became REWRAP in reflow mode, where an empty '
+              'line ends a paragraph -- except the first one, which is the line '
+              'the key joins into and must take the words')
+    cfg = UNDO_CFG.replace('WRAP=DEV', 'TEXTWIDTH=40')
+    LINES = ['', 'alpha beta', 'gamma', '', 'next paragraph']
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.wait(1.0)
+        t.press('DOWN')
+        t.press('BS')
+        t.wait(1.0)
+        t.snap('joined')
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        want = crlf(['alpha beta gamma', '', 'next paragraph'])
+        return [
+            Check('W5/joined', run.var('joined', 'TOTLINES') == 3 and
+                  run.var('joined', 'DOCLINE') == 0,
+                  'TOTLINES %s, DOCLINE %s after BS'
+                  % (run.var('joined', 'TOTLINES'), run.var('joined', 'DOCLINE'))),
+            Check('W5/content', got == want, disk_diff(got, want)),
+        ]
+
 CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G6Hooks(),
          G7Selection(), G8Config(), G9Directory(), G10Autoalign(), G11Paste(),
          G12ScreenRestore(), G13FeatureResidency(), H1Help(), H2HelpQuestion(), H3HelpFile(), H4FileSwitch(), H5Verbose(), H6DatMissing(), H7AboutDialog(),
@@ -8924,7 +9137,7 @@ CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G
          P1ReflowBoundary(), P2DeleteLastRow0(), P3ReplaceAllUndo(),
          Q1StyleSelection(), Q2ShiftWrapScroll(), Q3FindAdjacent(),
          Q4SettingsBorders(), Q5SettingsShadow(), Q6VdpWaitJiffy(),
-         V1ViLeader(), V2WrapSelRoom(), V3InsDelimRoom(), V4ViColonBig(), W1TabRun(), W2SettingsFocus(),
+         V1ViLeader(), V2WrapSelRoom(), V3InsDelimRoom(), V4ViColonBig(), W1TabRun(), W2SettingsFocus(), W3RewrapSettings(), W4RewrapMenu(), W5ReflowEmpty(),
          X1ViLineBreak(), X2CuaLineBreak(), Z1CtrlStop(),
          B2Font(), B3Rom(), B4CfgStream(), B5ShippedDisk(), B6ManualJp(), B6ManualF1xv(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),

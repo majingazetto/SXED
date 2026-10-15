@@ -73,3 +73,5 @@ DATMAGIC
 STRLDG
 STRRDIR
 STRSVQ
+STRRWT          # read-only: the Settings rewrap question, title (DOASKX)
+STRRWQ          # read-only: the Settings rewrap question, text (DOASKX)

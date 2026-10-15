@@ -343,11 +343,18 @@ WBRUN           DEFB    0               ; WBINSN: CHARACTERS IN THE RUN
 JOINLA          DEFW    0               ; EDJOIN: TARGET LINE NUMBER (LINE A)
 JOINLB          DEFW    0               ; EDJOIN: SOURCE LINE NUMBER (LINE B)
 JOINCOL         DEFB    0               ; EDJOIN: JOIN SEAM COLUMN (FORMER LEN OF LINE A)
-RFLINE          DEFW    0               ; REFLOW: RECEIVER LINE NUMBER (L)
-RFSPACE         DEFB    0               ; REFLOW: AVAILABLE SPACE ON RECEIVER
-RFSEP           DEFB    0               ; REFLOW: 1 = SEPARATOR SPACE NEEDED
-RFCNT           DEFB    0               ; REFLOW: BYTES TO TRANSFER
-RFPASS          DEFB    0               ; REFLOW: 0 ON THE FIRST PASS OF THE CASCADE
+RWLINE          DEFW    0               ; REWRAP: LINE BEING WRAPPED
+RWEND           DEFW    0               ; REWRAP: LAST LINE OF THE RANGE
+RWW             DEFB    0               ; REWRAP: THE MARGIN
+RWCHG           DEFB    0               ; REWRAP: NON-ZERO ONCE THE DOCUMENT CHANGED
+RWHEAD          DEFB    0               ; REWRAP: LENGTH OF THE HEAD OF A SPLIT
+RWTAIL          DEFB    0               ; REWRAP: COLUMN THE TAIL OF A SPLIT STARTS AT
+RWTLEN          DEFB    0               ; REWRAP: LENGTH OF THAT TAIL
+RWSEP           DEFB    0               ; REWRAP: 1 = A SPACE GOES BEFORE THE PULLED WORDS
+RWS0            DEFB    0               ; REWRAP: FIRST NON-SPACE COLUMN OF THE NEXT LINE
+RWCNT           DEFB    0               ; REWRAP: CHARACTERS PULLED UP
+RWALL           DEFB    0               ; REWRAP: 1 = THE WHOLE NEXT LINE WAS PULLED
+RWSTOP          DEFB    0               ; REWRAP: 0 REWRAP, 1 REFLOW, 2 REFLOW'S FIRST LINE
 RPLREC          DEFB    0               ; REPLACE ALL: NON-ZERO ONCE ITS GROUP HAS A RECORD
 RPLLIN          DEFB    0               ; REPLACE ALL: 1 = THIS LINE IS RECORDED
 STYLMASK        DEFB    0               ; APPLSEL: ATTRIBUTE MASK TO TOGGLE
