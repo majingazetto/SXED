@@ -12,20 +12,20 @@ Designed for serious text editing directly on vintage hardware, SXED features a 
 |:---|:---|:---|:---|:---|
 | **`S6ED.COM`** | MSX2 / 2+ / TR | Screen 6 ($512 \times 212$, 4 colors) | **80 cols $\times$ 24 rows** | 6×8 bitmap font with 4 dynamic weights (Normal, Bold, Italic, Bold-Italic). |
 | **`S61ED.COM`** | MSX2 / 2+ / TR | Screen 6 ($512 \times 212$, 4 colors) | **61 cols $\times$ 24 rows** | 8×8 bitmap font with 4 dynamic weights, centered with a clean 16 px margin. |
-| **`S2ED.COM`** | MSX1 / 2 / 2+ / TR | Screen 2 ($256 \times 192$, 16 colors) | **61 cols $\times$ 22 rows** | Dual-glyph 4×8 font in $8 \times 8$ cells, 16 TMS9918 colors with 4 customizable themes. |
+| **`S2ED.COM`** | MSX1 / 2 / 2+ / TR | Screen 2 ($256 \times 192$, 16 colors) | **61 cols $\times$ 22 rows** | Dual-glyph 4×8 font in $8 \times 8$ cells, 16 TMS9918 colors with 6 themes. |
 
 ---
 
 ## Key Features
 
 - **Modern Window & Menu System:**
-  - Pull-down menus (`F1`–`F5` or `ESC` hotkeys) with keyboard shortcuts and drop shadows.
+  - Pull-down menus (`F1`, `SELECT` or `F10`) with keyboard shortcuts and drop shadows.
   - Interactive modal dialogs with focusable widgets: **Go to Line**, **Find & Replace**, and **Settings**.
   - Built-in zero-extra-segment **File Browser** (Open / Save As) with drive and directory navigation.
 
 - **Editing & Formatting:**
   - **Variable-length line storage** with automatic 16 KB mapper segment compaction.
-  - Dynamic **Word Wrap** and paragraph reflow (`AUTOALIGN`).
+  - Dynamic **Word Wrap**, paragraph rewrap (Edit > Rewrap) and auto-indentation (`AUTOALIGN`).
   - Horizontal viewport panning (`LEFTCOL`) supporting lines up to 255 characters.
   - Markdown-like formatting markers (`*italic*`, `**bold**`, `***bold-italic***`) rendered in real time.
   - Full dead-key accent and international character arbitration (direct matrix polling with BIOS arbitration).
@@ -43,9 +43,10 @@ Designed for serious text editing directly on vintage hardware, SXED features a 
 - **Multiple Keymap Profiles:**
   - `STD`: Intuitive modern standard profile.
   - `TED`: WordStar-compatible cursor diamonds and shortcuts.
+  - `VI`: modal Vi editing (see above).
 
 - **Color Themes & Typography:**
-  - Customizable color palettes and shadow rendering (`DARK`, `GREEN`, `AMBER`, `MSX`).
+  - Six themes on every editor (`DARK`, `AMBER`, `GREEN`, `LIGHT`, `MSX`, `MONO`), custom colours on S6ED / S61ED, configurable drop shadow.
   - Alternative 8×8 fonts for S61ED: `DEFAULT` (by Miguel A. Fernandez), `CGA`, `CPC`, `BIOS`.
 
 ---
@@ -53,7 +54,7 @@ Designed for serious text editing directly on vintage hardware, SXED features a 
 ## System Requirements
 
 - **Operating System:** MSX-DOS 2.20+ or Nextor 2.1+.
-- **Memory:** MSX Memory Mapper with at least one free 16 KB segment for text storage (4 segments recommended for larger files).
+- **Memory:** MSX Memory Mapper with at least two free 16 KB segments (a stock 128 KB machine under MSX-DOS 2 has them); more segments mean bigger documents.
 - **VDP:**
   - **S6ED** and **S61ED**: Yamaha V9938 / V9958 Video Display Processor (MSX2, MSX2+, or MSX turbo R) with 128 KB VRAM.
   - **S2ED**: Texas Instruments TMS9918A / TMS9928A / TMS9929A or Yamaha V9938 / V9958 with 16 KB VRAM (runs on standard MSX1).
