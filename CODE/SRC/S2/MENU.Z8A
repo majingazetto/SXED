@@ -79,16 +79,11 @@ DOMNU           LD      A, (MNUID)
                 CP      CLEFT
                 JP      Z, .LEFT
 
-                ; F1..F5 SWITCH DIRECTLY TO THEIR MENU
+                ; ONLY F1 BELONGS TO THE MENUS: IT GOES BACK TO FILE
                 CP      F1KEY
-                JR      C, .ACCEL
-                CP      F5KEY + 1
-                JR      NC, .ACCEL
-                SUB     F1KEY
-                CP      MNUCOUNT
-                JR      C, .SWOK
-                LD      A, MNUCOUNT - 1
-.SWOK           JP      MNUSWCH
+                JR      NZ, .ACCEL
+                XOR     A
+                JP      MNUSWCH
 
 .RIGHT          LD      A, (MNUID)
                 INC     A

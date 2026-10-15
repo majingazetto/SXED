@@ -273,6 +273,7 @@ F2KEY           EQU     #F2
 F3KEY           EQU     #F3
 F4KEY           EQU     #F4
 F5KEY           EQU     #F5
+F8KEY           EQU     #F8             ; FUNCTION KEY F8 (SHIFT+F3)
 F10KEY          EQU     #FA             ; FUNCTION KEY F10 (SHIFT+F5)
 
                 ; MSX DEDICATED KEYS

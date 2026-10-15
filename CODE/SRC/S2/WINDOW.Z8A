@@ -1176,6 +1176,7 @@ WINEDIT         LD      A, B
 
                 XOR     A
                 LD      (INPLEN), A
+                LD      (INPCAR), A
                 LD      (INPBUF), A     ; ASCIIZ, EMPTY
                 LD      (WINSEL), A     ; ED_FFLD
                 CALL    EDFLD
@@ -1204,42 +1205,9 @@ WINEDIT         LD      A, B
                 OR      A
                 JR      NZ, .KEYLP
                 LD      A, C
-                CP      BS
-                JR      Z, .BS
-                CP      '0'
+                LD      E, ED_DIGIT     ; PAGE 1: INSERT, BS, DEL, HOME
+                CALL    FLDKEY
                 JR      C, .KEYLP
-                CP      '9' + 1
-                JR      NC, .KEYLP
-
-                ; APPEND, IF THERE IS ROOM
-                LD      B, A            ; B = DIGIT
-                LD      A, (INPLEN)
-                LD      C, A
-                LD      A, (EDWID)
-                CP      C
-                JR      Z, .KEYLP       ; FULL: IGNORED, SILENTLY
-                LD      HL, INPBUF
-                LD      E, C
-                LD      D, 0
-                ADD     HL, DE
-                LD      (HL), B
-                INC     HL
-                LD      (HL), 0
-                LD      A, C
-                INC     A
-                LD      (INPLEN), A
-                JR      .REFLD
-
-.BS             LD      A, (INPLEN)
-                OR      A
-                JR      Z, .KEYLP
-                DEC     A
-                LD      (INPLEN), A
-                LD      E, A
-                LD      D, 0
-                LD      HL, INPBUF
-                ADD     HL, DE
-                LD      (HL), 0
 
 .REFLD          CALL    EDFLD           ; ONE ROW, NOT THE WHOLE WINDOW
                 LD      A, (EDROW)
@@ -1280,11 +1248,11 @@ WINEDIT         LD      A, B
 
 
 ; - EDFLD ------------------------------
-; - PAINT THE FIELD: WHAT HAS BEEN TYPED, THE CARET AT THE INSERTION POINT
-; - WHEN THE FIELD HAS THE FOCUS, AND SPACES FOR THE REST. IT SPANS
+; - PAINT THE FIELD: WHAT HAS BEEN TYPED AND SPACES FOR THE REST, OVER
 ; - EDWID + 1 COLUMNS, THE EXTRA ONE BEING WHERE THE CARET STANDS WHEN THE
-; - FIELD IS FULL.
-; - IN:  NONE (USES EDROW, EDCOL, EDWID, INPBUF, INPLEN, WINSEL)
+; - FIELD IS FULL. WITH THE FOCUS, THE CARET COLUMN IS INVERTED (PATINV),
+; - SO A CHARACTER UNDER IT STAYS READABLE.
+; - IN:  NONE (USES EDROW, EDCOL, EDWID, INPBUF, INPLEN, INPCAR, WINSEL)
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; -
@@ -1296,20 +1264,14 @@ EDFLD           LD      A, (EDWID)
 .LOOP           PUSH    BC
                 LD      A, (INPLEN)
                 CP      C
-                JR      Z, .CARET
-                JR      C, .BLANK
-                ; A TYPED CHARACTER
+                LD      A, ' '
+                JR      Z, .PUT
+                JR      C, .PUT         ; PAST THE TEXT: A SPACE
                 LD      HL, INPBUF
                 LD      E, C
                 LD      D, 0
                 ADD     HL, DE
                 LD      A, (HL)
-                JR      .PUT
-.CARET          LD      A, (WINSEL)
-                OR      A
-                LD      A, '_'
-                JR      Z, .PUT         ; ONLY WHEN THE FIELD HAS THE FOCUS
-.BLANK          LD      A, ' '
 .PUT            PUSH    AF
                 LD      A, (EDROW)
                 LD      B, A
@@ -1323,7 +1285,18 @@ EDFLD           LD      A, (EDWID)
                 POP     BC
                 INC     C
                 DJNZ    .LOOP
-                RET
+                LD      A, (WINSEL)
+                OR      A
+                RET     NZ              ; ONLY WHEN THE FIELD HAS THE FOCUS
+                LD      A, (EDROW)
+                LD      H, A
+                LD      A, (INPCAR)
+                LD      C, A
+                LD      A, (EDCOL)
+                ADD     A, C
+                LD      C, A
+                LD      B, 1
+                JP      PATINV
 
 
 ; --- DOGOTO                    ----------------------------------------

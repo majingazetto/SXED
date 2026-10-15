@@ -13,8 +13,24 @@ New
   at the end of a line goes to the start of the next one,
   LEFT at column 0 to the end of the previous one. Never
   past the last line. Vi does it only in insert mode.
+- F3 / Shift+F3 find the next / previous match in every
+  profile (with no search yet, F3 opens Find & Replace).
+- The file browser Name field edits like a line: LEFT /
+  RIGHT move the cursor, HOME / Shift+HOME go to the ends,
+  BS and DEL delete before / under it, and typing inserts
+  at it. The Go to Line field edits the same way.
 
 Changed
+- Only F1 (with SELECT and F10) opens the menus: F2..F5 no
+  longer do, which frees them for other commands. Inside a
+  menu F1 goes back to File.
+- Shift+BS deletes like BS (it did nothing).
+- File browser: the selected entry keeps the accent colour
+  only while the grid has the focus; with the focus on the
+  Name field or a button it is shown blue on white, so it
+  no longer looks as if the arrow keys would move it.
+- The Name field keeps the case you type: it showed names
+  in lower case but turned what you typed to upper case.
 - Quitting with unsaved changes asks once: "Exit to
   MSX-DOS?" with YES (exit without saving) and SAVE (save,
   then exit; the default). ESC stays. The second "Save

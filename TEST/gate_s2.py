@@ -859,7 +859,7 @@ class S211About(S2Case):
         # The snapshot is armed AFTER both keys: WINPOLL is polled in a tight
         # loop by whichever modal owns the screen, so a gate armed between the
         # two would sample the dropdown instead of the dialog.
-        t.press('F5')                           # Help menu
+        t.menu('help')                           # Help menu
         t.press('A')                            # Help > About
         t.snap('dialog', vram='patcol', at='WINPOLL')
         t.press('RETURN')
@@ -1153,7 +1153,7 @@ class S212DialogUndo(S2Case):
         t = Timeline()
         t.text('PREFIX ')                       # one coalesced transaction
         t.snap('typed')
-        t.press('F5')                           # Help menu
+        t.menu('help')                           # Help menu
         t.press('A')                            # About, through FTRBASE
         t.snap('dialog', at='WINPOLL')
         t.press('RETURN')
@@ -1235,7 +1235,7 @@ class S213ShadowCfg(S2Case):
     def timeline(self, ctx, variant=None):
         t = Timeline()
         t.snap('boot', vram='patcol')
-        t.press('F5')                           # Help menu
+        t.menu('help')                           # Help menu
         t.press('A')                            # Help > About
         t.snap('dialog', vram='patcol', at='WINPOLL')
         return t
@@ -1730,8 +1730,8 @@ class S216Menu(S2Case):
 
 class S217MenuNav(S2Case):
     name = 'S2-17-menu-nav'
-    desc = ('RIGHT and LEFT walk the three menus and wrap, F1..F3 jump '
-            'straight to one, and the highlight in row 0 follows exactly one '
+    desc = ('RIGHT and LEFT walk the three menus and wrap, F1 goes back to '
+            'File, and the highlight in row 0 follows exactly one '
             'title at a time')
     origin = ('phase W4.  Switching menus closes one window and opens the '
               'next, and the title highlight is a PATINV toggle: miss the '
@@ -1763,7 +1763,8 @@ class S217MenuNav(S2Case):
         t.press('LEFT')
         t.snap('l1', at='WINPOLL')
 
-        # The function keys jump straight to a menu
+        # Only F1 belongs to the menus: F2 and F3 leave Edit open, F1 goes
+        # back to File
         t.press('F2')
         t.snap('f2', at='WINPOLL')
         t.press('F3')
@@ -1776,7 +1777,7 @@ class S217MenuNav(S2Case):
 
         # RETURN accepts, and the action runs in page 1 after DOMNU returns.
         # Help item 0 opens Settings modal dialog; ESC closes it.
-        t.press('F3')
+        t.menu('help')
         t.snap('help', at='WINPOLL')
         t.press('RETURN')
         t.snap('sett_open', at='WINPOLL')
@@ -1788,7 +1789,7 @@ class S217MenuNav(S2Case):
         # (ACCUT is EQU 46, so CALL ACCUT was CALL #002E, into the DOS zero
         # page).  Select All is the cheapest of them to observe.
         t.wait(1.0)
-        t.press('F2')
+        t.menu('edit')
         t.wait(1.0)
         t.press('A')
         t.snap('selall')
@@ -1804,12 +1805,12 @@ class S217MenuNav(S2Case):
         # Every step lands on the menu it should.
         want = [('file', 0), ('r1', 1), ('r2', 2),
                 ('rwrap', 0), ('lwrap', 2), ('l1', 1),
-                ('f2', 1), ('f3', 2), ('f1', 0)]
+                ('f2', 1), ('f3', 1), ('f1', 0)]
         bad = [(l, run.var(l, 'MNUID')) for l, m in want
                if run.var(l, 'MNUID') != m]
         checks.append(Check('S2-17/walk', not bad,
-                            'RIGHT/LEFT wrap both ways and F1..F3 jump '
-                            'directly' if not bad else
+                            'RIGHT/LEFT wrap both ways, only F1 '
+                            'switches' if not bad else
                             'wrong menu at %s' % bad))
 
         # A switch resets the selection to the first item.
@@ -1821,7 +1822,7 @@ class S217MenuNav(S2Case):
         # Exactly one title is inverted at any moment, and it is the open
         # menu's.  This is what catches a missing un-highlight.
         r0b = pattern.row_of(boot, pattern.MNUROW)
-        for label, menu in (('r1', 1), ('r2', 2), ('rwrap', 0), ('f3', 2)):
+        for label, menu in (('r1', 1), ('r2', 2), ('rwrap', 0), ('f3', 1)):
             dump = run.blob(label, 'patcol')
             if dump is None:
                 checks.append(Check('S2-17/%s/title' % label, False,
@@ -1998,7 +1999,7 @@ class S218Goto(S2Case):
 
         # 11. The Edit menu reaches the same dialog
         t.wait(1.0)
-        t.press('F2')
+        t.menu('edit')
         t.wait(1.0)
         t.press('G')
         t.snap('menu', at='WINPOLL')
@@ -2761,7 +2762,8 @@ class S228BrowseOpen(S2Case):
             'selection or by a typed relative path')
     origin = ('F3 of the file browser spec: S2ED file browser in SCREEN 2 / '
               'TMS9918')
-    variants = ('nav', 'mask', 'typed', 'dirty', 'vi', 'menu', 'cursor')
+    variants = ('nav', 'mask', 'typed', 'dirty', 'vi', 'menu', 'cursor',
+                'field')
     NOTES = crlf(['N1', 'N2', 'N3'])
 
     def config(self, ctx, variant=None):
@@ -2846,6 +2848,28 @@ class S228BrowseOpen(S2Case):
             t.press('ESC')
             t.wait(1.0)
             t.snap('closed', bytes_=b)
+            return t
+        if variant == 'field':
+            t.press('TAB')                  # the focus leaves the grid
+            t.wait(0.5)
+            t.snap('unfoc', at='WINPOLL', vram='patcol', bytes_=b)
+            t.text('abc')
+            t.press('LEFT', repeat=2)       # a|bc
+            t.text('x')                     # ax|bc
+            t.press('HOME')                 # |axbc
+            t.text('y')                     # y|axbc
+            t.press('HOME', mods=['SHIFT']) # yaxbc|
+            t.press('BS')                   # yaxb|
+            t.press('LEFT')                 # yax|b
+            t.press('DEL')                  # yax|
+            t.wait(0.5)
+            t.snap('edited', at='WINPOLL',
+                   bytes_=b + [('INPLEN', 1), ('INPCAR', 1)])
+            t.press('UP')                   # back to the grid
+            t.wait(0.5)
+            t.snap('refoc', at='WINPOLL', vram='patcol', bytes_=b)
+            t.press('ESC')
+            t.wait(1.0)
             return t
         if variant == 'mask':
             t.press('TAB')
@@ -2934,6 +2958,27 @@ class S228BrowseOpen(S2Case):
                                     % (b1('fld2', 'BRWFOC'), b1('list', 'BRWFOC'),
                                        run.var('closed', 'WINACTV'))))
                 continue
+            if variant == 'field':
+                b1 = lambda label, name: (run.var(label, name) or [None])[0]
+                got = (asciiz(run, 'edited', 'INPBUF'),
+                       b1('edited', 'INPLEN'), b1('edited', 'INPCAR'))
+                checks.append(Check('%s/edit' % v, got == ('yax', 3, 3),
+                                    'caret editing in the Name field, case '
+                                    'kept: (INPBUF, INPLEN, INPCAR) = %s '
+                                    "(want ('yax', 3, 3))" % (got,)))
+                inv = ((pattern.COLWIN & 0x0F) << 4) | (pattern.COLWIN >> 4)
+                bars = []
+                for label in ('unfoc', 'refoc'):
+                    dump = run.blob(label, 'patcol')
+                    crow = (pattern.colour_row(dump[0x2000:], BRWRLST)
+                            if dump is not None else None)
+                    bars.append(sorted(set(crow[2 * 8:9 * 8])) if crow else None)
+                checks.append(Check('%s/unfocused' % v,
+                                    bars == [[inv], [pattern.COLBSEL]],
+                                    'slot 0 colours: focus on the field %s, '
+                                    'back on the grid %s (want [%#x], [%#x])'
+                                    % (bars[0], bars[1], inv, pattern.COLBSEL)))
+                continue
             got = brw_listing(run, 'open')
             want = self.root_listing(run)
             files = [x for x in (got or []) if not x.endswith(':')]
@@ -3008,7 +3053,9 @@ class S228BrowseOpen(S2Case):
             if variant in ('nav', 'typed'):
                 checks.append(Check('%s/opened' % v,
                                     asciiz(run, 'loaded', 'FILENAME') ==
-                                    'A:\\SUB\\NOTES.TXT' and
+                                    # typed: the field keeps the case it was typed in
+                                    ('A:\\sub\\notes.txt' if variant == 'typed'
+                                     else 'A:\\SUB\\NOTES.TXT') and
                                     run.var('loaded', 'TOTLINES') == 3 and
                                     run.var('loaded', 'WINACTV') == 0,
                                     'FILENAME %r, TOTLINES %s'
@@ -3191,8 +3238,8 @@ class S231Settings(S2Case):
         t = Timeline()
         t.snap('boot', vram='patcol')
 
-        # Open Help menu (F3), Item 0 is Settings...
-        t.press('F3')
+        # Open Help menu (F1, LEFT), Item 0 is Settings...
+        t.menu('help')
         t.snap('menu', at='WINPOLL')
         t.press('RETURN')
         t.snap('open', vram='patcol', at='WINPOLL')
@@ -3927,7 +3974,7 @@ class S244MenuStrips(S2Case):
     def timeline(self, ctx, variant=None):
         t = Timeline()
         t.snap('boot')
-        t.press('F2')                           # Edit: the longest menu
+        t.menu('edit')                           # Edit: the longest menu
         t.wait(1.0)
         t.snap('open', vram='patcol', at='WINPOLL')
         t.press('DOWN', repeat=3)
@@ -3989,7 +4036,7 @@ class S245SettingsValues(S2Case):
     def timeline(self, ctx, variant=None):
         t = Timeline()
         t.snap('boot')
-        t.press('F3')
+        t.menu('help')
         t.snap('menu', at='WINPOLL')
         t.press('RETURN')
         t.snap('open', at='WINPOLL', vram='pat', bytes_=self.STT)
@@ -4366,7 +4413,7 @@ class S248ShadowRoundTrip(S2Case):
     def timeline(self, ctx, variant=None):
         t = Timeline()
         t.snap('boot', vram='patcol')
-        t.press('F3')
+        t.menu('help')
         t.snap('menu', at='WINPOLL')
         t.press('RETURN')
         t.snap('open', at='WINPOLL', vram='pat', bytes_=self.STT)
@@ -4376,7 +4423,7 @@ class S248ShadowRoundTrip(S2Case):
         t.wait(10.0)                            # the save takes ~8 s on the
         t.snap('saved', vars_=self.VARS)        # MSX1 floppy; the timeline is
         t.wait(1.0)                             # absolute, keys would land in it
-        t.press('F5')                           # Help menu
+        t.menu('help')                           # Help menu
         t.snap('help', at='WINPOLL')            # gate on THIS window first:
         t.wait(1.0)                             # every modal polls WINPOLL,
         t.press('A')                            # and a key inside a snap is lost

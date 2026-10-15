@@ -876,7 +876,7 @@ MUTATIONS = [
         'why': 'the selected slot is not highlighted with VCOLBSEL on S2ED',
         'target': 'S2ED',
         'file': 'BROWSER.Z8A',
-        'old': "                LD      A, (VCOLBSEL)   ; SELECTED: VCOLBSEL",
+        'old': "                LD      A, (VCOLBSEL)   ; SELECTED, THE GRID FOCUSED: VCOLBSEL",
         'new': "                LD      A, (VCOLWIN)    ; MUTATION: NORMAL COLOR",
         'filter': 'S2-28',
         'expect': ['S2-28/nav/drawn'],
@@ -2179,13 +2179,13 @@ MUTATIONS = [
         'name': 'goto-bs',
         'why': 'Backspace leaves the digit in the field, so a correction '
                'goes to the line the user was trying not to go to',
-        'file': 'WINDOW.Z8A',
+        'file': 'INPUT.Z8A',
         'old': """                DEC     A
-                LD      (INPLEN), A
-                LD      E, A""",
+                LD      (INPCAR), A
+                JR      .DELAT""",
         'new': """                NOP                     ; MUTATION: BACKSPACE REMOVES NOTHING
-                LD      (INPLEN), A
-                LD      E, A""",
+                LD      (INPCAR), A
+                JR      .DELAT""",
         'filter': 'H24',
         'expect': ['H24/backspace'],
     },
@@ -4732,6 +4732,113 @@ SELTMPXB        EQU     SELTMPXB2""")],
                 CALL    GRDSCRL""",
         'filter': 'S2-29',
         'expect': ['S2-29/grid'],
+    },
+    {
+        'name': 'fkey-f3-next',
+        'why': 'F3 does not find the next match in STD',
+        'file': 'KEYMAP.Z8A',
+        'old': "                DEFB    F3KEY,   MODANY,  ACFNXT",
+        'new': "                DEFB    F3KEY,   MODANY,  0      ; MUTATION: UNBOUND",
+        'filter': 'X4',
+        'expect': ['X4/std/f3-dialog', 'X4/std/f3'],
+    },
+    {
+        'name': 'fkey-f8-prev',
+        'why': 'Shift+F3 does not find the previous match in STD',
+        'file': 'KEYMAP.Z8A',
+        'old': "                DEFB    F8KEY,   MODANY,  ACFPRV",
+        'new': "                DEFB    F8KEY,   MODANY,  0      ; MUTATION: UNBOUND",
+        'filter': 'X4',
+        'expect': ['X4/std/f8'],
+    },
+    {
+        'name': 'shift-bs',
+        'why': 'Shift+BS does nothing in STD, as before v0.7',
+        'file': 'KEYMAP.Z8A',
+        'old': "                DEFB    BS,      MODSHFT, ACDELBK\n",
+        'new': "",
+        'filter': 'X4',
+        'expect': ['X4/shbs/deleted'],
+    },
+    {
+        'name': 'menu-f2-switch',
+        'why': 'a function key other than F1 switches menus again',
+        'file': 'MENU.Z8A',
+        'old': "                CP      F1KEY           ; ONLY F1 BELONGS TO THE MENUS:",
+        'new': "                CP      F2KEY           ; MUTATION: F2 SWITCHES",
+        'filter': 'H23',
+        'expect': ['H23/direct-fkeys'],
+    },
+    {
+        'name': 'brw-unfocus-col',
+        'why': 'the selected entry keeps the accent bar with the focus on '
+               'the Name field, so the arrow keys look as if they would move it',
+        'file': 'BROWSER.Z8A',
+        'old': "                LD      B, COL_FG       ; SELECTED, FOCUS ELSEWHERE: WHITE",
+        'new': "                LD      B, COL_HI       ; MUTATION: ACCENT REGARDLESS",
+        'filter': 'H34',
+        'expect': ['H34/field/unfocused'],
+    },
+    {
+        'name': 'brw-setfoc-slot',
+        'why': 'a focus change does not repaint the selected entry, so it '
+               'keeps the colour of the previous focus',
+        'file': 'BROWSER.Z8A',
+        'old': "                LD      A, (BRWSEL)     ; THE SELECTION WEARS THE FOCUS TOO\n                CALL    .SLOT\n",
+        'new': "",
+        'filter': 'H34',
+        'expect': ['H34/field/unfocused'],
+    },
+    {
+        'name': 's2-brw-unfocus-col',
+        'why': 'S2ED: the selected entry keeps VCOLBSEL with the focus on '
+               'the Name field',
+        'target': 'S2ED',
+        'file': 'BROWSER.Z8A',
+        'old': "                LD      A, (VCOLWIN)    ; FOCUS ELSEWHERE: THE WINDOW BODY",
+        'new': "                LD      A, (VCOLBSEL)   ; MUTATION: FOCUSED COLOUR",
+        'filter': 'S2-28',
+        'expect': ['S2-28/field/unfocused'],
+    },
+    {
+        'name': 'fld-left',
+        'why': 'LEFT does not move the caret in a text field, so typing '
+               'still only appends',
+        'file': 'INPUT.Z8A',
+        'old': """.LEFT           LD      A, (INPCAR)
+                OR      A
+                SCF
+                RET     Z
+                DEC     A""",
+        'new': """.LEFT           LD      A, (INPCAR)
+                OR      A
+                SCF
+                RET     Z
+                NOP                     ; MUTATION: THE CARET STAYS""",
+        'filter': 'H34',
+        'expect': ['H34/field/edit'],
+    },
+    {
+        'name': 'fld-del',
+        'why': 'DEL does not delete under the caret in a text field',
+        'file': 'INPUT.Z8A',
+        'old': ".DEL            LD      A, (INPCAR)\n",
+        'new': ".DEL            SCF                     ; MUTATION: DEL IGNORED\n                RET\n                LD      A, (INPCAR)\n",
+        'filter': 'H34',
+        'expect': ['H34/field/edit'],
+    },
+    {
+        'name': 'filechr-upcase',
+        'why': 'the Name field turns what is typed into upper case while '
+               'it shows names as they came',
+        'file': 'INPUT.Z8A',
+        'old': """.YES            POP     AF
+                OR      A               ; CY = 0""",
+        'new': """.YES            POP     AF
+                CALL    SRCHUPC         ; MUTATION: UPPER CASE
+                OR      A               ; CY = 0""",
+        'filter': 'H34',
+        'expect': ['H34/field/edit', 'H34/typed/opened'],
     },
 ]
 

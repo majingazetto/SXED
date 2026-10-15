@@ -456,3 +456,162 @@ CURSHP          LD      A, (BLNKPH)
                 LD      A, CURUND
 .LATCH          LD      (CURSHD), A
                 RET
+
+
+; --- TEXT FIELD                ----------------------------------------
+
+
+; - FLDKEY -----------------------------
+; - ONE KEY FOR THE TEXT FIELD OF A DIALOG (INPBUF / INPLEN, CARET AT
+; - INPCAR, AT MOST EDWID CHARACTERS). LEFT / RIGHT MOVE THE CARET, HOME
+; - AND SHIFT+HOME (CLS) TAKE IT TO EITHER END, BS DELETES BEFORE IT, DEL
+; - UNDER IT, AND A CHARACTER OF THE CLASS IS INSERTED AT IT. A DIALOG
+; - THAT USES LEFT / RIGHT FOR ITS FOCUS KEEPS THEM AND NEVER PASSES THEM.
+; - IN:  A = KEY, E = CHARACTER CLASS (ED_DIGIT OR ED_FILE)
+; - OUT: CY = 0: THE FIELD CHANGED, REPAINT IT.  CY = 1: NOTHING TO DO
+; - CLOBBERS: ALL
+; -
+
+FLDKEY          LD      C, A
+                LD      A, (INPLEN)
+                LD      B, A            ; B = LENGTH
+                LD      A, C
+                CP      CLEFT
+                JR      Z, .LEFT
+                CP      CRIGHT
+                JR      Z, .RIGHT
+                CP      HOMEKEY
+                JR      Z, .HOME
+                CP      CLSKEY
+                JR      Z, .END
+                CP      BS
+                JR      Z, .BS
+                CP      DEL
+                JR      Z, .DEL
+                DEC     E               ; ED_FILE?
+                JR      Z, .FILE
+                CP      '0'
+                RET     C
+                CP      '9' + 1
+                CCF
+                RET     C
+                JR      .INS
+.FILE           CALL    FILECHR
+                RET     C
+
+                ; INSERT A AT THE CARET, IF THERE IS ROOM
+.INS            LD      C, A            ; C = CHARACTER
+                LD      A, (EDWID)
+                LD      B, A
+                LD      A, (INPLEN)
+                CP      B
+                SCF
+                RET     Z               ; FULL: IGNORED, SILENTLY
+                LD      E, A
+                LD      D, 0            ; DE = LENGTH
+                INC     A
+                LD      (INPLEN), A
+                LD      HL, INPBUF
+                ADD     HL, DE          ; HL = THE NUL
+                LD      A, (INPCAR)
+                LD      B, A            ; B = CARET
+                LD      A, E
+                SUB     B
+                INC     A               ; LENGTH - CARET + 1 >= 1
+                PUSH    BC
+                LD      C, A
+                LD      B, 0
+                LD      D, H
+                LD      E, L
+                INC     DE
+                LDDR                    ; THE TAIL AND ITS NUL, ONE RIGHT
+                INC     HL              ; HL = INPBUF + CARET
+                POP     BC
+                LD      (HL), C
+                LD      A, B
+                INC     A
+                JR      .SETCAR
+
+.LEFT           LD      A, (INPCAR)
+                OR      A
+                SCF
+                RET     Z
+                DEC     A
+                JR      .SETCAR
+.RIGHT          LD      A, (INPCAR)
+                CP      B
+                SCF
+                RET     Z
+                INC     A
+                JR      .SETCAR
+.HOME           XOR     A
+                JR      .SETCAR
+.END            LD      A, B
+.SETCAR         LD      (INPCAR), A
+                OR      A               ; CY = 0
+                RET
+
+.BS             LD      A, (INPCAR)
+                OR      A
+                SCF
+                RET     Z
+                DEC     A
+                LD      (INPCAR), A
+                JR      .DELAT
+.DEL            LD      A, (INPCAR)
+                CP      B
+                SCF
+                RET     Z               ; NOTHING UNDER THE CARET
+.DELAT          LD      E, A
+                LD      D, 0
+                LD      HL, INPBUF
+                ADD     HL, DE          ; HL = INPBUF + CARET
+                LD      A, B
+                SUB     E               ; LENGTH - CARET >= 1
+                LD      C, A
+                LD      B, 0
+                LD      D, H
+                LD      E, L
+                INC     HL
+                LDIR                    ; THE TAIL AND ITS NUL, ONE LEFT
+                LD      HL, INPLEN
+                DEC     (HL)
+                OR      A               ; CY = 0
+                RET
+
+
+; - FILECHR ----------------------------
+; - CHARACTER CLASS ED_FILE: WHAT MAY BE TYPED INTO A FILE NAME FIELD --
+; - THE CHARACTERS OF A DOS 8.3 NAME, THE PATH SEPARATORS AND THE
+; - WILDCARDS. LETTERS KEEP THE CASE THEY WERE TYPED IN: DOS FOLDS THE
+; - NAME ITSELF, AND THE FIELD SHOWS NAMES AS THEY CAME.
+; - IN:  A = CHARACTER
+; - OUT: CY = 0: ACCEPTED, A UNCHANGED.  CY = 1: REFUSED
+; - CLOBBERS: F, B, HL
+; -
+
+FILECHR         PUSH    AF
+                CALL    SRCHUPC
+                CP      'A'
+                JR      C, .NOLET
+                CP      'Z' + 1
+                JR      C, .YES         ; A LETTER
+.NOLET          CP      '0'
+                JR      C, .SYM
+                CP      '9' + 1
+                JR      C, .YES         ; A DIGIT
+.SYM            LD      HL, .OK
+                LD      B, .OKEND - .OK
+.SLP            CP      (HL)
+                JR      Z, .YES
+                INC     HL
+                DJNZ    .SLP
+                POP     AF
+                SCF
+                RET
+.YES            POP     AF
+                OR      A               ; CY = 0
+                RET
+
+.OK             DEFM    "$&#@!%'()-_{}~^`", #5C, ":.*?"
+.OKEND

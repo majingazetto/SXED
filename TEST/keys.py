@@ -92,6 +92,18 @@ class Timeline(object):
                 self.t += GAP if tail is None else tail
         return self
 
+    def menu(self, which):
+        """Open a dropdown.  F1 is the only function key that opens menus
+        (F3 is find next since v0.7): File, then RIGHT to Edit or LEFT --
+        wrapping -- to Help."""
+        self.press('F1')
+        self.wait(0.5)
+        if which == 'edit':
+            self.press('RIGHT')
+        elif which == 'help':
+            self.press('LEFT')
+        return self
+
     def text(self, s):
         """Plain ASCII through the BIOS buffer -- much faster than the matrix."""
         self.at('type %s' % _tcl_str(s))

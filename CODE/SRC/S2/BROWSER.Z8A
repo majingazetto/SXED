@@ -68,6 +68,7 @@ DOBRW           XOR     A
                 LDIR
                 XOR     A
                 LD      (INPLEN), A
+                LD      (INPCAR), A
                 LD      (INPBUF), A
                 LD      (BRWPREV), A
                 LD      A, (BRWMODE)
@@ -237,6 +238,7 @@ DOBRW           XOR     A
                 LD      A, E
                 SUB     INPBUF & #FF
                 LD      (INPLEN), A
+                LD      (INPCAR), A
                 CALL    .FIELD
                 LD      A, BRWFLDR
                 CALL    WDUMPR          ; DUMP FIELD ROW
@@ -245,8 +247,9 @@ DOBRW           XOR     A
                 ; .JUMP: A LETTER OR DIGIT SELECTS THE NEXT ENTRY STARTING
                 ; WITH IT, WRAPPING AROUND
 .JUMP           LD      A, C
-                CALL    BRWCHR
+                CALL    FILECHR
                 JP      C, .KEYLP
+                CALL    SRCHUPC
                 LD      C, A            ; C = WHAT TO LOOK FOR, UPPER CASE
                 LD      A, (BRWCNT)
                 OR      A
@@ -263,6 +266,7 @@ DOBRW           XOR     A
                 CALL    BRWPOS
                 POP     BC
                 LD      A, (HL)
+                CALL    SRCHUPC         ; NAMES MAY COME IN EITHER CASE
                 CP      C
                 JR      NZ, .JMPNO
                 CALL    BRWFLG
@@ -278,41 +282,13 @@ DOBRW           XOR     A
 .KFLD           LD      A, C
                 CP      CR
                 JP      Z, .ACCEPT
-                CP      BS
-                JR      Z, .FLDBS
                 CP      CDOWN
                 JR      Z, .FLDDN
                 CP      CUP
                 JR      Z, .FLDUP
-                CALL    BRWCHR
+                LD      E, ED_FILE      ; PAGE 1: CARET, INSERT, BS, DEL
+                CALL    FLDKEY
                 JP      C, .KEYLP
-                LD      B, A
-                LD      A, (INPLEN)
-                LD      C, A
-                LD      A, (EDWID)
-                CP      C
-                JP      Z, .KEYLP       ; FULL
-                LD      HL, INPBUF
-                LD      E, C
-                LD      D, 0
-                ADD     HL, DE
-                LD      (HL), B
-                INC     HL
-                LD      (HL), 0
-                LD      A, C
-                INC     A
-                LD      (INPLEN), A
-                JR      .FLDUPD
-.FLDBS          LD      A, (INPLEN)
-                OR      A
-                JP      Z, .KEYLP
-                DEC     A
-                LD      (INPLEN), A
-                LD      E, A
-                LD      D, 0
-                LD      HL, INPBUF
-                ADD     HL, DE
-                LD      (HL), 0
 .FLDUPD         CALL    .FIELD
                 LD      A, BRWFLDR
                 CALL    WDUMPR
@@ -330,6 +306,9 @@ DOBRW           XOR     A
                 JR      C, .SETFOC
                 XOR     A
 .SETFOC         LD      (BRWFOC), A
+                LD      A, (BRWSEL)     ; THE SELECTION WEARS THE FOCUS TOO
+                CALL    .SLOT
+                CALL    .DUMPG
                 ; UPDATE FIELD CARET / COLOR
                 CALL    .FIELD
                 LD      A, BRWFLDR
@@ -536,10 +515,12 @@ DOBRW           XOR     A
                 LD      (DE), A
 .SDEND          LD      A, B
                 LD      (INPLEN), A
+                LD      (INPCAR), A
                 RET
 
 .CLRFLD         XOR     A
                 LD      (INPLEN), A
+                LD      (INPCAR), A
                 LD      (INPBUF), A
                 RET
 
@@ -665,7 +646,15 @@ DOBRW           XOR     A
                 LD      A, (BRWSEL)
                 CP      E
                 JR      NZ, .SLNOSEL
-                LD      A, (VCOLBSEL)   ; SELECTED: VCOLBSEL
+                LD      A, (BRWFOC)
+                CP      BRF_LIST
+                LD      A, (VCOLBSEL)   ; SELECTED, THE GRID FOCUSED: VCOLBSEL
+                JR      Z, .SLCOL
+                LD      A, (VCOLWIN)    ; FOCUS ELSEWHERE: THE WINDOW BODY
+                RRCA                    ; INVERTED (BLUE ON WHITE IN DARK)
+                RRCA
+                RRCA
+                RRCA
                 JR      .SLCOL
 .SLNOSEL        LD      A, E
                 CALL    BRWPOS
@@ -867,14 +856,12 @@ DOBRW           XOR     A
                 LD      A, (BRWFOC)
                 CP      BRF_FLD
                 RET     NZ
-                LD      A, (INPLEN)
+                LD      A, (INPCAR)
                 ADD     A, 10
                 LD      C, A            ; C = CHAR COL OF CARET
-                LD      B, BRWFLDR
-                LD      A, #DB          ; SOLID BLOCK CARET
-                LD      HL, VCOLTXT
-                LD      E, (HL)         ; COLOR
-                JP      WINPUTC
+                LD      H, BRWFLDR
+                LD      B, 1
+                JP      PATINV          ; INVERTED: A CHARACTER UNDER IT SHOWS
 
 .STRNAM         DEFM    "Name: ", 0
 

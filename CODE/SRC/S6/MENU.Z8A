@@ -59,16 +59,8 @@ DOMNU           LD      A, (MNUID)
                 CP      CLEFT
                 JP      Z, .LEFT
 
-                CP      F1KEY
-                JP      Z, .F1
-                CP      F2KEY
-                JP      Z, .F2
-                CP      F3KEY
-                JP      Z, .F3
-                CP      F4KEY
-                JP      Z, .F4
-                CP      F5KEY
-                JP      Z, .F5
+                CP      F1KEY           ; ONLY F1 BELONGS TO THE MENUS:
+                JP      Z, .F1          ; IT GOES BACK TO FILE
 
                 ; DISPATCH ACCELERATORS FOR ACTIVE (MNUID)
                 LD      C, A            ; C = KEY PRESSED
@@ -94,14 +86,6 @@ DOMNU           LD      A, (MNUID)
                 JP      MNUSWCH
 
 .F1             XOR     A
-                JP      MNUSWCH
-.F2             LD      A, 1
-                JP      MNUSWCH
-.F3             LD      A, 2
-                JP      MNUSWCH
-.F4             LD      A, 2
-                JP      MNUSWCH
-.F5             LD      A, 2
                 JP      MNUSWCH
 
                 ; ACCELERATORS MENU 0 (FILE)

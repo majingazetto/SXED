@@ -59,6 +59,7 @@ KMAPSTD         ; UNMODIFIED CURSORS & HOME
                 DEFB    CTRL_V,  MODCTRL, ACPAST
                 DEFB    TAB,     MODNONE, ACTABS
                 DEFB    BS,      MODNONE, ACDELBK
+                DEFB    BS,      MODSHFT, ACDELBK
                 DEFB    DEL,     MODNONE, ACDELFW
                 DEFB    CR,      MODANY,  ACNWLIN
                 DEFB    INSKEY,  MODNONE, ACTGLIN
@@ -76,10 +77,8 @@ KMAPSTD         ; UNMODIFIED CURSORS & HOME
                 DEFB    CTRL_Q,  MODCTRL, ACQUIT
                 DEFB    ESC,     MODANY,  ACQUIT
                 DEFB    F1KEY,   MODANY,  ACMENU
-                DEFB    F2KEY,   MODANY,  ACMNU1
-                DEFB    F3KEY,   MODANY,  ACMNU2
-                DEFB    F4KEY,   MODANY,  ACMNU3
-                DEFB    F5KEY,   MODANY,  ACMNU4
+                DEFB    F3KEY,   MODANY,  ACFNXT
+                DEFB    F8KEY,   MODANY,  ACFPRV
                 DEFB    SELKEY,  MODNONE, ACMENU
                 DEFB    F10KEY,  MODANY,  ACMENU
                 DEFB    #FF
@@ -127,6 +126,7 @@ KMAPTED         ; UNMODIFIED CURSORS
 
                 ; BASIC EDITING KEYS
                 DEFB    BS,      MODNONE, ACDELBK
+                DEFB    BS,      MODSHFT, ACDELBK
                 DEFB    DEL,     MODNONE, ACDELFW
                 DEFB    DEL,     MODCTRL, ACDELLN
                 DEFB    TAB,     MODNONE, ACTABS
@@ -158,10 +158,8 @@ KMAPTED         ; UNMODIFIED CURSORS
 
                 ; SYSTEM ACCELERATORS
                 DEFB    F1KEY,   MODANY,  ACMENU
-                DEFB    F2KEY,   MODANY,  ACMNU1
-                DEFB    F3KEY,   MODANY,  ACMNU2
-                DEFB    F4KEY,   MODANY,  ACMNU3
-                DEFB    F5KEY,   MODANY,  ACMNU4
+                DEFB    F3KEY,   MODANY,  ACFNXT
+                DEFB    F8KEY,   MODANY,  ACFPRV
                 DEFB    SELKEY,  MODNONE, ACMENU
                 DEFB    F10KEY,  MODANY,  ACMENU
                 DEFB    #FF
@@ -229,10 +227,8 @@ KMAPVIN         ; VI NORMAL MOVEMENT
                 DEFB    CTRL_S,  MODCTRL, ACSAVE
                 DEFB    CTRL_Q,  MODCTRL, ACQUIT
                 DEFB    F1KEY,   MODANY,  ACMENU
-                DEFB    F2KEY,   MODANY,  ACMNU1
-                DEFB    F3KEY,   MODANY,  ACMNU2
-                DEFB    F4KEY,   MODANY,  ACMNU3
-                DEFB    F5KEY,   MODANY,  ACMNU4
+                DEFB    F3KEY,   MODANY,  ACFNXT
+                DEFB    F8KEY,   MODANY,  ACFPRV
                 DEFB    SELKEY,  MODNONE, ACMENU
                 DEFB    F10KEY,  MODANY,  ACMENU
                 DEFB    #FF
@@ -253,13 +249,12 @@ KMAPVII         ; RETURN TO NORMAL MODE
                 DEFB    CDOWN,   MODANY,  ACMVD
                 DEFB    TAB,     MODNONE, ACTABS
                 DEFB    BS,      MODNONE, ACDELBK
+                DEFB    BS,      MODSHFT, ACDELBK
                 DEFB    DEL,     MODNONE, ACDELFW
                 DEFB    CR,      MODANY,  ACNWLIN
                 DEFB    F1KEY,   MODANY,  ACMENU
-                DEFB    F2KEY,   MODANY,  ACMNU1
-                DEFB    F3KEY,   MODANY,  ACMNU2
-                DEFB    F4KEY,   MODANY,  ACMNU3
-                DEFB    F5KEY,   MODANY,  ACMNU4
+                DEFB    F3KEY,   MODANY,  ACFNXT
+                DEFB    F8KEY,   MODANY,  ACFPRV
                 DEFB    SELKEY,  MODNONE, ACMENU
                 DEFB    F10KEY,  MODANY,  ACMENU
                 DEFB    #FF
@@ -305,10 +300,8 @@ KMAPVIV         ; VI VISUAL MODE (SELECTION EXTENSION)
 
                 ; SYSTEM ACCELERATORS
                 DEFB    F1KEY,   MODANY,  ACMENU
-                DEFB    F2KEY,   MODANY,  ACMNU1
-                DEFB    F3KEY,   MODANY,  ACMNU2
-                DEFB    F4KEY,   MODANY,  ACMNU3
-                DEFB    F5KEY,   MODANY,  ACMNU4
+                DEFB    F3KEY,   MODANY,  ACFNXT
+                DEFB    F8KEY,   MODANY,  ACFPRV
                 DEFB    SELKEY,  MODNONE, ACMENU
                 DEFB    F10KEY,  MODANY,  ACMENU
                 DEFB    #FF

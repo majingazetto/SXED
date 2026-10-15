@@ -278,7 +278,7 @@ ACNWLIN         EQU     17              ; CR
 ACOPNBL         EQU     18              ; VI o
 ACOPNAB         EQU     19              ; VI O
 ACTGLIN         EQU     20              ; INS
-ACSAVE          EQU     22              ; F2 / CTRL + S
+ACSAVE          EQU     22              ; CTRL + S
 ACQUIT          EQU     23              ; ESC / CTRL + Q
 ACHELP          EQU     24              ; F1
 ACVIINS         EQU     26              ; VI i
@@ -307,10 +307,7 @@ ACTGLBD         EQU     48              ; CTRL + B (TOGGLE BOLD)
 ACTGLIT         EQU     49              ; CTRL + I (TOGGLE ITALIC)
 ACTABS          EQU     51              ; TAB (INSERT SPACES TO NEXT TAB STOP)
 ACMENU          EQU     52              ; DROP-DOWN MENU FILE (F1 / SELECT / F10)
-ACMNU1          EQU     53              ; DROP-DOWN MENU EDIT (F2)
-ACMNU2          EQU     54              ; DROP-DOWN MENU VIEW (F3)
-ACMNU3          EQU     55              ; DROP-DOWN MENU OPTIONS (F4)
-ACMNU4          EQU     56              ; DROP-DOWN MENU HELP (F5)
+                ; 53..56 FREE: F2..F5 NO LONGER OPEN MENUS (ONLY F1 DOES)
 ACUNDO          EQU     57              ; CTRL + Z / VI u (UNDO)
 ACREDO          EQU     58              ; CTRL + Y / VI CTRL+R (REDO)
 ACGOTOL         EQU     59              ; CTRL + G / EDIT MENU (GO TO LINE)

@@ -279,7 +279,7 @@ class S625Windows(S62Case):
         if variant == 'file':
             t.press('F1')
         else:
-            t.press('F5')
+            t.menu('help')
             t.wait(0.5)
             t.press('A')
         t.wait(1.0)

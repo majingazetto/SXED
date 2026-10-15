@@ -74,6 +74,7 @@ DOBRW           XOR     A
                 LDIR
                 XOR     A
                 LD      (INPLEN), A
+                LD      (INPCAR), A
                 LD      (INPBUF), A
                 LD      (BRWPREV), A
                 LD      A, (BRWMODE)
@@ -219,6 +220,7 @@ DOBRW           XOR     A
                 LD      A, E
                 SUB     INPBUF & #FF
                 LD      (INPLEN), A
+                LD      (INPCAR), A
                 CALL    .FIELD
                 CALL    EDBLIT
                 JP      .KEYLP
@@ -226,8 +228,9 @@ DOBRW           XOR     A
                 ; .JUMP: A LETTER OR DIGIT SELECTS THE NEXT ENTRY STARTING
                 ; WITH IT, WRAPPING AROUND
 .JUMP           LD      A, C
-                CALL    BRWCHR
+                CALL    FILECHR
                 JP      C, .KEYLP
+                CALL    SRCHUPC
                 LD      C, A            ; C = WHAT TO LOOK FOR, UPPER CASE
                 LD      A, (BRWCNT)
                 OR      A
@@ -244,6 +247,7 @@ DOBRW           XOR     A
                 CALL    BRWPOS
                 POP     BC
                 LD      A, (HL)
+                CALL    SRCHUPC         ; NAMES MAY COME IN EITHER CASE
                 CP      C
                 JR      NZ, .JMPNO
                 CALL    BRWFLG
@@ -259,41 +263,13 @@ DOBRW           XOR     A
 .KFLD           LD      A, C
                 CP      CR
                 JP      Z, .ACCEPT
-                CP      BS
-                JR      Z, .FLDBS
                 CP      CDOWN
                 JR      Z, .FLDDN
                 CP      CUP
                 JR      Z, .FLDUP
-                CALL    BRWCHR
+                LD      E, ED_FILE      ; PAGE 1: CARET, INSERT, BS, DEL
+                CALL    FLDKEY
                 JP      C, .KEYLP
-                LD      B, A
-                LD      A, (INPLEN)
-                LD      C, A
-                LD      A, (EDWID)
-                CP      C
-                JP      Z, .KEYLP       ; FULL
-                LD      HL, INPBUF
-                LD      E, C
-                LD      D, 0
-                ADD     HL, DE
-                LD      (HL), B
-                INC     HL
-                LD      (HL), 0
-                LD      A, C
-                INC     A
-                LD      (INPLEN), A
-                JR      .FLDUPD
-.FLDBS          LD      A, (INPLEN)
-                OR      A
-                JP      Z, .KEYLP
-                DEC     A
-                LD      (INPLEN), A
-                LD      E, A
-                LD      D, 0
-                LD      HL, INPBUF
-                ADD     HL, DE
-                LD      (HL), 0
 .FLDUPD         CALL    .FIELD
                 CALL    EDBLIT
                 JP      .KEYLP
@@ -312,6 +288,8 @@ DOBRW           XOR     A
 .SETFOC         LD      (BRWFOC), A
                 CALL    .FIELD          ; THE CARET COMES AND GOES
                 CALL    .BTNS
+                LD      A, (BRWSEL)     ; THE SELECTION WEARS THE FOCUS TOO
+                CALL    .SLOT
                 CALL    WINSHOW
                 JP      .KEYLP
 
@@ -507,10 +485,12 @@ DOBRW           XOR     A
                 LD      (DE), A
 .SDEND          LD      A, B
                 LD      (INPLEN), A
+                LD      (INPCAR), A
                 RET
 
 .CLRFLD         XOR     A
                 LD      (INPLEN), A
+                LD      (INPCAR), A
                 LD      (INPBUF), A
                 RET
 
@@ -681,7 +661,11 @@ DOBRW           XOR     A
                 LD      A, (BRWSEL)
                 CP      C
                 JR      NZ, .SLCLR
-                LD      B, COL_HI
+                LD      B, COL_HI       ; SELECTED, THE GRID FOCUSED: ACCENT
+                LD      A, (BRWFOC)
+                CP      BRF_LIST
+                JR      Z, .SLCLR
+                LD      B, COL_FG       ; SELECTED, FOCUS ELSEWHERE: WHITE
 .SLCLR          LD      A, B
                 LD      (VDP_CLR), A
                 LD      BC, BRWSLW
@@ -728,8 +712,12 @@ DOBRW           XOR     A
                 CP      (HL)            ; IS POSITION == (BRWSEL)?
                 POP     HL
                 LD      A, (WINVAR)
-                JP      Z, WINSTRX      ; SELECTED: TRANSPARENT XOR BLIT
-                JP      WINSTR          ; NORMAL: TIMP BLIT
+                JP      NZ, WINSTR      ; NORMAL: TIMP BLIT
+                LD      A, (BRWFOC)
+                CP      BRF_LIST
+                LD      A, (WINVAR)
+                JP      Z, WINSTRX      ; SELECTED: XOR, COL_UI ON COL_HI
+                JP      WINSTRN         ; FOCUS ELSEWHERE: NOT, COL_UI ON COL_FG
 
                 ; .SLUPD: BLIT THE SLOT OF POSITION A (THE CALLER SYNCS)
 .SLUPD          CALL    .SLOTXY

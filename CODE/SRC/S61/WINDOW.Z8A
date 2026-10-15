@@ -264,6 +264,20 @@ WINSTR3         PUSH    AF
                 JR      WINSTR.DOSTR
 
 
+; - WINSTRN ----------------------------
+; - BLIT ASCIIZ STRING WITH FONT VARIANT (TNOT): THE INK (%01) LANDS AS
+; - ITS COMPLEMENT %10, COL_UI, WHATEVER IS UNDER IT -- BLUE ON A WHITE
+; - BAR FOR A SELECTION WITHOUT THE FOCUS
+; - IN:  AS WINSTR
+; - OUT: AS WINSTR
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+WINSTRN         PUSH    AF
+                LD      A, VDP_TNOT
+                JR      WINSTRX.SETOP
+
+
 ; - WINSTRX ----------------------------
 ; - BLIT ASCIIZ STRING WITH FONT VARIANT (TXOR)
 ; - IN:  HL = POINTER TO ASCIIZ STRING, DE = DX, BC = DY, A = FONT VARIANT
@@ -273,7 +287,7 @@ WINSTR3         PUSH    AF
 
 WINSTRX         PUSH    AF
                 LD      A, VDP_TXOR
-                LD      (WINOP), A
+.SETOP          LD      (WINOP), A
                 POP     AF
                 JR      WINSTR.DOSTR
 
@@ -1290,6 +1304,7 @@ WINEDIT         LD      A, B
 
                 XOR     A
                 LD      (INPLEN), A
+                LD      (INPCAR), A
                 LD      (INPBUF), A     ; ASCIIZ, EMPTY
                 LD      (WINSEL), A     ; ED_FFLD
                 CALL    EDBOX           ; THE BORDER, ONCE
@@ -1319,42 +1334,9 @@ WINEDIT         LD      A, B
                 OR      A
                 JR      NZ, .KEYLP
                 LD      A, C
-                CP      BS
-                JR      Z, .BS
-                CP      '0'
+                LD      E, ED_DIGIT     ; PAGE 1: INSERT, BS, DEL, HOME
+                CALL    FLDKEY
                 JR      C, .KEYLP
-                CP      '9' + 1
-                JR      NC, .KEYLP
-
-                ; APPEND, IF THERE IS ROOM
-                LD      B, A            ; B = DIGIT
-                LD      A, (INPLEN)
-                LD      C, A
-                LD      A, (EDWID)
-                CP      C
-                JR      Z, .KEYLP       ; FULL: IGNORED, SILENTLY
-                LD      HL, INPBUF
-                LD      E, C
-                LD      D, 0
-                ADD     HL, DE
-                LD      (HL), B
-                INC     HL
-                LD      (HL), 0
-                LD      A, C
-                INC     A
-                LD      (INPLEN), A
-                JR      .REFLD
-
-.BS             LD      A, (INPLEN)
-                OR      A
-                JR      Z, .KEYLP
-                DEC     A
-                LD      (INPLEN), A
-                LD      E, A
-                LD      D, 0
-                LD      HL, INPBUF
-                ADD     HL, DE
-                LD      (HL), 0
 
 .REFLD          CALL    EDFLD           ; THE FIELD BOX, NOT THE WHOLE WINDOW
                 CALL    EDBLIT
@@ -1517,12 +1499,12 @@ EDFLD           ; 1. INTERIOR, ONE PIXEL INSIDE THE BORDER
                 LD      A, (WINSEL)
                 OR      A
                 RET     NZ
-                LD      A, (INPLEN)
+                LD      A, (INPCAR)     ; THE CARET, WHEREVER IT STANDS
                 LD      L, A
                 LD      H, 0
                 ADD     HL, HL          ; * 2
                 ADD     HL, HL          ; * 4
-                ADD     HL, HL          ; INPLEN * 8
+                ADD     HL, HL          ; INPCAR * 8
                 LD      A, (EDCOL)
                 LD      E, A
                 LD      D, 0
@@ -1545,7 +1527,7 @@ EDFLD           ; 1. INTERIOR, ONE PIXEL INSIDE THE BORDER
                 XOR     A
                 LD      (VDP_ARG), A
                 LD      HL, VDPCMBLK
-                LD      A, VDP_LMMV | VDP_IMP
+                LD      A, VDP_LMMV | VDP_XOR ; OVER A CHARACTER: IT SHOWS THROUGH
                 JP      LMMV
 
 

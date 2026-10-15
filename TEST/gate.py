@@ -1174,20 +1174,20 @@ class H7AboutDialog(Case):
     def timeline(self, ctx, variant=None):
         t = Timeline()
         t.snap('boot', vram=True)
-        # 1. Open with F5 then A, close with RETURN
-        t.press('F5')
+        # 1. Open with F1, LEFT (Help) then A, close with RETURN
+        t.menu('help')
         t.press('A')
         t.snap('dialog1', vram=True, at='WINPOLL')
         t.press('RETURN')
         t.snap('after_ret', vram=True)
-        # 2. Open with F5 then A, close with SPACE
-        t.press('F5')
+        # 2. Open with F1, LEFT (Help) then A, close with SPACE
+        t.menu('help')
         t.press('A')
         t.snap('dialog2', vram=True, at='WINPOLL')
         t.press('SPACE')
         t.snap('after_spc', vram=True)
-        # 3. Open with F5 then A, close with ESC
-        t.press('F5')
+        # 3. Open with F1, LEFT (Help) then A, close with ESC
+        t.menu('help')
         t.press('A')
         t.snap('dialog3', vram=True, at='WINPOLL')
         t.press('ESC')
@@ -2031,7 +2031,7 @@ class H22FileMenu(Case):
 class H23MenuNav(Case):
     name = 'H23-menu-nav'
     desc = ('Horizontal menu navigation across all 3 menus (RIGHT/LEFT wrapping), '
-            'direct function key jumps (F1..F3), item navigation with separator '
+            'F1 the only menu key, item navigation with separator '
             'skipping in Edit menu, and clean screen/title restoration on cancel')
     origin = ('3-menu horizontal navigation engine with table-driven dimensions, '
               'dynamic background save/restore, and title XOR highlighting')
@@ -2064,7 +2064,8 @@ class H23MenuNav(Case):
         t.press('LEFT')
         t.snap('nav_left_edit', at='WINPOLL')
 
-        # 4. Direct function keys jump across menus:
+        # 4. Only F1 belongs to the menus: F2 and F3 leave Edit open, F1
+        # goes back to File
         t.press('F2')
         t.snap('f2_jump_edit', at='WINPOLL')
         t.press('F3')
@@ -2074,7 +2075,7 @@ class H23MenuNav(Case):
 
         # 5. Navigate into Edit menu items and test separator skipping:
         # Items in Edit: 0:Cut, 1:Copy, 2:Paste, 3:Del Line, 4:Sep, 5:Select All, 6:Clear Sel
-        t.press('F2')
+        t.press('RIGHT')
         t.snap('edit_menu', at='WINPOLL')
         t.press('DOWN')
         t.snap('edit_item1', at='WINPOLL')
@@ -2087,7 +2088,7 @@ class H23MenuNav(Case):
         t.snap('edit_item3_up', at='WINPOLL')
 
         # 6. Action Settings modal via Help menu (Item 0)
-        t.press('F3')
+        t.press('RIGHT')
         t.snap('help_menu_sett', at='WINPOLL')
         t.press('RETURN')
         t.snap('after_sett_open', at='WINPOLL')
@@ -2099,7 +2100,7 @@ class H23MenuNav(Case):
         # (ACCUT is EQU 46, so CALL ACCUT was CALL #002E, into the DOS zero
         # page).  Select All is the cheapest of them to observe.
         t.wait(1.0)
-        t.press('F2')
+        t.menu('edit')
         t.wait(1.0)
         t.press('A')
         t.snap('after_selall')
@@ -2187,16 +2188,16 @@ class H23MenuNav(Case):
             % (run.var('nav_wrap_help', 'MNUID'),
                run.var('nav_left_edit', 'MNUID'))))
 
-        # 5. Direct F1..F3 key jumps
+        # 5. Only F1 switches: F2 / F3 leave Edit open, F1 goes to File
         fkeys_ok = (
             run.var('f2_jump_edit', 'MNUID') == 1 and
-            run.var('f3_jump_help', 'MNUID') == 2 and
+            run.var('f3_jump_help', 'MNUID') == 1 and
             run.var('f1_jump_file', 'MNUID') == 0
         )
         checks.append(Check(
             'H23/direct-fkeys',
             fkeys_ok,
-            'F1..F3 keys jump directly to corresponding menus (F2=%s, F3=%s, F1=%s)'
+            'only F1 switches menus (F2=%s, F3=%s, F1=%s)'
             % (run.var('f2_jump_edit', 'MNUID'),
                run.var('f3_jump_help', 'MNUID'),
                run.var('f1_jump_file', 'MNUID'))))
@@ -4328,7 +4329,7 @@ class H24GoToLine(Case):
 
         # 11. The Edit menu reaches the same dialog
         t.wait(1.0)
-        t.press('F2')
+        t.menu('edit')
         t.wait(1.0)
         t.press('G')
         t.snap('menu', at='WINPOLL')
@@ -5328,7 +5329,8 @@ class H34BrowseOpen(Case):
     origin = ('F2 of the file browser spec: File > Open, Ctrl+O and :e with '
               'no name did nothing, and there was no way to reach a file in '
               'another directory from inside the editor')
-    variants = ('nav', 'mask', 'typed', 'dirty', 'vi', 'menu', 'cursor')
+    variants = ('nav', 'mask', 'typed', 'dirty', 'vi', 'menu', 'cursor',
+                'field')
     NOTES = crlf(['N1', 'N2', 'N3'])
 
     def config(self, ctx, variant=None):
@@ -5398,6 +5400,28 @@ class H34BrowseOpen(Case):
             t.press('ESC')
             t.wait(1.0)
             t.snap('closed', bytes_=b)
+            return t
+        if variant == 'field':
+            t.press('TAB')                  # the focus leaves the grid
+            t.wait(0.5)
+            t.snap('unfoc', at='WINPOLL', vram='screen', bytes_=b)
+            t.text('abc')
+            t.press('LEFT', repeat=2)       # a|bc
+            t.text('x')                     # ax|bc
+            t.press('HOME')                 # |axbc
+            t.text('y')                     # y|axbc
+            t.press('HOME', mods=['SHIFT']) # yaxbc|
+            t.press('BS')                   # yaxb|
+            t.press('LEFT')                 # yax|b
+            t.press('DEL')                  # yax|
+            t.wait(0.5)
+            t.snap('edited', at='WINPOLL',
+                   bytes_=b + [('INPLEN', 1), ('INPCAR', 1)])
+            t.press('UP')                   # back to the grid
+            t.wait(0.5)
+            t.snap('refoc', at='WINPOLL', vram='screen', bytes_=b)
+            t.press('ESC')
+            t.wait(1.0)
             return t
         if variant == 'mask':
             t.press('TAB')
@@ -5489,6 +5513,27 @@ class H34BrowseOpen(Case):
                                     % (b1('fld2', 'BRWFOC'), b1('list', 'BRWFOC'),
                                        run.var('closed', 'WINACTV'))))
                 continue
+            if variant == 'field':
+                b1 = lambda label, name: (run.var(label, name) or [None])[0]
+                got = (asciiz(run, 'edited', 'INPBUF'),
+                       b1('edited', 'INPLEN'), b1('edited', 'INPCAR'))
+                checks.append(Check('%s/edit' % v, got == ('yax', 3, 3),
+                                    'caret editing in the Name field, case '
+                                    'kept: (INPBUF, INPLEN, INPCAR) = %s '
+                                    "(want ('yax', 3, 3))" % (got,)))
+                bars = []
+                for label in ('unfoc', 'refoc'):
+                    buf = run.blob(label, 'screen')
+                    bars.append((vram.pixel(buf, 126, 30, first_line=0),
+                                 vram.pixel(buf, 47, 26, first_line=0))
+                                if buf else None)
+                checks.append(Check('%s/unfocused' % v,
+                                    bars == [(vram.COL_FG, vram.COL_UI),
+                                             (vram.COL_HI, vram.COL_UI)],
+                                    'selection (bar, ink): focus on the field '
+                                    '%s, back on the grid %s (want white / blue, '
+                                    'then yellow / blue)' % tuple(bars)))
+                continue
             got = brw_listing(run, 'open')
             want = self.root_listing(run)
             files = [x for x in (got or []) if not x.endswith(':')]
@@ -5549,7 +5594,9 @@ class H34BrowseOpen(Case):
             if variant in ('nav', 'typed'):
                 checks.append(Check('%s/opened' % v,
                                     asciiz(run, 'loaded', 'FILENAME') ==
-                                    'A:\\SUB\\NOTES.TXT' and
+                                    # typed: the field keeps the case it was typed in
+                                    ('A:\\sub\\notes.txt' if variant == 'typed'
+                                     else 'A:\\SUB\\NOTES.TXT') and
                                     run.var('loaded', 'TOTLINES') == 3 and
                                     run.var('loaded', 'WINACTV') == 0,
                                     'FILENAME %r, TOTLINES %s'
@@ -5907,8 +5954,8 @@ class H37Settings(Case):
         t = Timeline()
         t.snap('boot', vram=True)
 
-        # Open Help menu (F3), Item 0 is Settings...
-        t.press('F3')
+        # Open Help menu (F1, LEFT), Item 0 is Settings...
+        t.menu('help')
         t.snap('menu', at='WINPOLL')
         t.press('RETURN')
         t.snap('open', at='WINPOLL')
@@ -7771,7 +7818,7 @@ class Q4SettingsBorders(Case):
     def timeline(self, ctx, variant=None):
         t = Timeline()
         t.snap('boot')
-        t.press('F3')
+        t.menu('help')
         t.snap('menu', at='WINPOLL')
         t.press('RETURN')
         t.wait(1.0)
@@ -7809,7 +7856,7 @@ class Q5SettingsShadow(Case):
     def timeline(self, ctx, variant=None):
         t = Timeline()
         t.snap('boot')
-        t.press('F3')
+        t.menu('help')
         t.snap('menu', at='WINPOLL')
         t.press('RETURN')
         t.wait(1.0)
@@ -8026,7 +8073,7 @@ class W2SettingsFocus(Case):
     def timeline(self, ctx, variant=None):
         t = Timeline()
         t.snap('boot')
-        t.press('F3')
+        t.menu('help')
         t.snap('menu', at='WINPOLL')
         t.press('RETURN')
         t.wait(1.0)
@@ -8816,7 +8863,7 @@ class U13UndoJoinMargin(Case):
         t.press('DEL')                          # join: 80 characters, seam 79
         t.wait(1.0)
         t.snap('joined')
-        t.press('F3')                           # Help
+        t.menu('help')                           # Help
         t.press('RETURN')                       # Settings
         t.snap('open', at='WINPOLL')
         t.press('DOWN')                         # Wrap
@@ -8948,7 +8995,7 @@ def rewrap_model(lines, width):
 
 def settings_to_txt(t):
     """Help > Settings, Wrap DEV -> TXT, OK."""
-    t.press('F3')
+    t.menu('help')
     t.press('RETURN')
     t.press('DOWN')                     # Wrap
     t.press('RIGHT')                    # DEV -> TXT
@@ -9023,7 +9070,7 @@ class W3RewrapSettings(Case):
 
 class W4RewrapMenu(Case):
     name = 'W4-rewrap-menu'
-    desc = ('Edit > Rewrap (F2, R) rewraps the paragraph around the cursor, or '
+    desc = ('Edit > Rewrap (F1, RIGHT, R) rewraps the paragraph around the cursor, or '
             'only the selected lines; in WRAP_DEV it does nothing')
     origin = ('2026-10-15: Rewrap replaced Deselect in the Edit menu (ESC '
               'already drops a selection), so the item count and indices stay '
@@ -9049,7 +9096,7 @@ class W4RewrapMenu(Case):
             t.press('DOWN', mods=['SHIFT'], repeat=2)   # lines 0..1, 2 col 0
         else:
             t.press('DOWN')
-        t.press('F2')                               # Edit
+        t.menu('edit')                               # Edit
         t.press('R')                                # Rewrap
         t.wait(2.0)
         t.snap('done')
@@ -9271,6 +9318,78 @@ class X3Rollover(Case):
             ]
         return checks
 
+
+class X4FunctionKeys(Case):
+    name = 'X4-function-keys'
+    desc = ('F3 / Shift+F3 find next / previous in every profile (F3 opens '
+            'Find & Replace while there is no search yet), and Shift+BS '
+            'deletes like BS')
+    origin = ('requested 2026-10-15: only F1 opens the menus, so the other '
+              'function keys are free; F3 is find next as in most editors. '
+              'Shift+BS did nothing because BS was bound to MODNONE only')
+    variants = ('std', 'vi', 'shbs')
+    LINES = ['AAA MSX BBB MSX CCC']
+
+    def config(self, ctx, variant=None):
+        if variant == 'vi':
+            return UNDO_CFG.replace('PROFILE=STD', 'PROFILE=VI')
+        return UNDO_CFG
+
+    def fixture(self, ctx, variant=None):
+        return crlf(['abc'] if variant == 'shbs' else self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.wait(1.0)
+        if variant == 'shbs':
+            t.press('RIGHT', repeat=3)          # the end of 'abc'
+            t.press('BS', mods=['SHIFT'])
+            t.wait(0.5)
+            t.snap('deleted')
+            return t
+        t.press('F3')                           # no search yet: the dialog
+        t.wait(1.0)
+        t.snap('dialog', at='WINPOLL')
+        for ch in 'MSX':
+            t.press(ch)
+        t.wait(0.5)
+        t.press('RETURN')
+        t.wait(1.0)
+        t.snap('found1')
+        t.press('F3')
+        t.wait(1.0)
+        t.snap('f3')
+        t.press('F3', mods=['SHIFT'])
+        t.wait(1.0)
+        t.snap('f8')
+        return t
+
+    def verify(self, ctx, runs):
+        checks = []
+        for variant, run in sorted(runs.items()):
+            pre = 'X4/%s' % variant
+            if variant == 'shbs':
+                got = (run.var('deleted', 'CURX'), run.var('deleted', 'MODIFIED'))
+                checks.append(Check('%s/deleted' % pre, got == (2, 0xFF),
+                                    'Shift+BS at the end of abc: (CURX, '
+                                    'MODIFIED) = %s (want (2, 255))' % (got,)))
+                continue
+            checks.append(Check('%s/f3-dialog' % pre,
+                                run.var('dialog', 'WINACTV') == 1,
+                                'F3 with no search opens Find & Replace '
+                                '(WINACTV %s)' % run.var('dialog', 'WINACTV')))
+            sel = lambda s: (run.var(s, 'DOCLINE'), run.var(s, 'SELANCX'),
+                             run.var(s, 'SELACT'))
+            for label, col, what in (('found1', 4, 'dialog'),
+                                     ('f3', 12, 'F3 finds next'),
+                                     ('f8', 4, 'Shift+F3 finds previous')):
+                checks.append(Check('%s/%s' % (pre, label),
+                                    sel(label) == (0, col, 1),
+                                    '%s: (DOCLINE, SELANCX, SELACT) = %s '
+                                    '(want (0, %d, 1))' % (what, sel(label), col)))
+        return checks
+
+
 CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G6Hooks(),
          G7Selection(), G8Config(), G9Directory(), G10Autoalign(), G11Paste(),
          G12ScreenRestore(), G13FeatureResidency(), H1Help(), H2HelpQuestion(), H3HelpFile(), H4FileSwitch(), H5Verbose(), H6DatMissing(), H7AboutDialog(),
@@ -9290,7 +9409,8 @@ CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G
          Q1StyleSelection(), Q2ShiftWrapScroll(), Q3FindAdjacent(),
          Q4SettingsBorders(), Q5SettingsShadow(), Q6VdpWaitJiffy(), Q7QuitSave(),
          V1ViLeader(), V2WrapSelRoom(), V3InsDelimRoom(), V4ViColonBig(), W1TabRun(), W2SettingsFocus(), W3RewrapSettings(), W4RewrapMenu(), W5ReflowEmpty(),
-         X1ViLineBreak(), X2CuaLineBreak(), X3Rollover(), Z1CtrlStop(),
+         X1ViLineBreak(), X2CuaLineBreak(), X3Rollover(), X4FunctionKeys(),
+         Z1CtrlStop(),
          B2Font(), B3Rom(), B4CfgStream(), B5ShippedDisk(), B6ManualJp(), B6ManualF1xv(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(), D11Margin(), D12LongLine(), D13Overwrite(),

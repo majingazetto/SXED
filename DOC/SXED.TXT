@@ -440,12 +440,11 @@ typed into the document (in Vi, only in insert mode).
 Common to ALL profiles:
 
     F1 / SELECT / F10   Open the File menu
-    F2                  Open the Edit menu
-    F3 / F4 / F5        Open the Help menu (there are only
-                        three menus)
+    F3 / Shift+F3       Find next / previous
     RETURN              New line / split line
     TAB                 Insert to next tab stop
     BS / DEL            Delete backward / forward
+                        (Shift+BS works as BS)
     INSERT              Toggle insert / overwrite
     Ctrl+G              Go to line...
     Ctrl+S              Save
@@ -677,10 +676,12 @@ wrap that pushes a word down while typing.
 
  ---- 10.1.- THE MENU BAR.
 
-F1, F2 (and F3/F4/F5), SELECT or F10 open the menus; the
-active menu title is highlighted on row 0. Inside a menu:
+F1, SELECT or F10 open the menus on File; the active menu
+title is highlighted on row 0. The other function keys are
+not menu keys. Inside a menu:
 
     Left / Right     Switch to the previous / next menu
+    F1               Back to the File menu
     Up / Down        Move over the items (skips separators)
     RETURN / SPACE   Execute the selected item
     Letter keys      Accelerators (shown by the items)
@@ -752,7 +753,16 @@ In the grid:
                   [Open]/[Save] -> [Cancel]
     ESC           Cancel
 
-In the Name field (38 chars) you can type:
+The selected entry wears the accent colour while the grid
+has the focus, and the inverse of the window (blue on white
+in the default theme) while the focus is elsewhere, so the
+arrow keys go where the accent is.
+
+In the Name field (38 chars) Left / Right move the cursor,
+HOME / Shift+HOME go to the start / end, BS and DEL delete
+before / under the cursor, and what you type is inserted at
+the cursor, in the case you type it (DOS stores names in
+upper case anyway). Up / Down move the focus. You can type:
 
     A name        Selects that file (relative to the shown
                   directory)
@@ -769,11 +779,13 @@ the browser exactly as you left it.
  ---- 10.6.- GO TO LINE.
 
 Ctrl+G (or Edit > Go to Line) opens a small dialog asking
-"Line number (1-N):". Digits type, BS deletes, ENTER accepts
-(empty cancels), ESC cancels, and TAB/arrows move between the
-field and the [OK]/[Cancel] buttons. Out of range numbers are
-clamped; the view is centered on the target line (or left
-untouched if the line is already visible).
+"Line number (1-N):". Digits are inserted at the cursor,
+BS / DEL delete, HOME / Shift+HOME go to the start / end,
+ENTER accepts (empty cancels), ESC cancels, and TAB/arrows
+move between the field and the [OK]/[Cancel] buttons. Out
+of range numbers are clamped; the view is centered on the
+target line (or left untouched if the line is already
+visible).
 
 
  ---- 10.7.- FIND & REPLACE.
@@ -797,8 +809,10 @@ finds the next match immediately. ESC closes the dialog.
 
 A found match becomes the current selection. The search wraps
 around the document; when there is no match the machine
-beeps. Ctrl+L / Ctrl+R (STD), n / N (Vi) repeat the last
-search forwards / backwards. Replace All is a single undo
+beeps. F3 / Shift+F3 (every profile), Ctrl+L / Ctrl+R
+(STD), Ctrl+N (TED) and n / N (Vi) repeat the last search
+forwards / backwards; with no search yet, F3 opens the
+dialog. Replace All is a single undo
 group: one undo reverts every replacement.
 
 
