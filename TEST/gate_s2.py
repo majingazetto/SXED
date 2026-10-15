@@ -2041,9 +2041,12 @@ class S218Goto(S2Case):
         ]
 
         # The field shows what was typed, the caret after it, spaces beyond --
-        # against the font, not against a picture.
+        # against the font, not against a picture.  The caret is PATINV: the
+        # four pixel columns of its text column inverted (an even column, the
+        # high nibble), so a character under it stays readable.
         row = pattern.row_of(typed, self.FLDROW)
-        want = self.text_cells(fnt, '42_   ')
+        want = self.text_cells(fnt, '42    ')
+        want[1] = bytes(b ^ 0xF0 for b in want[1])
         c0 = self.FLDCOL // 2
         bad = [c0 + i for i, w in enumerate(want)
                if row[(c0 + i) * 8:(c0 + i + 1) * 8] != w]

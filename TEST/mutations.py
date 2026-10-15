@@ -2148,7 +2148,9 @@ MUTATIONS = [
         'old': """                DEFW    ACTGOTO         ; 59 (GO TO LINE)""",
         'new': """                DEFW    ACTNONE         ; MUTATION: GO TO LINE UNBOUND""",
         'filter': 'H24',
-        'expect': ['H24/open', 'H24/centred'],
+        # the dialog never opens, so the WINPOLL-gated snapshot never fires
+        # and the session dies: caught under the case name
+        'expect_any': ['H24/open', 'H24/centred', 'H24-goto-line'],
     },
     {
         # The round-3 defect class, and the reason the suite runs two gates:
@@ -2180,12 +2182,12 @@ MUTATIONS = [
         'why': 'Backspace leaves the digit in the field, so a correction '
                'goes to the line the user was trying not to go to',
         'file': 'INPUT.Z8A',
-        'old': """                DEC     A
-                LD      (INPCAR), A
-                JR      .DELAT""",
-        'new': """                NOP                     ; MUTATION: BACKSPACE REMOVES NOTHING
-                LD      (INPCAR), A
-                JR      .DELAT""",
+        'old': """.BS             LD      A, (INPCAR)
+""",
+        'new': """.BS             SCF                     ; MUTATION: BACKSPACE REMOVES NOTHING
+                RET
+                LD      A, (INPCAR)
+""",
         'filter': 'H24',
         'expect': ['H24/backspace'],
     },
@@ -4740,7 +4742,9 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'old': "                DEFB    F3KEY,   MODANY,  ACFNXT",
         'new': "                DEFB    F3KEY,   MODANY,  0      ; MUTATION: UNBOUND",
         'filter': 'X4',
-        'expect': ['X4/std/f3-dialog', 'X4/std/f3'],
+        # nothing opens on F3, so the WINPOLL-gated snapshot never fires and
+        # the session dies: caught under the case name
+        'expect_any': ['X4/std/f3-dialog', 'X4/std/f3', 'X4-function-keys'],
     },
     {
         'name': 'fkey-f8-prev',

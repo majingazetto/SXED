@@ -475,7 +475,11 @@ CURSHP          LD      A, (BLNKPH)
 FLDKEY          LD      C, A
                 LD      A, (INPLEN)
                 LD      B, A            ; B = LENGTH
-                LD      A, C
+                LD      HL, INPCAR      ; A CARET PAST THE END WOULD MAKE THE
+                CP      (HL)            ; LDIR / LDDR COUNTS BELOW ZERO, I.E.
+                JR      NC, .CAROK      ; 64 KB: CLAMP IT TO THE LENGTH
+                LD      (HL), A
+.CAROK          LD      A, C
                 CP      CLEFT
                 JR      Z, .LEFT
                 CP      CRIGHT
