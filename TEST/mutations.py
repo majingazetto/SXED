@@ -315,10 +315,12 @@ MUTATIONS = [
         'file': 'VDP.Z8A',
         'old': """                EI                      ; ONE POLL PER DI: THE VBLANK IS SERVED
                 JR      C, .WAIT        ; BETWEEN POLLS, NOT HELD OFF FOR THE
+                POP     BC
                 POP     AF              ; WHOLE COMMAND (A 128 MS YMMM LOST ~6)""",
         'new': """                NOP                     ; MUTATION: NO EI BETWEEN POLLS
                 JR      C, .WAIT        ; BETWEEN POLLS, NOT HELD OFF FOR THE
                 EI
+                POP     BC
                 POP     AF              ; WHOLE COMMAND (A 128 MS YMMM LOST ~6)""",
         'filter': 'Q6',
         'expect': ['Q6/rate'],
@@ -2662,9 +2664,9 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'file': 'S6ED.Z8A',
         'old': """                LD      A, (SAVRG8)
                 LD      (RG8SAV), A
-                OUT     (VDPCT), A
+                OUT     (C), A
                 LD      A, #88          ; REG 8 | #80
-                OUT     (VDPCT), A""",
+                OUT     (C), A""",
         'new': """                ; MUTATION: R#8 LEFT AS SCRINIT SET IT""",
         'filter': 'G12',
         'expect': ['G12/restored-r8'],
