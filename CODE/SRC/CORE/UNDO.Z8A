@@ -160,14 +160,24 @@ UNDOREC         LD      C, A            ; C = OP_TYPE
                 BIT     7, C            ; UNDOF_CHN
                 JR      NZ, .INGRP
                 LD      (HL), 0         ; A NEW USER ACTION: NOTHING DROPPED YET
-.INGRP          LD      A, (WORKBUF)
+.INGRP          LD      A, C
+                AND     UNDOT_MSK
+                CP      UNDOT_SPL
+                JR      Z, .KEEP        ; SPLIT HOLDS NO PAYLOAD: NEVER DROPPED
+                CP      UNDOT_JON
+                JR      Z, .KEEP        ; JOIN HOLDS NO PAYLOAD: NEVER DROPPED
+                LD      A, (WORKBUF)
                 CP      TEXTCOLS + 1
                 JR      NC, .DROP       ; LONGER THAN A RECORD HOLDS
                 LD      A, (HL)
                 OR      A
                 JR      Z, .KEEP
 .DROP           LD      (HL), 1
-                JP      UNDOINIT
+                CALL    UNDOSVC
+                XOR     A
+                LD      (REDOPTR), A
+                LD      (REDOPTR + 1), A
+                RET
 .KEEP
 
                 PUSH    BC
@@ -394,10 +404,6 @@ UNDOJON         LD      A, (UNDOHLD)
                 OR      A
                 RET     NZ
                 CALL    UNDOCLS
-                LD      HL, WORKBUF2
-                LD      DE, WORKBUF
-                LD      BC, WORKSIZ
-                LDIR
                 LD      HL, (DOCLINE)
                 PUSH    HL
                 LD      A, (CURX)
@@ -749,6 +755,9 @@ UNDOPNT         LD      HL, (UNDOPTR)
 .MODSET         LD      (MODIFIED), A
                 LD      HL, (DOCLINE)
                 CALL    SHOWLN
+                XOR     A
+                LD      (LEFTCOL), A
+                CALL    ADJLCOL
                 JP      REDRAW
 
 
@@ -995,25 +1004,17 @@ UNDOSPU         ; 1. UPDATE UNDOPTR AND REDOPTR
                 LD      H, (IX + 1)
                 LD      (UNDOPTR), HL
 
-                ; 2. DELETE LINE (DOCLINE + 1) (THE TAIL LINE)
+                ; 2. RE-JOIN LINE A (DOCLINE) AND LINE B (DOCLINE + 1)
+                LD      A, 1
+                LD      (UNDOHLD), A
                 LD      L, (IX + 5)
-                LD      H, (IX + 6)
-                INC     HL              ; HL = DOCLINE + 1
-                CALL    LINEDEL
-                LD      HL, (TOTLINES)
-                DEC     HL
-                LD      (TOTLINES), HL
-
-                ; 3. RESTORE PRE-SPLIT LINE AT (IX + 5) FROM PAYLOAD
-                PUSH    IX
-                POP     HL
-                LD      DE, UNDOHDR_SZ
-                ADD     HL, DE          ; HL = IX + 10 (PAYLOAD)
-                LD      DE, WORKBUF
-                CALL    UNDOUPK
-                LD      L, (IX + 5)
-                LD      H, (IX + 6)     ; HL = DOCLINE
-                CALL    LINEWRT
+                LD      H, (IX + 6)     ; HL = LINE A (DOCLINE)
+                LD      E, L
+                LD      D, H
+                INC     DE              ; DE = LINE B (DOCLINE + 1)
+                CALL    JOIN2L
+                XOR     A
+                LD      (UNDOHLD), A
 
                 ; 4. RESTORE DOCLINE, CURX, TOPLINE
                 LD      L, (IX + 5)
@@ -1094,66 +1095,40 @@ REDOSPL         ; 1. UPDATE UNDOPTR AND REDOPTR
 ; - CLOBBERS: ALL
 ; -
 
-UNDOJNU         ; 1. CHECK IF LINE DIRECTORY IS FULL
-                LD      HL, (TOTLINES)
-                LD      DE, MAXLINES
-                CALL    CMPHLDE
-                CCF
-                RET     C               ; DIRECTORY FULL: REFUSE
-
-                ; 2. RESERVE SPACE IN MAPPER FOR RESTORED LINE B
-                LD      C, (IX + UNDOHDR_SZ)
-                CALL    NEWREC
-                RET     C
-                LD      (NRSEG), A
-                LD      (NROFF), DE
-
-                ; 3. UPDATE UNDOPTR AND REDOPTR
+UNDOJNU         ; 1. UPDATE UNDOPTR AND REDOPTR
                 LD      (REDOPTR), IX
                 LD      L, (IX + 0)
                 LD      H, (IX + 1)
                 LD      (UNDOPTR), HL
 
-                ; 4. TRUNCATE LINE A AT (IX + 5) BACK TO JOINCOL (IX + 7)
+                ; 2. POSITION CURSOR AT THE JOIN SEAM ON LINE A
                 LD      L, (IX + 5)
                 LD      H, (IX + 6)
-                CALL    LINEREAD        ; READS COMBINED LINE A INTO WORKBUF
+                LD      (DOCLINE), HL
                 LD      A, (IX + 7)
-                LD      (WORKBUF), A    ; TRUNCATE LENGTH TO SEAM
-                CALL    RECBL80         ; BLANK TAIL TO SPACES
-                LD      L, (IX + 5)
-                LD      H, (IX + 6)
-                CALL    LINEWRT         ; WRITE TRUNCATED LINE A BACK
+                LD      (CURX), A
+                LD      L, (IX + 8)
+                LD      H, (IX + 9)
+                LD      (TOPLINE), HL
+                CALL    SETCURY
 
-                ; 5. WRITE PAYLOAD (IX + 10) INTO (NRSEG, NROFF) (LINE B)
-                PUSH    IX
-                POP     HL
-                LD      BC, UNDOHDR_SZ
-                ADD     HL, BC          ; HL = SOURCE (IX + 10)
-                LD      DE, WORKBUF
-                CALL    UNDOUPK
-                LD      HL, WORKBUF
-                LD      A, (NRSEG)
-                LD      DE, (NROFF)
-                CALL    PUTREC
-
-                ; 6. OPEN DIRECTORY SLOT AT (IX + 5) + 1 (LINE B) AND FILL IT
-                LD      L, (IX + 5)
-                LD      H, (IX + 6)
-                INC     HL              ; HL = LINE A + 1 (LINE B)
-                PUSH    HL
-                CALL    LINEINS
-                POP     HL
-                LD      DE, (NROFF)
-                LD      A, (NRSEG)
-                CALL    DIRWRITE
-
-                ; 7. BUMP TOTLINES
+                ; 3. EXECUTE EDNWLIN WITH UNDOHLD = 1 (SPLIT LINE A AT SEAM)
                 LD      HL, (TOTLINES)
-                INC     HL
-                LD      (TOTLINES), HL
+                PUSH    HL
+                PUSH    IX              ; S2ED'S REPAINT IN EDNWLIN USES IX
+                LD      A, 1
+                LD      (UNDOHLD), A
+                CALL    EDNWLIN
+                XOR     A
+                LD      (UNDOHLD), A
+                POP     IX
+                POP     DE
+                LD      HL, (TOTLINES)
+                OR      A
+                SBC     HL, DE
+                JR      Z, .REFUSED
 
-                ; 8. RESTORE DOCLINE, CURX, TOPLINE
+                ; 4. RESTORE DOCLINE AT LINE A, CURX AT SEAM, RESTORE TOPLINE
                 LD      L, (IX + 5)
                 LD      H, (IX + 6)
                 LD      (DOCLINE), HL
@@ -1163,8 +1138,15 @@ UNDOJNU         ; 1. CHECK IF LINE DIRECTORY IS FULL
                 LD      H, (IX + 9)
                 LD      (TOPLINE), HL
 
-                ; 9. MARK MODIFIED; ACTUNDO / ACTREDO PAINT ONCE PER GROUP
+                ; 5. MARK MODIFIED; ACTUNDO / ACTREDO PAINT ONCE PER GROUP
                 JP      UNDOOK
+
+.REFUSED        LD      (UNDOPTR), IX   ; REFUSED: PUT BOTH POINTERS BACK
+                LD      L, (IX + 2)
+                LD      H, (IX + 3)
+                LD      (REDOPTR), HL
+                SCF
+                RET
 
 
 ; --- REDOJON                   ----------------------------------------
