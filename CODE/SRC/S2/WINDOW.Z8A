@@ -963,11 +963,6 @@ DOQIT           LD      HL, DOASK.TITQIT
                 LD      DE, DOASK.STRQIT
                 JR      DOASK
 
-DOSAVQ          LD      HL, DOASK.TITQIT
-                LD      DE, STRSVQ
-                XOR     A               ; DO NOT SHOW UNSAVED WARNING
-                JR      DOASK.ASKGO
-
 DOOPN           LD      HL, DOASK.TITOPN
                 LD      DE, DOASK.STRNEW
                 JR      DOASK
@@ -996,7 +991,8 @@ DONEW           LD      HL, DOASK.TITNEW
 ; -
 ; - IN:  HL = ASCIIZ TITLE, DE = ASCIIZ QUESTION (FEATURE SEGMENT)
 ; -      READS MODIFIED FOR THE UNSAVED-CHANGES WARNING LINE
-; - OUT: (WINRES) = 0 CANCELLED, 1 CONFIRMED
+; - OUT: (WINRES) = 0 CANCELLED, 1 CONFIRMED, 2 SAVE: WITH ASKSAV SET
+; -      THE SECOND BUTTON IS [ SAVE ] (S) INSTEAD OF [ NO ] (ACTQUIT CLEARS IT)
 ; - CLOBBERS: ALL
 ; -
 
@@ -1065,6 +1061,10 @@ DOASK           LD      A, 1            ; SHOW UNSAVED WARNING IF DIRTY
                 JR      Z, .DONE
                 CP      'n'
                 JR      Z, .DONE
+                CP      'S'             ; SAVE (ASKSAV); WITHOUT IT, A CANCEL
+                JR      Z, .SECOND
+                CP      's'
+                JR      Z, .SECOND
                 JR      .KEYLP
 
 .TOYES          XOR     A
@@ -1079,7 +1079,10 @@ DOASK           LD      A, 1            ; SHOW UNSAVED WARNING IF DIRTY
                 JR      .KEYLP
 
 .ACCEPT         LD      A, (WINSEL)
-                XOR     1               ; YES (0) CONFIRMS, NO (1) CANCELS
+                OR      A
+                JR      Z, .YES         ; YES (0) CONFIRMS
+.SECOND         LD      A, (ASKSAV)     ; NO (1) CANCELS: 0; SAVE: 2
+                ADD     A, A
                 LD      (WINRES), A
                 JR      .DONE
 
@@ -1102,12 +1105,18 @@ DOASK           LD      A, 1            ; SHOW UNSAVED WARNING IF DIRTY
                 LD      HL, .BTNYES
                 CALL    WINPUTS
 
+                LD      HL, .BTNNO
+                LD      A, (ASKSAV)
+                OR      A
+                JR      Z, .LBLNO
+                LD      HL, .BTNSAV
+.LBLNO          PUSH    HL
                 LD      A, (WINSEL)
                 DEC     A
                 CALL    .ROLE           ; Z = NO IS SELECTED
                 LD      B, 13
                 LD      C, 34
-                LD      HL, .BTNNO
+                POP     HL
                 JP      WINPUTS
 
 ; - .ROLE: A = COLOR FOR A BUTTON, GIVEN Z SET WHEN IT IS THE SELECTED ONE
@@ -1127,6 +1136,7 @@ DOASK           LD      A, 1            ; SHOW UNSAVED WARNING IF DIRTY
 .STRWRN         DEFM    "Unsaved changes!", 0
 .BTNYES         DEFM    "[  YES ]", 0
 .BTNNO          DEFM    "[  NO  ]", 0
+.BTNSAV         DEFM    "[ SAVE ]", 0
 
 
 ; --- WINEDIT                   ----------------------------------------
@@ -2028,7 +2038,7 @@ DOSETT          LD      A, 5
                 LD      (HL), A
                 RET
 
-.MAXTBL         DEFB    4, 2, 3, 2, 3, 3, 3, THMCNT
+.MAXTBL         DEFB    3, 2, 3, 2, 3, 3, 3, THMCNT
                 DEFB    2
 
 .DRWUI          ; DRAW 9 SETTING ROWS (ROWS 6..14)
@@ -2241,11 +2251,10 @@ DOSETT          LD      A, 5
 .LBLTHM         DEFM    "Theme:     ", 0
 .LBLSHD         DEFM    "Shadow:    ", 0
 
-.VALPRF         DEFW    .VP0, .VP1, .VP2, .VP3
+.VALPRF         DEFW    .VP0, .VP1, .VP2
 .VP0            DEFM    "STD", 0
 .VP1            DEFM    "TED", 0
-.VP2            DEFM    "EMC", 0
-.VP3            DEFM    "VI", 0
+.VP2            DEFM    "VI", 0
 
 .VALWRP         DEFW    .VA2, .VW1
 .VW1            DEFM    "TXT", 0

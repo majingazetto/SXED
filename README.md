@@ -43,7 +43,6 @@ Designed for serious text editing directly on vintage hardware, SXED features a 
 - **Multiple Keymap Profiles:**
   - `STD`: Intuitive modern standard profile.
   - `TED`: WordStar-compatible cursor diamonds and shortcuts.
-  - `EMC`: Emacs-style control chords (`Ctrl-F`, `Ctrl-B`, `Ctrl-P`, `Ctrl-N`, `Ctrl-A`, `Ctrl-E`, `Ctrl-K`, `Ctrl-Y`).
 
 - **Color Themes & Typography:**
   - Customizable color palettes and shadow rendering (`DARK`, `GREEN`, `AMBER`, `MSX`).

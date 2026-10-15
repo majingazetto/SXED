@@ -6,6 +6,31 @@ Newest first. The manual is SXED.TXT.
 -------------------------------------------------------------
 
 
+ -------- v0.7 (2026-10-15)
+
+New
+- The cursor rolls over the line ends in DEV mode too: RIGHT
+  at the end of a line goes to the start of the next one,
+  LEFT at column 0 to the end of the previous one. Never
+  past the last line. Vi does it only in insert mode.
+
+Changed
+- Quitting with unsaved changes asks once: "Exit to
+  MSX-DOS?" with YES (exit without saving) and SAVE (save,
+  then exit; the default). ESC stays. The second "Save
+  changes?" question is gone.
+- The Emacs profile (EMC) is gone: STD, TED and Vi remain.
+  A CFG with PROFILE=EMC now starts in STD.
+- Unused code removed (the old profile cycling among it):
+  about 150 bytes freed in every editor, which is what
+  makes room for the above on S2ED.
+
+Fixed
+- The manuals named v0.5 in their header since v0.6; they
+  now carry the release they ship with, and the build checks
+  it against the code and this history.
+
+
  -------- v0.6 (2026-10-15)
 
 New

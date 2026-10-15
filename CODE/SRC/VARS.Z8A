@@ -147,7 +147,7 @@ BLNKCNT         DEFB    0               ; BLINK TICK COUNTER
 CURSHD          DEFB    0               ; SHAPE THE VISIBLE CURSOR WAS DRAWN WITH
 SELREDR         DEFB    0               ; NZ: REDRAW PAINTS THE SELECTION ROW BY ROW
 
-KMAPID          DEFB    0               ; 0=STD, 1=TED, 2=EMACS, 3=VI
+KMAPID          DEFB    0               ; 0=STD, 1=TED, 2=VI
 KMAPPTR         DEFW    0               ; POINTER TO ACTIVE KEYMAP TABLE
 VIMODE          DEFB    0               ; 0=NORMAL, 1=INSERT
 VILEAD          DEFB    0               ; VI LEADER KEY PENDING
@@ -260,9 +260,6 @@ SRCHLEN         DEFB    0               ; LENGTH OF SEARCH PATTERN (0..SRCHMAX)
 RPLCPAT         DEFS    SRCHMAX + 1, 0  ; REPLACE PATTERN (ASCIIZ)
 RPLCLEN         DEFB    0               ; LENGTH OF REPLACE PATTERN (0..SRCHMAX)
 SRCHOPT         DEFB    0               ; BIT 0: CASE SENSITIVE (1=YES, 0=NO)
-SRCHDIR         DEFB    0               ; 0 = FORWARD, 1 = BACKWARD
-SRCHLST         DEFW    0               ; LAST MATCH DOCLINE
-SRCHCOL         DEFB    0               ; LAST MATCH CURX
 FNDFOC          DEFB    0               ; FIND DIALOG ACTIVE FOCUS (0..6)
 FNDROW          DEFB    0               ; FIND DIALOG FIELD ROW
 FNDLEN          DEFB    0               ; FIND DIALOG FIELD LENGTH
@@ -445,7 +442,8 @@ WINVAR          DEFB    0               ; WINSTR: FONT VARIANT TEMP
 WINOP           DEFB    0               ; WINSTR: VDP LOGOP TEMP
 WINBST          DEFB    0               ; WINBTS: BUTTON STYLE (0=NORMAL, 1=SELECTED)
 WINSEL          DEFB    0               ; MODAL DIALOG: SELECTED OPTION INDEX
-WINRES          DEFB    0               ; MODAL DIALOG RESULT (0=CANCEL, 1=CONFIRM)
+WINRES          DEFB    0               ; MODAL DIALOG RESULT (0=CANCEL, 1=CONFIRM, 2=SAVE)
+ASKSAV          DEFB    0               ; 1 = DOASK'S SECOND BUTTON IS SAVE (ONE DIALOG)
 MNUID           DEFB    0               ; ACTIVE MENU ID (0=FILE, 1=EDIT, 2=VIEW, 3=OPT, 4=HELP)
 MNUSEL          DEFB    0               ; ACTIVE MENU ITEM INDEX
 MNUTMPY         DEFB    0               ; MENU TEMP REL Y

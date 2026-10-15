@@ -517,7 +517,7 @@ class G8Config(Case):
     variants = ('spaced', 'compact')
 
     WANT = {
-        'spaced': ([('KMAPID', 3, 'PROFILE=VI'), ('WRAPMODE', 1, 'WRAP=TXT'),
+        'spaced': ([('KMAPID', 2, 'PROFILE=VI'),   # KMVI: STD 0, TED 1, VI 2 ('WRAPMODE', 1, 'WRAP=TXT'),
                     ('MKUPMD', 2, 'MARKUP=LIT'), ('SHOWCLK', 0, 'CLOCK=0'),
                     ('TABWIDTH', 8, 'TABWIDTH=8'), ('SAVEEOL', 1, 'EOL=UNIX'),
                     ('AUTOALGN', 1, 'AUTOALIGN=ON')], AMBER),
@@ -4838,13 +4838,14 @@ THEME=DARK
         run = one(runs)
         checks = []
 
-        # Boot state: KMAPID = 3 (VI), status bar right-aligned with [NORM]
+        # Boot state: KMAPID = KMVI, status bar right-aligned with [NORM]
         stat_raw = run.snaps.get('boot', {}).get('STATBUF', [])
         stat_str = ''.join(chr(c) for c in stat_raw) if stat_raw else ''
+        vi = ctx.sym['KMVI']            # from the build, not a literal
         checks.append(Check('H27/boot-vi',
-                            run.var('boot', 'KMAPID') == 3 and ('[NORM]' in stat_str or '[N]' in stat_str),
-                            'KMAPID=3 and mode in status bar'
-                            if (run.var('boot', 'KMAPID') == 3 and ('[NORM]' in stat_str or '[N]' in stat_str)) else
+                            run.var('boot', 'KMAPID') == vi and ('[NORM]' in stat_str or '[N]' in stat_str),
+                            'KMAPID=%d (VI) and mode in status bar' % vi
+                            if (run.var('boot', 'KMAPID') == vi and ('[NORM]' in stat_str or '[N]' in stat_str)) else
                             'KMAPID=%s, stat=%r' % (run.var('boot', 'KMAPID'), stat_str)))
 
         # 1. :42 jump: DOCLINE = 41 (0-based line 42), CURX = 0
@@ -9119,6 +9120,157 @@ class W5ReflowEmpty(Case):
             Check('W5/content', got == want, disk_diff(got, want)),
         ]
 
+
+
+# --- Q7  ONE QUESTION TO QUIT WITH UNSAVED CHANGES ---------------------
+
+
+QUIT_LINES = ['%02d QUIT AND SAVE TEST LINE' % i for i in range(6)]
+
+
+class QuitSaveCase(object):
+    """Shared by S6ED, S61ED and S2ED: the dialog is each target's own code.
+
+    Modified: ESC asks "Exit to MSX-DOS?" with "Unsaved changes!" and
+    Yes / Save -- Yes leaves without saving, Save (S, or ENTER: the focus
+    starts there) saves and leaves, ESC stays.  Clean: Yes / No as before.
+    """
+    variants = ('yes', 'save', 'enter', 'esc', 'clean')
+    TAG = 'Q7'
+
+    def fixture(self, ctx, variant=None):
+        return crlf(QUIT_LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.wait(1.0)
+        if variant != 'clean':
+            t.text('X')
+        t.wait(1.0)
+        t.press('ESC')
+        t.snap('dlg', at='WINPOLL')
+        t.wait(1.0)
+        if variant == 'esc':
+            t.press('ESC')
+            t.wait(1.0)
+            t.snap('after')
+            return t
+        t.snap('exit', at='TERM.TERMDON')       # armed before the key that quits
+        t.press({'yes': 'Y', 'clean': 'Y', 'save': 'S', 'enter': 'RETURN'}[variant])
+        t.wait(8.0)
+        return t
+
+    def verify(self, ctx, runs):
+        checks = []
+        for variant, run in sorted(runs.items()):
+            pre = '%s/%s' % (self.TAG, variant)
+            got = run.session.extract(run.dsk, 'DOC.TXT')
+            saved = crlf(['X' + QUIT_LINES[0]] + QUIT_LINES[1:])
+            orig = crlf(QUIT_LINES)
+            dirty = variant != 'clean'
+            checks.append(Check(
+                '%s/dialog' % pre,
+                run.var('dlg', 'ASKSAV') == (1 if dirty else 0) and
+                run.var('dlg', 'WINSEL') == 1,
+                'ASKSAV %s (want %d: the second button is %s), focus %s (want 1)'
+                % (run.var('dlg', 'ASKSAV'), 1 if dirty else 0,
+                   'Save' if dirty else 'No', run.var('dlg', 'WINSEL'))))
+            if variant == 'esc':
+                checks.append(Check(
+                    '%s/stays' % pre,
+                    run.var('after', 'SCRRDY') == 0xFF and
+                    run.var('after', 'MODIFIED') == 0xFF and
+                    run.var('after', 'ASKSAV') == 0,
+                    'SCRRDY %s, MODIFIED %s, ASKSAV %s after ESC (want the '
+                    'editor, still modified, the flag cleared)'
+                    % (run.var('after', 'SCRRDY'), run.var('after', 'MODIFIED'),
+                       run.var('after', 'ASKSAV'))))
+                want = orig
+            else:
+                checks.append(Check('%s/exits' % pre, 'exit' in run.snaps,
+                                    'reached TERM' if 'exit' in run.snaps
+                                    else 'never reached TERM'))
+                want = saved if variant in ('save', 'enter') else orig
+            checks.append(Check('%s/content' % pre, got == want,
+                                disk_diff(got, want) if 'disk_diff' in globals()
+                                else ('byte for byte' if got == want else
+                                      'got %r, want %r' % (got, want))))
+        return checks
+
+
+class Q7QuitSave(QuitSaveCase, Case):
+    name = 'Q7-quit-save'
+    desc = ('with unsaved changes ESC asks once: Yes leaves without saving, '
+            'Save (S / ENTER) saves and leaves, ESC stays')
+    origin = ('reported 2026-10-15: "Save changes?" came after "Exit to '
+              'MSX-DOS?", and No there threw the edits away when the user '
+              'meant to stay. One question now, the tester\'s proposal')
+    cfg = UNDO_CFG
+
+
+# --- X3  ROLLOVER AT THE LINE ENDS ---------------------------------------
+
+
+class X3Rollover(Case):
+    name = 'X3-rollover'
+    desc = ('RIGHT at the end of a line goes to the start of the next, LEFT at '
+            'column 0 to the end of the one above, in WRAP_DEV too; never past '
+            'the last line. Vi rolls over only in insert mode')
+    origin = ('requested 2026-10-15: in WRAP_DEV the cursor stopped at the line '
+              'end. STD and TED roll over in both modes; Vi keeps h / l and the '
+              'cursor keys on the line in normal mode, as Vim does')
+    variants = ('std', 'ted', 'vi')
+    LINES = ['ab', 'cd']
+
+    def config(self, ctx, variant=None):
+        prof = {'std': 'STD', 'ted': 'TED', 'vi': 'VI'}[variant]
+        return UNDO_CFG.replace('PROFILE=STD', 'PROFILE=' + prof)
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.wait(1.0)
+        if variant == 'vi':
+            t.press('L', repeat=3)              # normal mode: stops on 'b'
+            t.snap('normal')
+            t.text('a')                         # insert after it: column 2
+            t.wait(0.5)
+        else:
+            t.press('RIGHT', repeat=2)          # the end of line 0
+        t.snap('eol')
+        t.press('RIGHT')
+        t.snap('right')
+        t.press('LEFT')
+        t.snap('left')
+        t.press('DOWN')
+        t.press('RIGHT', repeat=3)              # the end of the last line, then one more
+        t.snap('last')
+        return t
+
+    def verify(self, ctx, runs):
+        checks = []
+        for variant, run in sorted(runs.items()):
+            pre = 'X3/%s' % variant
+            pos = lambda s: (run.var(s, 'DOCLINE'), run.var(s, 'CURX'))
+            if variant == 'vi':
+                checks.append(Check('%s/normal-stays' % pre, pos('normal') == (0, 1),
+                                    'l three times in normal mode: %s (want (0, 1))'
+                                    % (pos('normal'),)))
+            checks += [
+                Check('%s/eol' % pre, pos('eol') == (0, 2), 'at %s' % (pos('eol'),)),
+                Check('%s/right' % pre, pos('right') == (1, 0),
+                      'RIGHT at the end: %s (want (1, 0))' % (pos('right'),)),
+                Check('%s/left' % pre, pos('left') == (0, 2),
+                      'LEFT at column 0: %s (want (0, 2))' % (pos('left'),)),
+                Check('%s/last' % pre, pos('last') == (1, 2) and
+                      run.var('last', 'TOTLINES') == 2,
+                      'past the end of the last line: %s, TOTLINES %s (want (1, 2), 2)'
+                      % (pos('last'), run.var('last', 'TOTLINES'))),
+            ]
+        return checks
+
 CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G6Hooks(),
          G7Selection(), G8Config(), G9Directory(), G10Autoalign(), G11Paste(),
          G12ScreenRestore(), G13FeatureResidency(), H1Help(), H2HelpQuestion(), H3HelpFile(), H4FileSwitch(), H5Verbose(), H6DatMissing(), H7AboutDialog(),
@@ -9136,9 +9288,9 @@ CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G
          K1WqSaveFailed(), K2LoadDiskError(), K3SaveCloseError(),
          P1ReflowBoundary(), P2DeleteLastRow0(), P3ReplaceAllUndo(),
          Q1StyleSelection(), Q2ShiftWrapScroll(), Q3FindAdjacent(),
-         Q4SettingsBorders(), Q5SettingsShadow(), Q6VdpWaitJiffy(),
+         Q4SettingsBorders(), Q5SettingsShadow(), Q6VdpWaitJiffy(), Q7QuitSave(),
          V1ViLeader(), V2WrapSelRoom(), V3InsDelimRoom(), V4ViColonBig(), W1TabRun(), W2SettingsFocus(), W3RewrapSettings(), W4RewrapMenu(), W5ReflowEmpty(),
-         X1ViLineBreak(), X2CuaLineBreak(), Z1CtrlStop(),
+         X1ViLineBreak(), X2CuaLineBreak(), X3Rollover(), Z1CtrlStop(),
          B2Font(), B3Rom(), B4CfgStream(), B5ShippedDisk(), B6ManualJp(), B6ManualF1xv(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(), D11Margin(), D12LongLine(), D13Overwrite(),

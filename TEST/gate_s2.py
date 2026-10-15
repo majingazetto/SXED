@@ -21,7 +21,8 @@ import pattern
 from gate import (BRW_BYTES, H30NewDocument, H36BrowseSaveAs,
                   H43CursorShape, H44SelScroll, H45SelAllPage,
                   asciiz, brw_drives, full_ent_bytes,
-                  REWRAP_LINES, rewrap_model, settings_to_txt)
+                  REWRAP_LINES, rewrap_model, settings_to_txt,
+                  QuitSaveCase)
 from cases import (Case, DEFAULT_CFG, HomePathCase, LongPathCase,
                    ShippedDiskCase, crlf, io_fixture, numbered)
 from harness import MACH_MSX1, Session
@@ -3969,7 +3970,7 @@ class S245SettingsValues(S2Case):
               'ON/OFF field; the field had no case of its own')
 
     # (label, values) in dialog order; Clock and Shadow share .VALALN.
-    ROWS = [('Profile:   ', ['STD', 'TED', 'EMC', 'VI']),
+    ROWS = [('Profile:   ', ['STD', 'TED', 'VI']),
             ('Wrap:      ', ['DEV', 'TXT']),
             ('Autoalign: ', ['OFF', 'ON', 'DEV']),
             ('Clock:     ', ['OFF', 'ON']),
@@ -4697,6 +4698,19 @@ class S254RewrapSettings(S2Case):
                                 'got %r, want %r' % (got, want)))
         return checks
 
+
+
+# --- S2-55  ONE QUESTION TO QUIT WITH UNSAVED CHANGES -------------------
+
+
+class S255QuitSave(QuitSaveCase, S2Case):
+    name = 'S2-55-quit-save'
+    TAG = 'S2-55'
+    desc = ('with unsaved changes ESC asks once: Yes leaves without saving, '
+            'Save (S / ENTER) saves and leaves, ESC stays')
+    origin = ('as Q7 on S6ED, 2026-10-15: the Save button is this target\'s '
+              'own DOASK code')
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
          S210Theme(), S211About(), S212DialogUndo(),
@@ -4715,7 +4729,7 @@ CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S245SettingsValues(), S246ViVisualWalk(), S247RightMargin(),
          S248ShadowRoundTrip(), S249Overwrite(), S250CursorShape(),
          S251SelScroll(), S252SelAllPage(),
-         S253UndoLongJoin(), S254RewrapSettings()]
+         S253UndoLongJoin(), S254RewrapSettings(), S255QuitSave()]
 
 
 def run(ctx, cases=None):

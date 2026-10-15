@@ -192,7 +192,7 @@ class HomePathCase(Case):
     # prefix).  KMAPID: 1 = WS, 3 = VI.
     WANT = {
         'root': (8, 1, 0, 'A:\\'),
-        'path': (2, 3, 1, 'A:\\TOOLS\\'),
+        'path': (2, 2, 1, 'A:\\TOOLS\\'),       # KMAPID 2 = KMVI
         'global-only': (8, 1, 1, 'A:\\TOOLS\\'),
         'fallback': (4, 0, 1, 'A:\\TOOLS\\'),   # no CFG anywhere: defaults
     }

@@ -1,5 +1,5 @@
 -------------------------------------------------------------
-SXED Screen X Text Editor v0.5 (2026-10-14)
+SXED Screen X Text Editor v0.7 (2026-10-15)
 2024 - 2026 Armando Pérez Abad
 
 S6ED  - Screen 6 text editor for MSX2, 80 columns
@@ -37,7 +37,6 @@ Fonts by Miguel A. Fernandez
 
     7.1.- STANDARD PROFILE (STD).
     7.2.- TED PROFILE (TED).
-    7.3.- EMACS PROFILE (EMC).
 
  8.- VI MODE.
 
@@ -289,7 +288,7 @@ The status bar has two channels:
 
  ---- 6.1.- MOVING THE CURSOR.
 
-These keys work the same in the STD, TED and EMC profiles
+These keys work the same in the STD and TED profiles
 (Vi has its own set, see 8):
 
     Left / Right          One character left / right
@@ -304,9 +303,11 @@ Lines can be up to 255 characters long. When the cursor moves
 past the right edge the window scrolls horizontally in 8
 column steps, so long lines are never cut.
 
-In WRAP=TXT mode (see 6.4) moving right past the end of a
-line jumps to the start of the next one, and moving left at
-column 1 jumps to the end of the previous one.
+Moving right past the end of a line jumps to the start of
+the next one, and moving left at column 1 jumps to the end
+of the previous one (never past the last line). In the Vi
+profile this happens only in insert mode: in normal mode
+h / l and the cursor keys stay on the line.
 
 
  ---- 6.2.- INSERT, DELETE & LINES.
@@ -427,9 +428,9 @@ pair or wrap the current selection.
 
  -------- 7.- KEYMAP PROFILES.
 
-Four keyboard profiles are built in: Standard, TED
-(WordStar), Emacs, and Vi. The Settings dialog selects
-one, and PROFILE= sets it in the CFG. The active profile
+Three keyboard profiles are built in: Standard, TED
+(WordStar) and Vi. The Settings dialog selects one, and
+PROFILE= sets it in the CFG. The active profile
 is remembered when you save Settings.
 
 The full tables follow. Unless noted, "the editor" means all
@@ -513,25 +514,6 @@ Shift+Ctrl or Shift+GRAPH:
     Ctrl+U / Ctrl+Shift+U    Undo / redo
     ESC                      Cancel selection, else quit
 
-
- ---- 7.3.- EMACS PROFILE (EMC).
-
-Basic Emacs-style control keys plus the standard cursor
-block:
-
-    Ctrl+B / Ctrl+F          Cursor left / right
-    Ctrl+P / Ctrl+N          Previous / next line
-    Ctrl+A / Ctrl+E          Beginning / end of line
-    Ctrl+D                   Delete character forward
-    Ctrl+Y                   Kill current line
-    Left/Right/Up/Down       Move cursor
-    Ctrl+Left / Ctrl+Right   Beginning / end of line
-    Ctrl+Up / Ctrl+Down      Top / bottom of document
-    GRAPH+Left/Right         Word left / right
-    GRAPH+Up / GRAPH+Down    Page up / down
-    GRAPH+BS                 Delete word left
-    Ctrl+Z / Ctrl+Shift+Z    Undo / redo
-    ESC                      Cancel selection, else quit
 
 The VI profile is a modal world of its own: see chapter 8.
 
@@ -661,7 +643,7 @@ either opens a new line.
 
 Undo/redo:
 
-    STD / EMC:  Ctrl+Z undo, Ctrl+Shift+Z redo
+    STD:        Ctrl+Z undo, Ctrl+Shift+Z redo
     TED:        Ctrl+U undo, Ctrl+Shift+U redo
     VI:         u undo, Ctrl+R redo
 
@@ -825,7 +807,7 @@ group: one undo reverts every replacement.
 Help > Settings (accelerator S) edits all the options in one
 dialog:
 
-    Profile     STD / TED / EMC / VI
+    Profile     STD / TED / VI
     Wrap        DEV / TXT
     Autoalign   OFF / ON / DEV
     Clock       OFF / ON
@@ -849,8 +831,8 @@ status bar shows "Saving..." and then [SAVED] or
 
  ---- 10.9.- CONFIRMATION DIALOGS.
 
-Quitting with unsaved changes, File > New or Open with a
-modified document, and overwriting in Save As all ask first:
+Quitting, File > New or Open with a modified document, and
+overwriting in Save As all ask first:
 
     [ YES ]  /  [ NO ]      Default is always NO
     Left / Right            Move between buttons
@@ -858,11 +840,17 @@ modified document, and overwriting in Save As all ask first:
     RETURN / SPACE          Accept the focused button
     ESC                     Same as NO
 
-With a dirty document the warning "Unsaved changes!" is
-shown. Confirming exit asks whether to save first ("Save
-changes?"). If yes, a named file is written, or Save As
-opens for an untitled file; if no, it exits discarding
-changes. If cancelled, you stay in the editor.
+Quitting with unsaved changes asks once, "Exit to MSX-DOS?"
+with the warning "Unsaved changes!", and the buttons are
+YES / SAVE instead:
+
+    YES  (Y)                Exit without saving
+    SAVE (S)                Save, then exit (the default)
+    ESC                     Stay in the editor
+
+SAVE writes a named file, or opens Save As for an untitled
+one; cancelling it or a write error keeps you in the
+editor.
 
 Note: ESC with an active selection only drops the
 selection; it does not quit.
@@ -895,7 +883,7 @@ one was read, otherwise to the general one.
 
 Keys (defaults in brackets):
 
-    PROFILE   STD / TED / EMC / VI              [STD]
+    PROFILE   STD / TED / VI                    [STD]
     WRAP      DEV / TXT                         [DEV]
     TEXTWIDTH 0..255 (alias TW; 0 = no margin)  [0]
     MARKUP    OFF / MD / LIT                    [MD]

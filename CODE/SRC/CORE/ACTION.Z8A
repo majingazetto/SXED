@@ -34,7 +34,7 @@ ACTTBL          DEFW    ACTNONE         ; 0
                 DEFW    ACTSAVE         ; 22
                 DEFW    ACTQUIT         ; 23
                 DEFW    ACTHELP         ; 24
-                DEFW    ACTCYCKM        ; 25
+                DEFW    ACTNONE         ; 25 (WAS CTRL+K, PROFILE: SETTINGS)
                 DEFW    ACTVIINS        ; 26
                 DEFW    ACTVIAPP        ; 27
                 DEFW    ACTVINRM        ; 28
@@ -957,29 +957,28 @@ ACTQUIT         LD      A, (SELACT)
                 OR      A
                 JR      Z, .ASKQ
                 JP      ACTDSEL
-.ASKQ           ; FTR-BUDGET: S6ED ~2,176 B FREE, S2ED 132 B >= 128 (2026-10-14)
+.ASKQ           ; ONE QUESTION. CLEAN: "EXIT TO MSX-DOS?" YES / NO. MODIFIED: THE
+                ; SAME WITH "UNSAVED CHANGES!" AND YES / SAVE -- YES LEAVES
+                ; WITHOUT SAVING, SAVE SAVES AND LEAVES, ESC STAYS. A SECOND
+                ; "SAVE CHANGES?" AFTER "EXIT?" READ AS IF NO WOULD STAY.
+                LD      A, (MODIFIED)
+                OR      A
+                JR      Z, .SETASK
+                LD      A, 1
+.SETASK         LD      (ASKSAV), A
+                ; FTR-BUDGET: S6ED ~2,190 B FREE, S2ED 156 B >= 128 (2026-10-15)
                 LD      A, (FTRSEG)
                 LD      HL, DOQIT
                 CALL    FCALL
+                XOR     A
+                LD      (ASKSAV), A     ; FOR THIS DIALOG ONLY
                 LD      A, (WINRES)
                 OR      A
                 RET     Z               ; CANCELLED: RESUME EDITING
+                DEC     A
+                JP      Z, TERM         ; YES: EXIT, DISCARDING ANY CHANGES
 
-                ; CONFIRMED EXIT: IF NOT MODIFIED, EXIT DIRECTLY TO DOS
-                LD      A, (MODIFIED)
-                OR      A
-                JP      Z, TERM
-
-                ; MODIFIED BUFFER: ASK "Save changes?" (YES / NO)
-                ; FTR-BUDGET: S6ED ~2,176 B FREE, S2ED 132 B >= 128 (2026-10-14)
-                LD      A, (FTRSEG)
-                LD      HL, DOSAVQ
-                CALL    FCALL
-                LD      A, (WINRES)
-                OR      A
-                JP      Z, TERM         ; NO: EXIT TO DOS DISCARDING CHANGES
-
-                ; YES: SAVE (OR SAVE AS IF UNTITLED)
+                ; SAVE (OR SAVE AS IF UNTITLED), THEN EXIT
                 LD      A, (FILENAME)
                 OR      A
                 JR      Z, .SAVAS
@@ -988,8 +987,6 @@ ACTQUIT         LD      A, (SELACT)
 .SAVAS          CALL    ACTSAVAS
 .SAVRES         RET     C               ; SAVE CANCELLED OR ERROR: STAY IN EDITOR
                 JP      TERM            ; SAVED: EXIT TO DOS
-
-STRSVQ          DEFM    "Save changes?", 0
 
 
 ; --- ACTHELP                   ----------------------------------------
@@ -1812,19 +1809,6 @@ SHOWLN          ; ALREADY ON SCREEN? TOPLINE <= DOCLINE < TOPLINE + ROWSVIS
 .ATTOP          LD      HL, 0
                 LD      (TOPLINE), HL
                 JP      SETCURY
-
-
-; --- ACTCYCKM                  ----------------------------------------
-
-
-; - ACTCYCKM ---------------------------
-; - CYCLE ACTIVE KEYMAP PROFILE
-; - IN:  NONE
-; - OUT: NONE
-; - CLOBBERS: ALL
-; -
-
-ACTCYCKM        JP      KMAPCYC
 
 
 ; --- ACTVIINS                  ----------------------------------------

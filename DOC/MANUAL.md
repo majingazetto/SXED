@@ -1,6 +1,6 @@
 # SXED User Manual & Reference Guide
 
-**SXED Screen X Text Editor v0.5 (2026-10-14)**  
+**SXED Screen X Text Editor v0.7 (2026-10-15)**  
 *(c) 2024 - 2026 Armando Pérez Abad*  
 *Fonts by Miguel A. Fernandez*
 
@@ -24,7 +24,6 @@
 - [7.- KEYMAP PROFILES.](#7-keymap-profiles)
   - [7.1.- STANDARD PROFILE (STD).](#7-1-standard-profile-std)
   - [7.2.- TED PROFILE (TED).](#7-2-ted-profile-ted)
-  - [7.3.- EMACS PROFILE (EMC).](#7-3-emacs-profile-emc)
 - [8.- VI MODE.](#8-vi-mode)
   - [8.1.- NORMAL MODE.](#8-1-normal-mode)
   - [8.2.- INSERT MODE.](#8-2-insert-mode)
@@ -217,7 +216,7 @@ The status bar has two channels:
 
 ### 6.1.- MOVING THE CURSOR
 
-These keys work the same in the STD, TED and EMC profiles (Vi has its own set, see 8):
+These keys work the same in the STD and TED profiles (Vi has its own set, see 8):
 
 | Key / Command | Description |
 |:---|:---|
@@ -231,7 +230,7 @@ These keys work the same in the STD, TED and EMC profiles (Vi has its own set, s
 
 Lines can be up to 255 characters long. When the cursor moves past the right edge the window scrolls horizontally in 8 column steps, so long lines are never cut.
 
-In WRAP=TXT mode (see 6.4) moving right past the end of a line jumps to the start of the next one, and moving left at column 1 jumps to the end of the previous one.
+Moving right past the end of a line jumps to the start of the next one, and moving left at column 1 jumps to the end of the previous one (never past the last line). In the Vi profile this happens only in insert mode: in normal mode h / l and the cursor keys stay on the line.
 
 ### 6.2.- INSERT, DELETE & LINES
 
@@ -312,7 +311,7 @@ OFF  Raw text (best for source code).
 
 ## 7.- KEYMAP PROFILES
 
-Four keyboard profiles are built in. Ctrl+K cycles them (STD -> TED -> EMC -> VI), the Settings dialog selects one, and PROFILE= sets it in the CFG. The active profile is remembered when you save Settings.
+Three keyboard profiles are built in: Standard, TED (WordStar) and Vi. The Settings dialog selects one, and PROFILE= sets it in the CFG. The active profile is remembered when you save Settings.
 
 The full tables follow. Unless noted, "the editor" means all three editors. In all profiles any unmapped printable key is typed into the document (in Vi, only in insert mode).
 
@@ -328,7 +327,6 @@ Common to ALL profiles:
 | `TAB` | Insert to next tab stop |
 | `BS / DEL` | Delete backward / forward |
 | `INSERT` | Toggle insert / overwrite |
-| `Ctrl+K` | Cycle keymap profile |
 | `Ctrl+G` | Go to line... |
 | `Ctrl+S` | Save |
 | `Ctrl+Q / ESC` | Quit (ESC first drops a selection) |
@@ -394,26 +392,6 @@ Compatible with the classic MSX TED 2.6 editor. Note: in TED Shift+cursor is wor
 | `Ctrl+Shift+S` | Save as... |
 | `Ctrl+L` | Open... (file browser) |
 | `Ctrl+U / Ctrl+Shift+U` | Undo / redo |
-| `ESC` | Cancel selection, else quit |
-
-### 7.3.- EMACS PROFILE (EMC)
-
-Basic Emacs-style control keys plus the standard cursor block:
-
-| Key / Command | Description |
-|:---|:---|
-| `Ctrl+B / Ctrl+F` | Cursor left / right |
-| `Ctrl+P / Ctrl+N` | Previous / next line |
-| `Ctrl+A / Ctrl+E` | Beginning / end of line |
-| `Ctrl+D` | Delete character forward |
-| `Ctrl+Y` | Kill current line |
-| `Left/Right/Up/Down` | Move cursor |
-| `Ctrl+Left / Ctrl+Right` | Beginning / end of line |
-| `Ctrl+Up / Ctrl+Down` | Top / bottom of document |
-| `GRAPH+Left/Right` | Word left / right |
-| `GRAPH+Up / GRAPH+Down` | Page up / down |
-| `GRAPH+BS` | Delete word left |
-| `Ctrl+Z / Ctrl+Shift+Z` | Undo / redo |
 | `ESC` | Cancel selection, else quit |
 
 The VI profile is a modal world of its own: see chapter 8.
@@ -538,7 +516,7 @@ Undo/redo:
 
 | Key / Command | Description |
 |:---|:---|
-| `` | STD / EMC:  Ctrl+Z undo, Ctrl+Shift+Z redo |
+| `STD:` | Ctrl+Z undo, Ctrl+Shift+Z redo |
 | `TED:` | Ctrl+U undo, Ctrl+Shift+U redo |
 | `VI:` | u undo, Ctrl+R redo |
 
@@ -663,7 +641,7 @@ Help > Settings (accelerator S) edits all the options in one dialog:
 
 | Key / Command | Description |
 |:---|:---|
-| `Profile` | STD / TED / EMC / VI |
+| `Profile` | STD / TED / VI |
 | `Wrap` | DEV / TXT |
 | `Autoalign` | OFF / ON / DEV |
 | `Clock` | OFF / ON |
@@ -679,7 +657,7 @@ Up/Down choose the option, Left/Right/SPACE cycle its value, and the [ OK ] / [C
 
 ### 10.9.- CONFIRMATION DIALOGS
 
-Quitting with unsaved changes, File > New or Open with a modified document, and overwriting in Save As all ask first:
+Quitting, File > New or Open with a modified document, and overwriting in Save As all ask first:
 
 ```text
 [ YES ]  /  [ NO ]      Default is always NO
@@ -689,7 +667,15 @@ RETURN / SPACE          Accept the focused button
 ESC                     Same as NO
 ```
 
-With a dirty document the warning "Unsaved changes!" is shown. Confirming exit asks whether to save first ("Save changes?"). If yes, a named file is written directly, or the Save As browser opens for an untitled file; if no, it exits discarding changes. Cancelling the Save As dialog or encountering a write error returns safely to the editor.
+Quitting with unsaved changes asks once, "Exit to MSX-DOS?" with the warning "Unsaved changes!", and the buttons are YES / SAVE instead:
+
+```text
+YES  (Y)                Exit without saving
+SAVE (S)                Save, then exit (the default)
+ESC                     Stay in the editor
+```
+
+SAVE writes a named file directly, or opens the Save As browser for an untitled one; cancelling it or a write error keeps you in the editor.
 
 Note: ESC with an active selection only drops the selection; it does not quit.
 
@@ -715,7 +701,7 @@ Keys (defaults in brackets):
 
 | Key / Command | Description |
 |:---|:---|
-| `PROFILE` | STD / TED / EMC / VI              [STD] |
+| `PROFILE` | STD / TED / VI                    [STD] |
 | `WRAP` | DEV / TXT                         [DEV] |
 | `` | TEXTWIDTH 0..255 (alias TW; 0 = no margin)  [0] |
 | `MARKUP` | OFF / MD / LIT                    [MD] |

@@ -168,26 +168,6 @@ EXECACT         CP      ACMAX
                 JP      CALHL
 
 
-; --- KMAPCYC                   ----------------------------------------
-
-
-; - KMAPCYC ----------------------------
-; - CYCLE ACTIVE KEYMAP PROFILE
-; - IN:  NONE
-; - OUT: NONE
-; - CLOBBERS: ALL
-; -
-
-KMAPCYC         LD      A, (KMAPID)
-                INC     A
-                CP      4
-                JR      C, .KCYCOK
-                XOR     A
-.KCYCOK         LD      (KMAPID), A
-                CALL    KMAPSW
-                JP      DRWSTAT
-
-
 ; --- KMAPSW                    ----------------------------------------
 
 
@@ -211,13 +191,7 @@ KMAPSW          LD      A, (KMAPID)
                 LD      (KMAPPTR), HL
                 RET
 
-.NOTTED         CP      KMEMACS
-                JR      NZ, .NOTEMAC
-                LD      HL, KMAPEMAC
-                LD      (KMAPPTR), HL
-                RET
-
-.NOTEMAC        ; KMVI
+.NOTTED         ; KMVI
                 XOR     A
                 LD      (VIMODE), A
                 LD      (VILEAD), A

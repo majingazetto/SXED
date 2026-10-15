@@ -14,7 +14,7 @@ import os
 import screen62
 from cases import Case, ShippedDiskCase, crlf, numbered
 from gate import (H36BrowseSaveAs, H43CursorShape, REWRAP_LINES, asciiz,
-                  rewrap_model, settings_to_txt)
+                  rewrap_model, settings_to_txt, QuitSaveCase)
 from harness import MACH_128K, MACH_2MB
 from keys import Timeline
 from result import Check
@@ -683,10 +683,23 @@ class S6214RewrapSettings(S62Case):
                                 'got %r, want %r' % (got, want)))
         return checks
 
+
+
+# --- S62-15  ONE QUESTION TO QUIT WITH UNSAVED CHANGES -------------------
+
+
+class S6215QuitSave(QuitSaveCase, S62Case):
+    name = 'S62-15-quit-save'
+    TAG = 'S62-15'
+    desc = ('with unsaved changes ESC asks once: Yes leaves without saving, '
+            'Save (S / ENTER) saves and leaves, ESC stays')
+    origin = ('as Q7 on S6ED, 2026-10-15: the Save button is this target\'s '
+              'own DOASK code')
+
 CASES = [S621Render(), S622Edit(), S623Scroll(), S624HScroll(),
          S625Windows(), S626Browse(), S627DatForeign(), S628LoadProgress(),
          S629BrowseBusy(), S6210ShippedDisk(), S6211SaveAsAfterOpen(),
-         S6212CursorShape(), S6213UndoLongJoin(), S6214RewrapSettings()]
+         S6212CursorShape(), S6213UndoLongJoin(), S6214RewrapSettings(), S6215QuitSave()]
 
 
 def run(ctx, cases=None):

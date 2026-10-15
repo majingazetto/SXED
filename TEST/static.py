@@ -883,6 +883,44 @@ def check_s2_theme_contrast(ctx):
                  % (len(themes), MIN_CONTRAST))
 
 
+def check_manual_version(ctx):
+    """Both manuals and the version history name the version the code is.
+
+    The manuals carry the version and date in their header, written by hand,
+    and v0.6 shipped both still saying "v0.5 (2026-10-14)".  The version comes
+    from VERSION.MAJOR / .MINOR in CORE/CONST_CORE.Z8A; the newest section of
+    CHANGES.TXT must be that version, and both manual headers must name it
+    with the same date.
+    """
+    const = open(os.path.join(ctx.src_dir, 'CORE', 'CONST_CORE.Z8A'),
+                 errors='replace').read()
+    major = re.search(r"^\.MAJOR\s+EQU\s+'(\d)'", const, re.M)
+    minor = re.search(r"^\.MINOR\s+EQU\s+'(\d)'", const, re.M)
+    if not (major and minor):
+        return Check('manual-version', False, 'VERSION not found in CONST_CORE')
+    ver = '%s.%s' % (major.group(1), minor.group(1))
+    doc = os.path.join(ctx.code_dir, '..', 'DOC')
+    found = {}
+    pats = {'CHANGES.TXT': r'^ -+ v(\d+\.\d+) \((\d{4}-\d\d-\d\d)\)',
+            'SXED.TXT': r'^SXED Screen X Text Editor v(\d+\.\d+) \((\d{4}-\d\d-\d\d)\)',
+            'MANUAL.md': r'^\*\*SXED Screen X Text Editor v(\d+\.\d+) \((\d{4}-\d\d-\d\d)\)\*\*'}
+    for name, pat in pats.items():
+        m = re.search(pat, open(os.path.join(doc, name), encoding='utf-8',
+                                errors='replace').read(), re.M)
+        if not m:
+            return Check('manual-version', False, 'no version line in %s' % name)
+        found[name] = (m.group(1), m.group(2))
+    bad = ['%s v%s' % (n, v) for n, (v, _) in sorted(found.items()) if v != ver]
+    dates = {d for _, d in found.values()}
+    if len(dates) > 1:
+        bad.append('dates differ: %s' % ', '.join(
+            '%s %s' % (n, d) for n, (_, d) in sorted(found.items())))
+    return Check('manual-version', not bad,
+                 'v%s (%s) in the code, CHANGES.TXT and both manuals'
+                 % (ver, found['CHANGES.TXT'][1]) if not bad else
+                 'code is v%s: %s' % (ver, '; '.join(bad)))
+
+
 ALL = [check_build_clean, check_image_end, check_vars_block, check_init_clear,
        check_layout_asserts, check_record_exclusive, check_target_params,
        check_data_placement, check_statbuf_term,
@@ -891,7 +929,8 @@ ALL = [check_build_clean, check_image_end, check_vars_block, check_init_clear,
        check_page1_hooks,
        check_assets, check_feature_discipline, check_window_discipline,
        check_ftr_budget, check_tpa_chain, check_build_symmetry,
-       check_manual_width, check_manual_charset, check_s2_theme_contrast]
+       check_manual_width, check_manual_charset, check_manual_version,
+       check_s2_theme_contrast]
 
 
 def run(ctx):

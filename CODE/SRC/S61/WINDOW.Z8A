@@ -682,16 +682,8 @@ WINSID          LD      HL, (WINH)
                 JP      LMMV
 
 
-; - WINBTN -----------------------------
-; - DRAW BUTTON, NORMAL STYLE (SEE WINBTS FOR THE STYLE LAYOUT)
-; - IN:  HL = ASCIIZ BUTTON TEXT
-; -      DE = RELATIVE X (PIXELS, MULTIPLE OF 4: THE BODY IS AN HMMV)
-; -      BC = RELATIVE Y (PIXELS)
-; - OUT: NONE
-; - CLOBBERS: ALL
-; -
 ; - WINBTS -----------------------------
-; - SAME, WITH EXPLICIT STYLE FOR OPTION SELECTION:
+; - DRAW BUTTON WITH AN EXPLICIT STYLE:
 ; - STYLE 0 (NORMAL):   COL_FG BORDER, CLR_BG BODY, NORMAL TEXT IN TIMP:
 ; -   UNFOCUSED BUTTON RESTS ON WINDOW BACKGROUND, TEXT IN COL_FG
 ; - STYLE 1 (SELECTED): COL_HI BORDER, CLR_UI BODY, BOLD TEXT IN TOR:
@@ -700,12 +692,13 @@ WINSID          LD      HL, (WINH)
 ; - FROM ITS LENGTH. A 9-CHARACTER "[  YES  ]" RAN 2 PX PAST THE BODY AND
 ; - ITS "]" LANDED ON THE BORDER.
 ; - IN:  A  = STYLE (0 = NORMAL, 1 = SELECTED)
-; -      HL, DE, BC AS ABOVE
+; -      HL = ASCIIZ BUTTON TEXT
+; -      DE = RELATIVE X (PIXELS, MULTIPLE OF 4: THE BODY IS AN HMMV)
+; -      BC = RELATIVE Y (PIXELS)
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; -
 
-WINBTN          XOR     A               ; STYLE NORMAL
 WINBTS          LD      (WINBST), A
                 PUSH    HL
                 PUSH    DE
@@ -1084,11 +1077,6 @@ DOQIT           LD      HL, DOASK.TITQIT
                 LD      DE, DOASK.STRQIT
                 JR      DOASK
 
-DOSAVQ          LD      HL, DOASK.TITQIT
-                LD      DE, STRSVQ
-                XOR     A               ; DO NOT SHOW UNSAVED CHANGES WARNING
-                JR      DOASK.ASKGO
-
 DOOPN           LD      HL, DOASK.TITOPN
                 LD      DE, DOASK.STRNEW
                 JR      DOASK
@@ -1107,7 +1095,8 @@ DONEW           LD      HL, DOASK.TITNEW
 ; - ASK A YES / NO QUESTION: TWO SELECTABLE OPTIONS, DEFAULT NO
 ; - IN:  HL = ASCIIZ TITLE, DE = ASCIIZ QUESTION (FEATURE SEGMENT)
 ; -      READS MODIFIED FOR THE UNSAVED-CHANGES WARNING LINE
-; - OUT: WINRES = 1: CONFIRMED, 0: CANCELLED
+; - OUT: WINRES = 1: CONFIRMED, 0: CANCELLED, 2: SAVE -- WITH ASKSAV SET
+; -      THE SECOND BUTTON IS "Save" (S) INSTEAD OF "No" (ACTQUIT CLEARS IT)
 ; - CLOBBERS: ALL
 ; -
 ; - LEFT/RIGHT MOVE THE SELECTION, ENTER/SPACE ACTIVATE IT, Y/N ARE
@@ -1182,6 +1171,10 @@ DOASK           LD      A, 1            ; SHOW UNSAVED WARNING IF DIRTY
                 JR      Z, .DONE
                 CP      'n'
                 JR      Z, .DONE
+                CP      'S'             ; SAVE (ASKSAV); WITHOUT IT, A CANCEL
+                JR      Z, .SECOND
+                CP      's'
+                JR      Z, .SECOND
                 JR      .KEYLP
 
 .TOYES          XOR     A
@@ -1206,7 +1199,10 @@ DOASK           LD      A, 1            ; SHOW UNSAVED WARNING IF DIRTY
                 JR      .KEYLP
 
 .ACCEPT         LD      A, (WINSEL)
-                XOR     1               ; YES (0) CONFIRMS, NO (1) CANCELS
+                OR      A
+                JR      Z, .YES         ; YES (0) CONFIRMS
+.SECOND         LD      A, (ASKSAV)     ; NO (1) CANCELS: 0; SAVE: 2
+                ADD     A, A
                 LD      (WINRES), A
                 JR      .DONE
 
@@ -1233,7 +1229,13 @@ DOASK           LD      A, 1            ; SHOW UNSAVED WARNING IF DIRTY
                 JR      .NSGO
 .NSSEL          LD      A, 1            ; NO SELECTED
 .NSGO           LD      HL, .BTNNO
-                LD      DE, 108         ; MULTIPLE OF 4: BUTTON BODY IS HMMV
+                LD      E, A            ; STYLE
+                LD      A, (ASKSAV)
+                OR      A
+                LD      A, E
+                JR      Z, .NSLBL
+                LD      HL, .BTNSAV
+.NSLBL          LD      DE, 108         ; MULTIPLE OF 4: BUTTON BODY IS HMMV
                 LD      BC, 44
                 JP      WINBTS
 
@@ -1247,6 +1249,7 @@ DOASK           LD      A, 1            ; SHOW UNSAVED WARNING IF DIRTY
 .STRWRN         DEFM    "Unsaved changes!", 0
 .BTNYES         DEFM    "Yes", 0
 .BTNNO          DEFM    "No", 0
+.BTNSAV         DEFM    "Save", 0
 
 
 ; --- WINEDIT                   ----------------------------------------
@@ -2374,7 +2377,7 @@ DOSETT          LD      HL, 120
                 LD      (HL), A
                 RET
 
-.MAXTBL         DEFB    4, 2, 3, 2, 3, 3, 3, THMCNT
+.MAXTBL         DEFB    3, 2, 3, 2, 3, 3, 3, THMCNT
                 DEFB    2
 
 .DRWUI          ; CLEAR WINDOW BODY
@@ -2634,11 +2637,10 @@ DOSETT          LD      HL, 120
 .LBLTHM         DEFM    "Theme:     ", 0
 .LBLSHD         DEFM    "Shadow:    ", 0
 
-.VALPRF         DEFW    .VP0, .VP1, .VP2, .VP3
+.VALPRF         DEFW    .VP0, .VP1, .VP2
 .VP0            DEFM    "STD", 0
 .VP1            DEFM    "TED", 0
-.VP2            DEFM    "EMC", 0
-.VP3            DEFM    "VI", 0
+.VP2            DEFM    "VI", 0
 
 .VALWRP         DEFW    .VA2, .VW1
 .VW1            DEFM    "TXT", 0

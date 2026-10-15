@@ -167,61 +167,6 @@ KMAPTED         ; UNMODIFIED CURSORS
                 DEFB    #FF
 
 
-; --- KMAPEMAC                  ----------------------------------------
-
-
-KMAPEMAC        ; EMACS NAVIGATION & EDITING
-                DEFB    CTRL_B,  MODCTRL, ACMVL
-                DEFB    CTRL_F,  MODCTRL, ACMVR
-                DEFB    CTRL_P,  MODCTRL, ACMVU
-                DEFB    CTRL_N,  MODCTRL, ACMVD
-                DEFB    CTRL_A,  MODCTRL, ACBOL
-                DEFB    CTRL_E,  MODCTRL, ACEOL
-                DEFB    CTRL_D,  MODCTRL, ACDELFW
-                DEFB    CTRL_Y,  MODCTRL, ACDELLN
-                DEFB    CTRL_Z,  MODCTRL, ACUNDO
-                DEFB    CTRL_Z,  MODSHFT | MODCTRL, ACREDO
-                DEFB    CTRL_S,  MODCTRL, ACSAVE
-                DEFB    CTRL_S,  MODSHFT | MODCTRL, ACSAVAS
-
-                ; UNMODIFIED CURSORS
-                DEFB    CLEFT,   MODNONE, ACMVL
-                DEFB    CRIGHT,  MODNONE, ACMVR
-                DEFB    CUP,     MODNONE, ACMVU
-                DEFB    CDOWN,   MODNONE, ACMVD
-
-                ; CTRL + CURSORS
-                DEFB    CLEFT,   MODCTRL, ACBOL
-                DEFB    CRIGHT,  MODCTRL, ACEOL
-                DEFB    CUP,     MODCTRL, ACTOP
-                DEFB    CDOWN,   MODCTRL, ACBOT
-
-                ; GRAPH + CURSORS
-                DEFB    CLEFT,   MODGRPH, ACWLFT
-                DEFB    CRIGHT,  MODGRPH, ACWRGT
-                DEFB    BS,      MODGRPH, ACDWLFT
-                DEFB    CUP,     MODGRPH, ACPGUP
-                DEFB    CDOWN,   MODGRPH, ACPGDN
-
-                ; EDITING & SYSTEM
-                DEFB    TAB,     MODNONE, ACTABS
-                DEFB    BS,      MODNONE, ACDELBK
-                DEFB    DEL,     MODNONE, ACDELFW
-                DEFB    CR,      MODANY,  ACNWLIN
-                DEFB    INSKEY,  MODNONE, ACTGLIN
-                DEFB    CTRL_G,  MODCTRL, ACGOTOL
-                DEFB    CTRL_Q,  MODCTRL, ACQUIT
-                DEFB    ESC,     MODANY,  ACQUIT
-                DEFB    F1KEY,   MODANY,  ACMENU
-                DEFB    F2KEY,   MODANY,  ACMNU1
-                DEFB    F3KEY,   MODANY,  ACMNU2
-                DEFB    F4KEY,   MODANY,  ACMNU3
-                DEFB    F5KEY,   MODANY,  ACMNU4
-                DEFB    SELKEY,  MODNONE, ACMENU
-                DEFB    F10KEY,  MODANY,  ACMENU
-                DEFB    #FF
-
-
 ; --- KMAPVIN                   ----------------------------------------
 
 

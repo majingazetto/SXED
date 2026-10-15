@@ -8,7 +8,7 @@
 
 VERSION
 .MAJOR          EQU     '0'
-.MINOR          EQU     '6'
+.MINOR          EQU     '7'
 
 
 ; --- CHARACTER ATTRIBUTES      ----------------------------------------
@@ -281,7 +281,6 @@ ACTGLIN         EQU     20              ; INS
 ACSAVE          EQU     22              ; F2 / CTRL + S
 ACQUIT          EQU     23              ; ESC / CTRL + Q
 ACHELP          EQU     24              ; F1
-ACCYCKM         EQU     25              ; F5 / CTRL + K
 ACVIINS         EQU     26              ; VI i
 ACVIAPP         EQU     27              ; VI a
 ACVINRM         EQU     28              ; VI ESC
@@ -370,8 +369,7 @@ ED_FCAN         EQU     2               ; FOCUS: THE CANCEL BUTTON
 
 KMSTD           EQU     0               ; STANDARD / CUA (DEFAULT)
 KMTED           EQU     1               ; TED 2.6 (HISOFT / RIES VRIEND)
-KMEMACS         EQU     2               ; EMACS
-KMVI            EQU     3               ; VI MODAL
+KMVI            EQU     2               ; VI MODAL
 
 VIMNORM         EQU     0               ; VI NORMAL MODE
 VIMINS          EQU     1               ; VI INSERT MODE

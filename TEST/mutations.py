@@ -643,6 +643,117 @@ MUTATIONS = [
         'expect': ['W4/sel/content'],
     },
     {
+        'name': 'quit-save-none',
+        'why': 'the Save button of the quit question acts as No: it cancels',
+        'file': 'WINDOW.Z8A',
+        'old': """.SECOND         LD      A, (ASKSAV)     ; NO (1) CANCELS: 0; SAVE: 2
+                ADD     A, A""",
+        'new': """.SECOND         LD      A, (ASKSAV)     ; NO (1) CANCELS: 0; SAVE: 2
+                XOR     A               ; MUTATION: SAVE CANCELS""",
+        'filter': 'Q7',
+        # the session waits on TERM that never comes: the case goes red
+        'expect_any': ['Q7/save/exits', 'Q7-quit-save'],
+    },
+    {
+        'name': 's2-quit-save-none',
+        'why': 'S2ED: the Save button of the quit question acts as No',
+        'target': 'S2ED',
+        'file': 'WINDOW.Z8A',
+        'old': """.SECOND         LD      A, (ASKSAV)     ; NO (1) CANCELS: 0; SAVE: 2
+                ADD     A, A""",
+        'new': """.SECOND         LD      A, (ASKSAV)     ; NO (1) CANCELS: 0; SAVE: 2
+                XOR     A               ; MUTATION: SAVE CANCELS""",
+        'filter': 'S2-55',
+        'expect_any': ['S2-55/save/exits', 'S2-55-quit-save'],
+    },
+    {
+        'name': 's61-quit-save-none',
+        'why': 'S61ED: the Save button of the quit question acts as No',
+        'target': 'S61ED',
+        'file': 'WINDOW.Z8A',
+        'old': """.SECOND         LD      A, (ASKSAV)     ; NO (1) CANCELS: 0; SAVE: 2
+                ADD     A, A""",
+        'new': """.SECOND         LD      A, (ASKSAV)     ; NO (1) CANCELS: 0; SAVE: 2
+                XOR     A               ; MUTATION: SAVE CANCELS""",
+        'filter': 'S62-15',
+        'expect_any': ['S62-15/save/exits', 'S62-15-quit-save'],
+    },
+    {
+        'name': 'quit-askflag',
+        'why': 'a modified document is asked Yes / No, as if clean: no way to save',
+        'file': 'ACTION.Z8A',
+        'old': """                LD      A, 1
+.SETASK         LD      (ASKSAV), A""",
+        'new': """                XOR     A               ; MUTATION: NEVER THE SAVE BUTTON
+                NOP
+.SETASK         LD      (ASKSAV), A""",
+        'filter': 'Q7',
+        # the save variant then waits on a TERM that never comes: the whole
+        # case goes red and its checks are not evaluated
+        'expect_any': ['Q7/yes/dialog', 'Q7-quit-save'],
+    },
+    {
+        'name': 'quit-askclr',
+        'why': 'the Save flag outlives the quit question and turns the next '
+               'Yes / No dialog into Yes / Save',
+        'file': 'ACTION.Z8A',
+        'old': """                XOR     A
+                LD      (ASKSAV), A     ; FOR THIS DIALOG ONLY""",
+        'new': """                XOR     A               ; MUTATION: FLAG KEPT
+                NOP
+                NOP
+                NOP""",
+        'filter': 'Q7',
+        'expect': ['Q7/esc/stays'],
+    },
+    {
+        'name': 'quit-skey',
+        'why': 'S does not answer Save in the quit question',
+        'file': 'WINDOW.Z8A',
+        'old': """                CP      'S'             ; SAVE (ASKSAV); WITHOUT IT, A CANCEL
+                JR      Z, .SECOND
+                CP      's'
+                JR      Z, .SECOND""",
+        'new': """                NOP                     ; MUTATION: NO S KEY
+                NOP
+                NOP
+                NOP
+                NOP
+                NOP
+                NOP
+                NOP""",
+        'filter': 'Q7',
+        'expect_any': ['Q7/save/exits', 'Q7-quit-save'],
+    },
+    {
+        'name': 'rollover-dev',
+        'why': 'the cursor stops at the line ends in WRAP_DEV, as before v0.7',
+        'file': 'EDIT.Z8A',
+        'old': """ROLLOK          LD      A, (WRAPMODE)
+                CP      WRAP_TXT
+                RET     Z""",
+        'new': """ROLLOK          LD      A, (WRAPMODE)
+                CP      WRAP_TXT
+                RET     Z
+                OR      #FF             ; MUTATION: NO ROLLOVER IN DEV
+                RET""",
+        'filter': 'X3',
+        'expect': ['X3/std/right', 'X3/ted/left'],
+    },
+    {
+        'name': 'rollover-vi-normal',
+        'why': 'Vi normal mode rolls over too: l at the end of a line leaves it',
+        'file': 'EDIT.Z8A',
+        'old': """                CP      KMVI
+                JR      NZ, .YES
+                LD      A, (VIMODE)""",
+        'new': """                CP      KMVI
+                JR      .YES            ; MUTATION: VI ROLLS IN EVERY MODE
+                LD      A, (VIMODE)""",
+        'filter': 'X3',
+        'expect': ['X3/vi/normal-stays'],
+    },
+    {
         'name': 'undo-long-drop',
         'why': 'dev as it was reported: an edit on a long line drops the '
                'whole history, so Ctrl+Z does nothing',

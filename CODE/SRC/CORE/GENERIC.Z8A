@@ -285,18 +285,6 @@ PNTHL           LD      A,(HL)
 CALHL           JP   (HL) 
 
 
-; - CALFUN --------------     
-; - HL: POINTER 
-; - A * 2       
-; - HL + = A    
-; - HL = (HL)   
-; - JP (HL)     
-; -
-
-CALFUN          CALL ADDHLPNT
-                JP   (HL)
-
-
 ; --- FUNCTION KEYS             -----------------------------------------
 
 

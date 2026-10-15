@@ -1930,10 +1930,9 @@ EDMOVCHR        CP      CRIGHT
                 LD      (CURX), A
                 RET
 
-.LEFT0          LD      A, (WRAPMODE)
-                CP      WRAP_TXT
-                RET     NZ              ; WRAP_DEV: STAY AT COL 0
-                ; WRAP_TXT: WRAP TO PREVIOUS LINE
+.LEFT0          CALL    ROLLOK
+                RET     NZ              ; NO ROLLOVER: STAY AT COL 0
+                ; ROLL TO THE END OF THE PREVIOUS LINE
                 LD      HL, (DOCLINE)
                 LD      A, H
                 OR      L
@@ -1956,10 +1955,9 @@ EDMOVCHR        CP      CRIGHT
                 LD      (CURX), A
                 RET
 
-.RGTWRAP        LD      A, (WRAPMODE)
-                CP      WRAP_TXT
-                RET     NZ              ; WRAP_DEV: STAY AT MAX COLUMN
-                ; WRAP_TXT: WRAP TO NEXT LINE
+.RGTWRAP        CALL    ROLLOK
+                RET     NZ              ; NO ROLLOVER: STAY AT MAX COLUMN
+                ; ROLL TO THE START OF THE NEXT LINE (NEVER ADDS ONE)
                 LD      HL, (DOCLINE)
                 INC     HL
                 LD      DE, (TOTLINES)
@@ -1969,6 +1967,31 @@ EDMOVCHR        CP      CRIGHT
                 LD      (CURX), A
                 LD      A, CDOWN
                 JP      EDMOVROW
+
+
+; - ROLLOK -----------------------------
+; - DOES A SIDEWAYS MOVE ROLL OVER THE LINE END (RIGHT AT THE END TO THE
+; - NEXT LINE, LEFT AT COLUMN 0 TO THE END OF THE ONE ABOVE)?  ALWAYS IN
+; - WRAP_TXT, AS IT ALWAYS DID; IN WRAP_DEV TOO FOR STD AND TED, AND FOR VI
+; - IN INSERT MODE, WHERE THE CURSOR KEYS ARE HOW ONE MOVES WHILE TYPING.
+; - VI NORMAL AND VISUAL KEEP H / L AND THE CURSOR KEYS ON THE LINE, AS
+; - VIM DOES.
+; - IN:  NONE
+; - OUT: Z = ROLL OVER, NZ = STAY
+; - CLOBBERS: AF
+; -
+
+ROLLOK          LD      A, (WRAPMODE)
+                CP      WRAP_TXT
+                RET     Z
+                LD      A, (KMAPID)
+                CP      KMVI
+                JR      NZ, .YES
+                LD      A, (VIMODE)
+                CP      VIMINS
+                RET
+.YES            XOR     A
+                RET
 
 
 ; --- GETMAXC                   ----------------------------------------

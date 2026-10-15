@@ -382,34 +382,6 @@ SETWRT          PUSH    BC
                 RET
 
 
-
-
-; --- SETRD                     ----------------------------------------
-
-
-; - SETRD ------------------------------
-; - SETS VRAM READ ADDRESS IN TMS9918
-; - RUNS WITH DI TO PROTECT THE TWO CONTROL WRITES FROM ISR CORRUPTION
-; - IN:  HL = 14-BIT VRAM ADDRESS
-; - OUT: NONE
-; - CLOBBERS: AF
-; -
-
-SETRD           PUSH    BC
-                LD      A, (VDPCTRL)
-                LD      C, A
-                DI
-                OUT     (C), L
-                LD      A, H
-                AND     #3F             ; BIT 6 = 0 (READ SETUP)
-                OUT     (C), A
-                EI
-                POP     BC
-                RET
-
-
-
-
 ; --- VDPDUMP                   ----------------------------------------
 
 
