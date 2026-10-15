@@ -2977,62 +2977,71 @@ class D9Kana(Case):
 
 class D10Markup(Case):
     name = 'D10-markup'
-    desc = 'markdown and lite markup: mode cycling, delimiter insertion, and selection wrapping'
-    origin = ('ACTCYCMK cycles MKUPMD (OFF->MD->LITE->OFF), INSDELIM inserts delimiter pairs '
-              'with centered cursor, and WRAPSEL wraps single-line selection in delimiters')
-    cfg = ("; MARKUP test configuration\r\n"
-           "MARKUP = OFF\r\n"
-           "WRAP = DEV\r\n"
-           "PROFILE = STD\r\n")
+    desc = ('markdown and lite markup from the CFG: delimiter insertion and '
+            'selection wrapping; Ctrl+T and Ctrl+W no longer change a setting')
+    origin = ('INSDELIM inserts delimiter pairs with centered cursor, and WRAPSEL '
+              'wraps single-line selection in delimiters.  The markup mode used '
+              'to be cycled with Ctrl+T and the wrap mode toggled with Ctrl+W; '
+              'both are Settings now (2026-10-15), so the keys must do nothing')
     autoexec = 'S6ED DOC.TXT'
+    variants = ('md', 'lit')
+
+    def config(self, ctx, variant=None):
+        return ("; MARKUP test configuration\r\n"
+                "MARKUP = %s\r\n"
+                "WRAP = DEV\r\n"
+                "PROFILE = STD\r\n" % ('MD' if variant == 'md' else 'LIT'))
 
     def timeline(self, ctx, variant=None):
         t = Timeline()
         t.snap('m0')
-        t.press('T', mods=['CTRL'])    # OFF -> MD (1)
+        if variant == 'md':
+            t.press('B', mods=['CTRL'])    # INSDELIM: inserts '****', cursor in middle
+            t.text('BOLD')                 # '**BOLD**', cursor before closing '**'
+            t.press('RIGHT', repeat=2)     # past closing '**' to EOL (col 8)
+            t.press('RETURN')              # line 1
+            t.press('I', mods=['CTRL'])    # INSDELIM: inserts '**', cursor in middle
+            t.text('ITAL')                 # '*ITAL*', cursor before closing '*'
+            t.press('RIGHT')               # past closing '*' to EOL (col 6)
+            t.press('RETURN')              # line 2
+            t.text('TARGET')
+            t.press('LEFT', mods=['SHIFT'], repeat=6)  # select 'TARGET'
+            t.press('B', mods=['CTRL'])    # WRAPSEL: '**TARGET**'
+        else:
+            t.text('LITETEST')
+            t.press('LEFT', mods=['SHIFT'], repeat=8)  # select 'LITETEST'
+            t.press('B', mods=['CTRL'])    # WRAPSEL: in LITE wraps with '*'
+        t.press('RIGHT', mods=['CTRL'])    # deselect, to EOL
+        t.press('T', mods=['CTRL'])        # no longer bound: nothing happens
+        t.press('W', mods=['CTRL'])        # no longer bound: nothing happens
+        t.wait(1.0)
         t.snap('m1')
-        t.press('B', mods=['CTRL'])    # INSDELIM: inserts '****', cursor in middle
-        t.text('BOLD')                 # text is '**BOLD**', cursor at col 6 (before closing '**')
-        t.press('RIGHT', repeat=2)     # move past closing '**' to EOL (col 8)
-        t.press('RETURN')              # line 1
-        t.press('I', mods=['CTRL'])    # INSDELIM: inserts '**', cursor in middle
-        t.text('ITAL')                 # text is '*ITAL*', cursor at col 5 (before closing '*')
-        t.press('RIGHT')               # move past closing '*' to EOL (col 6)
-        t.press('RETURN')              # line 2
-        t.text('TARGET')               # len 6
-        t.press('LEFT', mods=['SHIFT'], repeat=6)  # select 'TARGET'
-        t.press('B', mods=['CTRL'])    # WRAPSEL: wraps with '**' -> '**TARGET**' (len 10)
-        t.press('RIGHT', mods=['CTRL'])            # move to EOL of line 2 (col 10)
-        t.press('T', mods=['CTRL'])    # MD -> LITE (2)
-        t.snap('m2')
-        t.press('RETURN')              # line 3
-        t.text('LITETEST')             # len 8
-        t.press('LEFT', mods=['SHIFT'], repeat=8)  # select 'LITETEST'
-        t.press('B', mods=['CTRL'])    # WRAPSEL: in LITE wraps with '*' -> '*LITETEST*' (len 10)
-        t.press('T', mods=['CTRL'])    # LITE -> OFF (0)
-        t.snap('m3')
         t.press('S', mods=['CTRL'])
         t.wait(3.0)
         t.snap('saved')
         return t
 
     def verify(self, ctx, runs):
-        run = one(runs)
-        got = run.session.extract(run.dsk, 'DOC.TXT')
-        want = crlf(['**BOLD**', '*ITAL*', '**TARGET**', '*LITETEST*'])
-        m0 = run.var('m0', 'MKUPMD')
-        m1 = run.var('m1', 'MKUPMD')
-        m2 = run.var('m2', 'MKUPMD')
-        m3 = run.var('m3', 'MKUPMD')
-        checks = [
-            Check('D10/mode-cycle', m0 == 0 and m1 == 1 and m2 == 2 and m3 == 0,
-                  'MKUPMD: %d -> %d -> %d -> %d' % (m0, m1, m2, m3)),
-            Check('D10/content', got == want,
-                  'document matches byte for byte' if got == want else
-                  'got %r, want %r' % (got, want)),
-            Check('D10/totlines', run.var('saved', 'TOTLINES') == 4,
-                  'TOTLINES = %s (expected 4)' % run.var('saved', 'TOTLINES')),
-        ]
+        checks = []
+        for variant, run in sorted(runs.items()):
+            pre = 'D10/%s' % variant
+            got = run.session.extract(run.dsk, 'DOC.TXT')
+            want = crlf(['**BOLD**', '*ITAL*', '**TARGET**'] if variant == 'md'
+                        else ['*LITETEST*'])
+            mode = 1 if variant == 'md' else 2
+            m0, m1 = run.var('m0', 'MKUPMD'), run.var('m1', 'MKUPMD')
+            checks += [
+                Check('%s/mode' % pre, m0 == mode and m1 == mode,
+                      'MKUPMD %s from the CFG, %s after Ctrl+T (want %d both)'
+                      % (m0, m1, mode)),
+                Check('%s/wrap-kept' % pre,
+                      run.var('m0', 'WRAPMODE') == 0 and run.var('m1', 'WRAPMODE') == 0,
+                      'WRAPMODE %s -> %s across Ctrl+W (want 0, DEV)'
+                      % (run.var('m0', 'WRAPMODE'), run.var('m1', 'WRAPMODE'))),
+                Check('%s/content' % pre, got == want,
+                      'document matches byte for byte' if got == want else
+                      'got %r, want %r' % (got, want)),
+            ]
         return checks
 
 
@@ -7228,7 +7237,8 @@ class R4UndoLongLine(Case):
     origin = ('2026-10-06 review: UNDOPAK / UNDOUPK keep TEXTCOLS characters '
               'but the length byte whole, so a restore kept the edited tail '
               'past TEXTCOLS; and a redo of a line the edit made too long '
-              'brought back a truncated image')
+              'brought back a truncated image.  Since 2026-10-15 a line past '
+              'TEXTCOLS goes in a big record and is recorded whole')
     variants = ('long', 'redo')
 
     @staticmethod
@@ -7264,13 +7274,19 @@ class R4UndoLongLine(Case):
             first = self._first(variant)
             got = run.session.extract(run.dsk, 'DOC.TXT')
             if variant == 'long':
-                # 90 > TEXTCOLS: the edit drops the history, so Ctrl+Z and
-                # Ctrl+Shift+Z do nothing and the typed X stays.
+                # 90 > TEXTCOLS: a big record (MAXCOLS) keeps the whole line,
+                # so Ctrl+Z restores it exactly and Ctrl+Shift+Z brings the X
+                # back on all 91 characters.  It used to drop the history.
                 want = crlf(['X' + first, 'SECOND LINE'])
                 checks.append(Check(
-                    'R4/long/dropped', run.var('typed', 'UNDOPTR') == 0,
-                    'UNDOPTR %s after typing on a %d-character line (want 0)'
-                    % (run.var('typed', 'UNDOPTR'), len(first))))
+                    'R4/long/recorded',
+                    run.var('typed', 'UNDOPTR') != 0 and
+                    run.var('undone', 'REDOPTR') != 0 and
+                    run.var('redone', 'UNDOPTR') != 0,
+                    'UNDOPTR %s typed, REDOPTR %s undone, UNDOPTR %s redone '
+                    '(all non-zero) on a %d-character line'
+                    % (run.var('typed', 'UNDOPTR'), run.var('undone', 'REDOPTR'),
+                       run.var('redone', 'UNDOPTR'), len(first))))
             else:
                 # 80 fits a record, 81 does not: the undo is exact and the
                 # redo is withdrawn rather than replayed from a truncated image.
@@ -7282,6 +7298,46 @@ class R4UndoLongLine(Case):
             checks.append(Check('R4/%s/content' % variant, got == want,
                                 disk_diff(got, want)))
         return checks
+
+
+class R5JoinOom(Case):
+    name = 'R5-join-oom'
+    desc = ('a join whose longer line does not fit the full segment: refused, '
+            'both lines kept, nothing recorded')
+    origin = ('2026-10-15 review: JOIN2L ignored LINEWRT\'s carry, so with no '
+              'memory for the longer line A it deleted line B anyway -- its '
+              'text lost -- after recording a join that never happened')
+
+    LINES = short_lines(SEG_FULL)
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.press('DOWN')
+        t.press('BS')                           # join lines 0 and 1: 32 chars
+        t.wait(15.0)
+        t.snap('refused')
+        t.press('S', mods=['CTRL'])
+        t.wait(6.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        want = crlf(self.LINES)
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        return [
+            Check('R5/refused', run.var('saved', 'SCRRDY') == 0xFF and
+                  run.var('refused', 'TOTLINES') == SEG_FULL and
+                  run.var('refused', 'UNDOPTR') == 0,
+                  'SCRRDY %s, TOTLINES %s (want %d), UNDOPTR %s (want 0)'
+                  % (run.var('saved', 'SCRRDY'), run.var('refused', 'TOTLINES'),
+                     SEG_FULL, run.var('refused', 'UNDOPTR'))),
+            Check('R5/content', got == want, disk_diff(got, want)),
+        ]
 
 
 def disk_diff(got, want):
@@ -8527,6 +8583,329 @@ class H46DriveSwitch(Case):
         return checks
 
 
+
+
+# --- U11-U13  UNDO ON LINES LONGER THAN TEXTCOLS -----------------------
+
+
+TEST_LINES = ['Hello MSX World!', 'This is a test of S6ED.',
+              'MSX2 Screen 6 Text Editor', '80 columns x 24 rows.',
+              'Enjoy homebrewing!']
+
+
+def join_with_spaces(t, n):
+    """The reported flow: down one line, to column 0, BS (join), and from the
+    second join on a space typed at the seam."""
+    for i in range(n):
+        t.press('DOWN')
+        t.press('LEFT', mods=['CTRL'])
+        t.press('BS')
+        if i:
+            t.press('SPACE')
+
+
+class U11UndoLongJoin(Case):
+    name = 'U11-undo-long-join'
+    desc = ('join the TEST lines one by one with a space at every seam, go to '
+            'the end of the long line, undo everything; then redo everything')
+    origin = ('reported 2026-10-15: an undo record held TEXTCOLS characters, so '
+              'from the third join on the typed space could not be recorded. '
+              'On dev that dropped the history (Ctrl+Z did nothing); on the '
+              'first fix it skipped the record, the undo split the line with '
+              'the space inside -- at the start of the next line -- and '
+              'MODIFIED came back to 0 over a document that was not the file')
+    cfg = UNDO_CFG
+    variants = ('undo', 'redo')
+    UNDOS = 7           # four joins and three spaces
+
+    def joined(self):
+        return TEST_LINES[0] + TEST_LINES[1] + ' ' + ' '.join(TEST_LINES[2:])
+
+    def fixture(self, ctx, variant=None):
+        return crlf(TEST_LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.wait(1.0)
+        join_with_spaces(t, len(TEST_LINES) - 1)
+        t.press('RIGHT', mods=['CTRL'])
+        t.wait(1.0)
+        t.snap('joined')
+        for _ in range(self.UNDOS):
+            t.press('Z', mods=['CTRL'])
+        t.wait(1.0)
+        t.snap('undone', vram=True)
+        if variant == 'redo':
+            for _ in range(self.UNDOS):
+                t.press('Z', mods=['SHIFT', 'CTRL'])
+            t.wait(1.0)
+            t.snap('redone')
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        checks = []
+        joined = self.joined()
+        for variant, run in sorted(runs.items()):
+            pre = 'U11/%s' % variant
+            got = run.session.extract(run.dsk, 'DOC.TXT')
+            want = crlf([joined] if variant == 'redo' else TEST_LINES)
+            checks.append(Check(
+                '%s/joined' % pre,
+                run.var('joined', 'TOTLINES') == 1 and
+                run.var('joined', 'CURX') == len(joined) and
+                run.var('joined', 'LEFTCOL') > 0,
+                'TOTLINES %s, CURX %s (want %d), LEFTCOL %s'
+                % (run.var('joined', 'TOTLINES'), run.var('joined', 'CURX'),
+                   len(joined), run.var('joined', 'LEFTCOL'))))
+            checks.append(Check(
+                '%s/undone' % pre,
+                run.var('undone', 'TOTLINES') == len(TEST_LINES) and
+                run.var('undone', 'UNDOPTR') == 0 and
+                run.var('undone', 'MODIFIED') == 0,
+                'TOTLINES %s, UNDOPTR %s, MODIFIED %s after %d x Ctrl+Z'
+                % (run.var('undone', 'TOTLINES'), run.var('undone', 'UNDOPTR'),
+                   run.var('undone', 'MODIFIED'), self.UNDOS)))
+            rows = vram.render_text(run.blob('undone', 'vram'), font=font_of(ctx))
+            if rows is not None:
+                checks.append(Check(
+                    '%s/screen' % pre, rows[:len(TEST_LINES)] == TEST_LINES,
+                    'rows 0..4 read back as the original lines'
+                    if rows[:len(TEST_LINES)] == TEST_LINES else
+                    'screen %r' % rows[:len(TEST_LINES)]))
+            if variant == 'redo':
+                checks.append(Check(
+                    '%s/redone' % pre,
+                    run.var('redone', 'TOTLINES') == 1 and
+                    run.var('redone', 'MODIFIED') == 0xFF,
+                    'TOTLINES %s, MODIFIED %s after %d x Ctrl+Shift+Z'
+                    % (run.var('redone', 'TOTLINES'),
+                       run.var('redone', 'MODIFIED'), self.UNDOS)))
+            checks.append(Check('%s/content' % pre, got == want,
+                                disk_diff(got, want)))
+        return checks
+
+
+class U12UndoLongEdits(Case):
+    name = 'U12-undo-long-edits'
+    desc = ('edits on a line longer than TEXTCOLS mixed with the rest of the '
+            'history: delete it, delete a selection across it, type on it')
+    origin = ('2026-10-15 review: such an edit was not recorded.  Skipping the '
+              'record and keeping the history replayed older records over '
+              'lines the skipped edit had moved, restored half a selection, '
+              'and let an undo land on the save point while the long line '
+              'still differed from the file -- MODIFIED 0, quit without asking')
+    cfg = UNDO_CFG
+    variants = ('del', 'sel', 'modified', 'mixgrp')
+    LONG = ''.join(chr(65 + i % 26) for i in range(100))
+    LINES = ['L%02d SHORT LINE' % i for i in range(10)]
+    LINES[5] = LONG
+    # A selection whose group overflows the ring on a big record (521 bytes)
+    # while a later normal one (171) would still fit: 5 big + 3 normal = 3118,
+    # the next big gives 3118 + 521 + 521 > UNDOSIZ + 1, the normal after it
+    # 3118 + 171 + 521 <= UNDOSIZ + 1.  Only UNDODRP keeps that tail out.
+    MIX = ([chr(65 + i) * 100 for i in range(5)] +
+           ['S%02d SHORT' % i for i in range(3)] + ['Z' * 100] +
+           ['S03 SHORT'] + ['T%02d TAIL' % i for i in range(3)])
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.MIX if variant == 'mixgrp' else self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.wait(1.0)
+        if variant == 'del':
+            t.press('DOWN', repeat=8)
+            t.text('X')                         # recorded on line 8
+            t.press('UP', repeat=3)
+            t.press('Y', mods=['CTRL'])         # delete the long line 5
+            t.wait(1.0)
+            t.snap('edited')
+            t.press('Z', mods=['CTRL'])
+            t.press('Z', mods=['CTRL'])
+        elif variant == 'mixgrp':
+            t.press('DOWN', mods=['SHIFT'], repeat=9)   # lines 0..8, 9 col 0
+            t.press('DEL')
+            t.wait(1.0)
+            t.snap('edited')
+            t.press('Z', mods=['CTRL'])
+        elif variant == 'sel':
+            t.press('DOWN', repeat=3)
+            t.press('DOWN', mods=['SHIFT'], repeat=3)   # lines 3..5 and 6 col 0
+            t.press('DEL')
+            t.wait(1.0)
+            t.snap('edited')
+            t.press('Z', mods=['CTRL'])
+        else:
+            t.press('DOWN', repeat=5)
+            t.text('X')                         # on the long line
+            t.press('UP', repeat=5)
+            t.text('Y')                         # on line 0
+            t.wait(1.0)
+            t.snap('edited')
+            t.press('Z', mods=['CTRL'])         # undoes Y only
+        t.wait(1.0)
+        t.snap('undone')
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        checks = []
+        for variant, run in sorted(runs.items()):
+            pre = 'U12/%s' % variant
+            got = run.session.extract(run.dsk, 'DOC.TXT')
+            if variant == 'mixgrp':
+                want = crlf(self.MIX[9:])
+                checks.append(Check(
+                    '%s/dropped' % pre,
+                    run.var('edited', 'UNDOPTR') == 0 and
+                    run.var('undone', 'UNDOPTR') == 0,
+                    'UNDOPTR %s after the delete, %s after Ctrl+Z (want 0: the '
+                    'group does not fit, the history goes and none of it stays)'
+                    % (run.var('edited', 'UNDOPTR'), run.var('undone', 'UNDOPTR'))))
+            elif variant == 'modified':
+                lines = list(self.LINES)
+                lines[5] = 'X' + self.LONG
+                want = crlf(lines)
+                checks.append(Check(
+                    '%s/still-modified' % pre,
+                    run.var('undone', 'MODIFIED') == 0xFF and
+                    run.var('undone', 'UNDOPTR') != 0,
+                    'MODIFIED %s, UNDOPTR %s after undoing only the second edit '
+                    '(want #FF and the long line\'s record still there)'
+                    % (run.var('undone', 'MODIFIED'), run.var('undone', 'UNDOPTR'))))
+            else:
+                want = crlf(self.LINES)
+                checks.append(Check(
+                    '%s/clean' % pre,
+                    run.var('undone', 'TOTLINES') == len(self.LINES) and
+                    run.var('undone', 'MODIFIED') == 0,
+                    'TOTLINES %s (edited %s), MODIFIED %s after the undo'
+                    % (run.var('undone', 'TOTLINES'),
+                       run.var('edited', 'TOTLINES'),
+                       run.var('undone', 'MODIFIED'))))
+            checks.append(Check('%s/content' % pre, got == want,
+                                disk_diff(got, want)))
+        return checks
+
+
+class U13UndoJoinMargin(Case):
+    name = 'U13-undo-join-margin'
+    desc = ('a join made in WRAP_DEV, undone after Settings switched to WRAP_TXT, '
+            'splits at the seam even when the seam is the margin column')
+    origin = ('2026-10-15 review: the undo of a join splits through EDNWLIN, '
+              'whose SPLITL takes EFFCURX -- in WRAP_TXT, on a full line with '
+              'the cursor on its last column, one column further on.  A seam '
+              'at TXTWIDTH - 1 then kept the first character of line B on A')
+    cfg = UNDO_CFG
+    A = 'M' * 79                    # TXTWIDTH = TEXTCOLS = 80 once in TXT
+    LINES = [A, 'Z', 'THIRD LINE']
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.wait(1.0)
+        t.press('RIGHT', mods=['CTRL'])         # end of line 0, column 79
+        t.press('DEL')                          # join: 80 characters, seam 79
+        t.wait(1.0)
+        t.snap('joined')
+        t.press('F3')                           # Help
+        t.press('RETURN')                       # Settings
+        t.snap('open', at='WINPOLL')
+        t.press('DOWN')                         # Wrap
+        t.press('RIGHT')                        # DEV -> TXT
+        t.press('DOWN', repeat=8)               # [ OK ]
+        t.press('RETURN')
+        t.wait(2.0)
+        t.snap('settings')
+        t.press('Z', mods=['CTRL'])
+        t.wait(1.0)
+        t.snap('undone')
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        want = crlf(self.LINES)
+        return [
+            Check('U13/joined', run.var('joined', 'TOTLINES') == 2,
+                  'TOTLINES %s after DEL at the end of line 0'
+                  % run.var('joined', 'TOTLINES')),
+            Check('U13/txt', run.var('settings', 'WRAPMODE') == 1 and
+                  run.var('settings', 'TXTWIDTH') == len(self.A) + 1,
+                  'WRAPMODE %s, TXTWIDTH %s after Settings (want 1, %d)'
+                  % (run.var('settings', 'WRAPMODE'),
+                     run.var('settings', 'TXTWIDTH'), len(self.A) + 1)),
+            Check('U13/undone', run.var('undone', 'TOTLINES') == 3,
+                  'TOTLINES %s after Ctrl+Z' % run.var('undone', 'TOTLINES')),
+            Check('U13/content', got == want, disk_diff(got, want)),
+        ]
+
+
+class U14UndoRingMixed(Case):
+    name = 'U14-undo-ring-mixed'
+    desc = ('records of different sizes: a big record that does not fit under '
+            'the top of the ring wraps, and the older records left in the gap '
+            'are evicted first')
+    origin = ('2026-10-15: with one record size, no record could be left in a '
+              'gap a record did not fit.  A 521-byte record does not fit a gap '
+              'a 171-byte one sits in: it wrapped to the bottom over live '
+              'records without evicting them, and the chain ran through them')
+    cfg = UNDO_CFG
+    # 23 normal records fill the first lap to 3933; 21 more reach 3591 in the
+    # second, leaving the first lap's records at 3591 and 3762 above.  The big
+    # record does not fit there (3591 + 521 > 4096): the gap is evicted, then
+    # the four records under its 521 bytes at the bottom.  18 edits are left.
+    SHORT, KEPT = 44, 18
+    LONG = 'W' * 100
+    LINES = (['M%02d %s' % (i, 'LINE OF THE MIXED RING') for i in range(SHORT)]
+             + [LONG, 'LAST LINE'])
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.wait(1.0)
+        for _ in range(self.SHORT):         # one normal record per line
+            t.text('Q')
+            t.press('LEFT')
+            t.press('DOWN')
+        t.text('Q')                         # the big record, on the long line
+        t.wait(1.0)
+        t.snap('typed')
+        t.press('Z', mods=['CTRL'], repeat=self.KEPT + 3)
+        t.wait(1.0)
+        t.snap('undone')
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        stay = self.SHORT - (self.KEPT - 1)     # edits evicted, still applied
+        want = crlf(['Q' + x if i < stay else x
+                     for i, x in enumerate(self.LINES)])
+        return [
+            Check('U14/undone', run.var('undone', 'UNDOPTR') == 0 and
+                  run.var('undone', 'TOTLINES') == len(self.LINES),
+                  'UNDOPTR %s, TOTLINES %s after %d x Ctrl+Z'
+                  % (run.var('undone', 'UNDOPTR'), run.var('undone', 'TOTLINES'),
+                     self.KEPT + 3)),
+            Check('U14/content', got == want, disk_diff(got, want)),
+        ]
+
 CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G6Hooks(),
          G7Selection(), G8Config(), G9Directory(), G10Autoalign(), G11Paste(),
          G12ScreenRestore(), G13FeatureResidency(), H1Help(), H2HelpQuestion(), H3HelpFile(), H4FileSwitch(), H5Verbose(), H6DatMissing(), H7AboutDialog(),
@@ -8540,7 +8919,7 @@ CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G
          H35BrowseMany(), H36BrowseSaveAs(), H37Settings(), H38DiskError(), H39DatForeign(),
          H40LoadProgress(), H41BrowseBusy(), H42IoBlocks(), H43CursorShape(),
          H44SelScroll(), H45SelAllPage(), H46DriveSwitch(),
-         R1FreeListCompact(), R2LinewrtOom(), R3UndoCompactIX(), R4UndoLongLine(),
+         R1FreeListCompact(), R2LinewrtOom(), R3UndoCompactIX(), R4UndoLongLine(), R5JoinOom(),
          K1WqSaveFailed(), K2LoadDiskError(), K3SaveCloseError(),
          P1ReflowBoundary(), P2DeleteLastRow0(), P3ReplaceAllUndo(),
          Q1StyleSelection(), Q2ShiftWrapScroll(), Q3FindAdjacent(),
@@ -8554,7 +8933,8 @@ CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G
          I1UnixAuto(), I2DosAuto(), I3ConvertDosToUnix(), I4ConvertUnixToDos(),
          U1UndoMod(), U2UndoDel(), U3UndoSplit(), U4UndoJoin(), U5UndoSel(),
          U6UndoSelDel(), U7UndoRing(), U8UndoDropped(), U9UndoLineEdits(),
-         U10UndoClean()]
+         U10UndoClean(), U11UndoLongJoin(), U12UndoLongEdits(),
+         U13UndoJoinMargin(), U14UndoRingMixed()]
 
 
 def run(ctx, cases):

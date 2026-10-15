@@ -440,26 +440,6 @@ MKDELIM         LD      E, A
                 RET
 
 
-; --- ACTCYCMK                  ----------------------------------------
-
-
-; - ACTCYCMK ---------------------------
-; - CYCLE MARKUP MODE: OFF -> MD -> LIT -> OFF
-; - IN:  NONE
-; - OUT: NONE
-; - CLOBBERS: ALL
-; -
-
-ACTCYCMK        LD      A, (MKUPMD)
-                INC     A
-                CP      MKUP_MAX
-                JR      C, .SETMD
-                XOR     A
-.SETMD          LD      (MKUPMD), A
-                CALL    REDRAW
-                JP      DRWSTAT
-
-
 ; --- INSDELIM                  ----------------------------------------
 
 

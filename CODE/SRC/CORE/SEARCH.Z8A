@@ -717,10 +717,10 @@ DORPLAL         LD      A, (SRCHLEN)
                 ; UNDO: ONE RECORD PER LINE, TAKEN BEFORE ITS FIRST
                 ; REPLACEMENT, THE FIRST OF THE GROUP MOD AND THE REST CHAINED.
                 ; IT USED TO BE ONE PER OCCURRENCE AND THE GROUP HAD NO CAP:
-                ; PAST UNDOGMAX THE RING EVICTED ITS OWN HEAD AND CTRL+Z
-                ; REVERTED ONLY THE LAST FEW. A GROUP GOES WHOLE OR NOT AT ALL
-                ; (UNDOSEL'S RULE): THE LINE THAT WOULD MAKE IT UNDOGMAX + 1
-                ; DROPS THE HISTORY, AND NOTHING MORE IS RECORDED.
+                ; PAST WHAT THE RING HOLDS IT EVICTED ITS OWN HEAD AND CTRL+Z
+                ; REVERTED ONLY THE LAST FEW. A GROUP GOES WHOLE OR NOT AT ALL:
+                ; UNDOREC COUNTS IT IN BYTES, AND THE RECORD THAT WOULD NOT FIT
+                ; DROPS THE HISTORY AND EVERY LATER RECORD OF THE GROUP.
                 LD      A, (RPLLIN)
                 OR      A
                 JR      NZ, .RECD       ; THIS LINE IS ALREADY RECORDED
@@ -728,18 +728,14 @@ DORPLAL         LD      A, (SRCHLEN)
                 LD      (RPLLIN), A
                 PUSH    BC
                 LD      HL, RPLREC
-                LD      A, (HL)         ; A = RECORDS ALREADY IN THE GROUP
-                CP      UNDOGMAX
-                JR      C, .GRPOK
-                CALL    UNDOINIT        ; TOO MANY LINES TO KEEP: FORGET IT
-                JR      .RECDP
-.GRPOK          INC     (HL)
+                LD      A, (HL)         ; A = 0 ON THE GROUP'S FIRST RECORD
+                LD      (HL), 1
                 OR      A
                 LD      A, UNDOT_MOD
                 JR      Z, .FSTREC
                 OR      UNDOF_CHN       ; CHAIN INTO SINGLE UNDO TRANSACTION
 .FSTREC         CALL    UNDOREC
-.RECDP          POP     BC
+                POP     BC
 .RECD
 
                 ; SPLICE LINE

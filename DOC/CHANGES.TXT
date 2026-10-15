@@ -25,6 +25,16 @@ New
 Changed
 - Removed legacy Ctrl+K shortcut; profile cycling is managed
   exclusively via the Settings dialog.
+- Removed Ctrl+W (wrap mode) and Ctrl+T (markup mode): both
+  are chosen in Help > Settings, like every other setting.
+
+Fixed
+- Undo works on lines longer than the screen. An edit on a
+  line past 80 columns (61 on S2ED / S61ED) could not be
+  recorded: Ctrl+Z did nothing, or undid the wrong change
+  and left the document marked as saved.
+- A line join that runs out of memory no longer deletes the
+  joined line.
 
 
  -------- v0.5 (2026-10-14)

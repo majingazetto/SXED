@@ -30,7 +30,7 @@ ACTTBL          DEFW    ACTNONE         ; 0
                 DEFW    ACTOPNBL        ; 18
                 DEFW    ACTOPNAB        ; 19
                 DEFW    ACTTGLIN        ; 20
-                DEFW    ACTTGLWR        ; 21
+                DEFW    ACTNONE         ; 21 (WAS CTRL+W, WRAP MODE: SETTINGS)
                 DEFW    ACTSAVE         ; 22
                 DEFW    ACTQUIT         ; 23
                 DEFW    ACTHELP         ; 24
@@ -59,7 +59,7 @@ ACTTBL          DEFW    ACTNONE         ; 0
                 DEFW    ACTPAST         ; 47
                 DEFW    ACTTGLBD        ; 48
                 DEFW    ACTTGLIT        ; 49
-                DEFW    ACTCYCMK        ; 50
+                DEFW    ACTNONE         ; 50 (WAS CTRL+T, MARKUP MODE: SETTINGS)
                 DEFW    ACTTAB          ; 51
                 DEFW    ACTMENU         ; 52 (FILE)
                 DEFW    ACTMNU1         ; 53 (EDIT)
@@ -889,20 +889,6 @@ ACTDUPLN        CALL    UNDOCLS
 ACTTGLIN        LD      A, (INSMODE)
                 XOR     INS_MODE
                 LD      (INSMODE), A
-                JP      DRWSTAT
-
-
-; --- ACTTGLWR                  ----------------------------------------
-
-
-; - ACTTGLWR ---------------------------
-; - TOGGLE DEVELOPER / TEXT WRAP MODE
-; - IN:  NONE
-; - OUT: NONE
-; - CLOBBERS: ALL
-; -
-
-ACTTGLWR        CALL    EDTGLWRP
                 JP      DRWSTAT
 
 

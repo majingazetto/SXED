@@ -258,7 +258,7 @@ When a file containing raw TAB characters is loaded they are expanded to spaces 
 
 ### 6.4.- WORD WRAP & TEXT WIDTH
 
-Two wrap modes, toggled with Ctrl+W or WRAP= in the CFG:
+Two wrap modes, chosen in Help > Settings or with WRAP= in the CFG:
 
 ```text
 WRAP=DEV   Developer mode (default): no wrapping, lines
@@ -306,7 +306,7 @@ LIT  Chat style:  *bold*  _italic_
 OFF  Raw text (best for source code).
 ```
 
-[S6ED/S61ED] render bold/italic with the font weights; [S2ED] renders them in theme colors. Ctrl+T cycles the mode. Ctrl+B / Ctrl+I (STD profile) insert a delimiter pair or wrap the current selection.
+[S6ED/S61ED] render bold/italic with the font weights; [S2ED] renders them in theme colors. Help > Settings chooses the mode. Ctrl+B / Ctrl+I (STD profile) insert a delimiter pair or wrap the current selection.
 
 ## 7.- KEYMAP PROFILES
 
@@ -359,8 +359,6 @@ Classic CUA-style editing (the default):
 | `Ctrl+O` | Open... (file browser) |
 | `Ctrl+Shift+S` | Save as... (file browser) |
 | `Ctrl+B / Ctrl+I` | Bold / italic delimiters |
-| `Ctrl+T` | Cycle markup mode |
-| `Ctrl+W` | Toggle wrap mode |
 | `Ctrl+Z / Ctrl+Shift+Z` | Undo / redo |
 | `ESC` | Cancel selection, else quit |
 
@@ -413,8 +411,6 @@ Basic Emacs-style control keys plus the standard cursor block:
 | `GRAPH+Left/Right` | Word left / right |
 | `GRAPH+Up / GRAPH+Down` | Page up / down |
 | `GRAPH+BS` | Delete word left |
-| `Ctrl+T` | Cycle markup mode |
-| `Ctrl+W` | Toggle wrap mode |
 | `Ctrl+Z / Ctrl+Shift+Z` | Undo / redo |
 | `ESC` | Cancel selection, else quit |
 
@@ -475,7 +471,6 @@ Miscellaneous:
 ```text
 :    Ex command line (see 8.4)
 Ctrl+G  Go to line...    Ctrl+S  Save    Ctrl+Q  Quit
-Ctrl+T  Cycle markup mode
 ```
 
 Leader sequences: after "d", "g", or "y" the editor waits for the next key ("dd", "gg", "yy"). Any other key cancels the leader and is processed normally.
@@ -488,7 +483,6 @@ ESC returns to Normal mode. While inserting:
 Cursor keys              Move (staying in Insert)
 RETURN / TAB / BS / DEL  As usual
 Ctrl+B / Ctrl+I          Bold / italic delimiters
-Ctrl+T                   Cycle markup mode
 Any printable key        Typed into the document
 ```
 

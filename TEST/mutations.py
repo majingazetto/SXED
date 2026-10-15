@@ -382,12 +382,15 @@ MUTATIONS = [
     },
     {
         'name': 'p3-rpl-nocap',
-        'why': 'Replace All records a group larger than UNDOGMAX, which the ring cannot keep whole',
-        'file': 'SEARCH.Z8A',
-        'old': """                CP      UNDOGMAX
-                JR      C, .GRPOK""",
-        'new': """                CP      UNDOGMAX
-                JR      .GRPOK          ; MUTATION: NO CAP""",
+        'why': 'Replace All records a group larger than the ring holds whole: '
+               'UNDOREC keeps no byte budget for the group',
+        'file': 'UNDO.Z8A',
+        'old': """                JR      NC, .KEEP
+                LD      A, 1
+                LD      (UNDODRP), A""",
+        'new': """                JR      .KEEP           ; MUTATION: NO GROUP BUDGET
+                LD      A, 1
+                LD      (UNDODRP), A""",
         'filter': 'P3',
         'expect': ['P3/many/dropped', 'P3/many/content'],
     },
@@ -503,13 +506,70 @@ MUTATIONS = [
     },
     {
         'name': 'r4-undo-long',
-        'why': 'UNDOREC records a line longer than TEXTCOLS, which UNDOPAK truncates',
+        'why': 'a line longer than TEXTCOLS is packed into a normal record: '
+               'the restore keeps a stale tail and the redo is lost',
         'file': 'UNDO.Z8A',
-        'old': """                JR      NC, .DROP       ; LONGER THAN A RECORD HOLDS""",
-        'new': """                NOP                     ; MUTATION: RECORDED ANYWAY
+        'old': """                SET     6, C            ; UNDOF_BIG: LONGER THAN TEXTCOLS""",
+        'new': """                NOP                     ; MUTATION: NOT FLAGGED BIG
                 NOP""",
         'filter': 'R4',
-        'expect': ['R4/long/dropped', 'R4/long/content'],
+        'expect': ['R4/long/recorded'],
+    },
+    {
+        'name': 'undo-long-skip',
+        'why': 'the first fix as it shipped on fix/undo-join-split: an edit '
+               'on a long line is skipped and the history kept, so the undo '
+               'splits a join with the space inside, replays records over '
+               'lines the skipped edit moved, and reports a clean document',
+        'file': 'UNDO.Z8A',
+        'old': """                JR      C, .SIZED
+                SET     6, C            ; UNDOF_BIG: LONGER THAN TEXTCOLS""",
+        'new': """                JR      C, .SIZED
+                RET                     ; MUTATION: SKIPPED, HISTORY KEPT
+                NOP""",
+        'filter': 'U1',
+        'expect': ['U11/undo/content', 'U12/del/content',
+                   'U12/modified/still-modified'],
+    },
+    {
+        'name': 's2-undo-long-skip',
+        'why': 'the first fix on S2ED: an edit on a line past 61 columns is '
+               'skipped and the history kept',
+        'target': 'S2ED',
+        'file': 'UNDO.Z8A',
+        'old': """                JR      C, .SIZED
+                SET     6, C            ; UNDOF_BIG: LONGER THAN TEXTCOLS""",
+        'new': """                JR      C, .SIZED
+                RET                     ; MUTATION: SKIPPED, HISTORY KEPT
+                NOP""",
+        'filter': 'S2-53',
+        'expect': ['S2-53/undo/content'],
+    },
+    {
+        'name': 's61-undo-long-skip',
+        'why': 'the first fix on S61ED: an edit on a line past 61 columns is '
+               'skipped and the history kept',
+        'target': 'S61ED',
+        'file': 'UNDO.Z8A',
+        'old': """                JR      C, .SIZED
+                SET     6, C            ; UNDOF_BIG: LONGER THAN TEXTCOLS""",
+        'new': """                JR      C, .SIZED
+                RET                     ; MUTATION: SKIPPED, HISTORY KEPT
+                NOP""",
+        'filter': 'S62-13',
+        'expect': ['S62-13/undo/content'],
+    },
+    {
+        'name': 'undo-long-drop',
+        'why': 'dev as it was reported: an edit on a long line drops the '
+               'whole history, so Ctrl+Z does nothing',
+        'file': 'UNDO.Z8A',
+        'old': """                JR      C, .SIZED
+                SET     6, C            ; UNDOF_BIG: LONGER THAN TEXTCOLS""",
+        'new': """                JR      C, .SIZED
+                JP      UNDOINIT        ; MUTATION: HISTORY DROPPED""",
+        'filter': 'U1',
+        'expect': ['U11/undo/undone', 'U11/undo/content', 'U12/sel/content'],
     },
     {
         'name': 'r4-redo-long',
@@ -2518,13 +2578,24 @@ SELTMPXB        EQU     SELTMPXB2""")],
     },
     {
         'name': 'd10-markup',
-        'why': 'ACTCYCMK markup mode cycling is disabled',
-        'file': 'MARKUP.Z8A',
-        'old': """ACTCYCMK        LD      A, (MKUPMD)""",
-        'new': """ACTCYCMK        RET                     ; MUTATION: ACTCYCMK NO-OP
-                LD      A, (MKUPMD)""",
+        'why': 'MARKUP= in the CFG is parsed but never applied, now that the '
+               'CFG and Settings are the only way to choose the markup mode',
+        'file': 'CFG.Z8A',
+        'old': """                LD      (MKUPMD), A
+                RET
+
+
+; --- PARSCLK""",
+        'new': """                NOP                     ; MUTATION: MARKUP= IGNORED
+                NOP
+                NOP
+                RET
+
+
+; --- PARSCLK""",
         'filter': 'D10',
-        'expect': ['D10/mode-cycle', 'D10/content'],
+        # MD is also the boot default, so only the LIT variant can tell
+        'expect': ['D10/lit/mode'],
     },
     {
         'name': 'e1-cut',
@@ -2726,9 +2797,9 @@ SELTMPXB        EQU     SELTMPXB2""")],
                'move leaves an inverted cell behind after every undo',
         'target': 'S2ED',
         'file': 'UNDO.Z8A',
-        'old': """                CALL    SHOWLN
+        'old': """                CALL    ADJLCOL
                 JP      REDRAW""",
-        'new': """                CALL    SHOWLN
+        'new': """                CALL    ADJLCOL
                 CALL    REDRAW          ; MUTATION: THE CURSOR DRAWN HERE TOO
                 CALL    DRWSTAT
                 JP      DRWCUR""",
@@ -3656,16 +3727,35 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'name': 'undo-join',
         'why': 'line join fails to record in undo ringbuffer when UNDOJON is bypassed',
         'file': 'EDIT.Z8A',
-        'old': """; RECORD JOIN IN UNDO RING BUFFER
-                CALL    UNDOJON
-                LD      HL, (JOINLA)""",
-        'new': """; RECORD JOIN IN UNDO RING BUFFER
+        'old': """                ; HAPPENED -- AND LINE B WAS DELETED ANYWAY, ITS TEXT LOST.
+                CALL    UNDOJON""",
+        'new': """                ; HAPPENED -- AND LINE B WAS DELETED ANYWAY, ITS TEXT LOST.
+                NOP                     ; MUTATION: JOIN NOT RECORDED
                 NOP
-                NOP
-                NOP
-                LD      HL, (JOINLA)""",
+                NOP""",
         'filter': 'U4',
         'expect': ['U4/undone-totlines'],
+    },
+    {
+        'name': 'join-oom-delete',
+        'why': 'JOIN2L ignores LINEWRT\'s carry: with no memory for the longer '
+               'line A it deletes line B anyway, and records a join that never '
+               'happened',
+        'file': 'EDIT.Z8A',
+        'old': """                RET     C               ; NO MEMORY: LINE A AS IT WAS, B KEPT""",
+        'new': """                NOP                     ; MUTATION: OOM IGNORED""",
+        'filter': 'R5',
+        'expect': ['R5/refused', 'R5/content'],
+    },
+    {
+        'name': 'undo-nwx-mode',
+        'why': 'the undo of a join splits in the current wrap mode: in WRAP_TXT '
+               'EFFCURX moves a seam on the margin of a full line one column on',
+        'file': 'UNDO.Z8A',
+        'old': """UNDONWX         LD      A, WRAP_DEV""",
+        'new': """UNDONWX         LD      A, (WRAPMODE)   ; MUTATION: NOT EXACT""",
+        'filter': 'U13',
+        'expect': ['U13/content'],
     },
     {
         'name': 'undo-sel',
@@ -3749,15 +3839,41 @@ SELTMPXB        EQU     SELTMPXB2""")],
     },
     {
         'name': 'undo-group-cap',
-        'why': 'a group larger than the ring is recorded anyway and evicts its '
-               'own first record, leaving a headless tail to replay',
+        'why': 'a group too big for the ring drops the history but keeps '
+               'recording the rest of it: a headless tail to replay',
         'file': 'UNDO.Z8A',
-        'old': """                CALL    CMPHLDE
-                JR      C, .FITS""",
-        'new': """                CALL    CMPHLDE
-                JR      .FITS           ; MUTATION: NO CAPACITY CHECK""",
-        'filter': 'U7',
-        'expect': ['U7/toobig/dropped'],
+        'old': """                LD      A, 1
+                LD      (UNDODRP), A
+                JP      UNDOINIT        ; TOO BIG TO KEEP: FORGET THE HISTORY""",
+        'new': """                NOP                     ; MUTATION: THE TAIL IS RECORDED
+                NOP
+                NOP
+                NOP
+                NOP
+                JP      UNDOINIT        ; TOO BIG TO KEEP: FORGET THE HISTORY""",
+        'filter': 'U12',
+        'expect': ['U12/mixgrp/dropped', 'U12/mixgrp/content'],
+    },
+    {
+        'name': 'undo-wrap-gap',
+        'why': 'a record that does not fit under the top of the ring wraps '
+               'without evicting the older records left in the gap: with '
+               'three record sizes one can live there, stays UNDOBOT, and the '
+               'chain runs through the records written over at the bottom',
+        'file': 'UNDO.Z8A',
+        'old': """                CALL    UNDOEVC
+                POP     DE
+                LD      (UNDORSZ), DE""",
+        'new': """                NOP                     ; MUTATION: THE GAP IS NOT EVICTED
+                NOP
+                NOP
+                POP     DE
+                LD      (UNDORSZ), DE""",
+        'filter': 'U14',
+        # the overwritten records are not evicted, so the record after them
+        # keeps a PREV_TRN into the middle of the big one: the last Ctrl+Z
+        # walks into it and stops on a dead address instead of reaching 0
+        'expect': ['U14/undone'],
     },
     {
         'name': 'undo-evict-window',
@@ -3767,7 +3883,7 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'file': 'UNDO.Z8A',
         'old': """                SBC     HL, DE          ; HL = UNDOBOT - WRITE BASE
                 JR      C, .EVCBEL      ; BELOW THE WINDOW
-                LD      DE, UNDOMOD_SZ
+                LD      DE, (UNDORSZ)
                 SBC     HL, DE          ; CY = 1 INSIDE THE WINDOW (CY WAS 0)
                 POP     HL              ; HL = WRITE BASE
                 JR      NC, .EVCDON     ; PAST THE WINDOW -> DONE""",
@@ -3778,7 +3894,7 @@ SELTMPXB        EQU     SELTMPXB2""")],
                 EX      DE, HL
                 OR      A
                 SBC     HL, DE
-                LD      DE, UNDOMOD_SZ
+                LD      DE, (UNDORSZ)
                 OR      A
                 SBC     HL, DE
                 POP     HL
@@ -3901,12 +4017,12 @@ SELTMPXB        EQU     SELTMPXB2""")],
     },
     {
         'name': 's2-undo-gmax',
-        'why': 'UNDOGMAX set too low: S2ED would drop the history on any delete '
-               'over 15 lines instead of 28',
+        'why': 'the group budget set too low: S2ED would drop the history on '
+               'any delete over 15 lines instead of 29',
         'target': 'S2ED',
-        'file': 'CONST_CORE.Z8A',
-        'old': """UNDOGMAX        EQU     (UNDOSIZ - UNDOMOD_SZ + 1) / UNDOMOD_SZ""",
-        'new': """UNDOGMAX        EQU     15              ; MUTATION: GMAX TOO LOW""",
+        'file': 'UNDO.Z8A',
+        'old': """                LD      BC, -(UNDOSIZ + 2)""",
+        'new': """                LD      BC, -(UNDOSIZ / 2 + 2) ; MUTATION: BUDGET TOO LOW""",
         'filter': 'S2-20',
         'expect': ['S2-20/big/cycle'],
     },

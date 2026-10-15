@@ -5,7 +5,9 @@
 ; TRANSACTIONAL LINE-DELTA RING BUFFER IN TPA RAM (PAGE 1):
 ;   LOCATED DYNAMICALLY AT UNDOBAS (= ENDVARS) UP TO UNDOBAS + UNDOSIZ (4 KB).
 ;   ASSERT GUARDS GUARANTEE IT NEVER OVERLAPS PAGE 2 (TXPAGE = #8000).
-;   EACH RECORD CONTAINS A 10-BYTE TRANSACTION HEADER PLUS 161 BYTES PAYLOAD.
+;   EACH RECORD IS A 10-BYTE TRANSACTION HEADER AND THE LINE IMAGE IT NEEDS:
+;   NONE FOR A SPLIT OR A JOIN (REBUILT FROM THE LINES), TEXTCOLS CHARACTERS
+;   FOR A LINE THAT FITS THEM, MAXCOLS (UNDOF_BIG) FOR A LONGER ONE.
 ;   SYMMETRIC SWAPPING OF PAYLOAD ENABLES BIDIRECTIONAL UNDO AND REDO WITHOUT
 ;   ANY SECONDARY ALLOCATIONS.
 ;
@@ -139,16 +141,21 @@ UNDOSVX         LD      DE, SAVENIL
 ; - ALLOCATE RECORD IN RING BUFFER AND WRITE TRANSACTION HEADER & PAYLOAD
 ; - IN:  A = OP_TYPE (UNDOT_*), OR-ED WITH UNDOF_CHN WHEN THE RECORD BELONGS
 ; -      TO THE SAME USER ACTION AS THE ONE BEFORE IT
-; -      WORKBUF HAS PRE-MUTATION RECORD
+; -      WORKBUF HAS PRE-MUTATION RECORD (NOT READ FOR A SPLIT OR A JOIN)
 ; - OUT: NONE
 ; - CLOBBERS: AF, BC, DE, HL
 ; -
-; - A RECORD HOLDS TEXTCOLS CHARACTERS (UNDOPAK) BUT A LINE REACHES MAXCOLS.
-; - A LINE LONGER THAN THE RECORD CANNOT BE RECORDED, AND THE RING STORES
-; - LINE NUMBERS, SO THE HISTORY IS DROPPED INSTEAD (UNDOINIT) -- AND WITH
-; - IT THE REST OF THAT USER ACTION'S GROUP, OR ITS LATER RECORDS WOULD BE
-; - LEFT CHAINED TO NOTHING. RESTORING A TRUNCATED IMAGE KEPT THE TAIL OF
-; - THE EDITED LINE (OR OF WHATEVER WORKBUF LAST HELD) PAST TEXTCOLS.
+; - THE RECORD IS SIZED BY WHAT IT KEEPS: THE HEADER ALONE FOR A SPLIT OR A
+; - JOIN, UNDOMOD_SZ FOR A LINE UP TO TEXTCOLS, UNDOBIG_SZ (UNDOF_BIG) FOR A
+; - LONGER ONE -- SO EVERY EDIT IS RECORDED, WHATEVER THE LENGTH OF ITS LINE.
+; - THE RING STORES LINE NUMBERS, SO AN EDIT IS RECORDED WHOLE OR THE HISTORY
+; - IS DROPPED. A GROUP THAT WOULD NO LONGER FIT THE RING WHOLE (SEE UNDOSIZ
+; - IN CONST_CORE) CALLS UNDOINIT AND THE REST OF ITS RECORDS ARE IGNORED
+; - (UNDODRP): CHAINED TO NOTHING THEY WOULD REPLAY HALF AN EDIT. SKIPPING
+; - ONE RECORD AND KEEPING THE HISTORY IS NEVER AN OPTION -- THE NEXT CTRL+Z
+; - REPLAYED OLDER RECORDS OVER LINES THE SKIPPED EDIT HAD CHANGED OR MOVED,
+; - AND A HEAD STILL EQUAL TO SAVEPTR CLEARED MODIFIED OVER A DOCUMENT THAT
+; - NO LONGER MATCHED THE FILE.
 ; -
 
 UNDOREC         LD      C, A            ; C = OP_TYPE
@@ -156,29 +163,55 @@ UNDOREC         LD      C, A            ; C = OP_TYPE
                 OR      A
                 RET     NZ              ; SUPPRESSED (DURING REDO)
 
-                LD      HL, UNDODRP
                 BIT     7, C            ; UNDOF_CHN
                 JR      NZ, .INGRP
-                LD      (HL), 0         ; A NEW USER ACTION: NOTHING DROPPED YET
-.INGRP          LD      A, C
+                XOR     A               ; A NEW USER ACTION: A NEW GROUP
+                LD      (UNDODRP), A
+                LD      H, A
+                LD      L, A
+                LD      (UNDOGSZ), HL
+                LD      (UNDOGMX), HL
+.INGRP          LD      A, (UNDODRP)
+                OR      A
+                RET     NZ              ; THE GROUP WAS DROPPED: NONE OF IT
+
+                ; SIZE THE RECORD
+                LD      HL, UNDOHDR_SZ
+                LD      A, C
                 AND     UNDOT_MSK
                 CP      UNDOT_SPL
-                JR      Z, .KEEP        ; SPLIT HOLDS NO PAYLOAD: NEVER DROPPED
-                CP      UNDOT_JON
-                JR      Z, .KEEP        ; JOIN HOLDS NO PAYLOAD: NEVER DROPPED
+                JR      NC, .SIZED      ; SPLIT, JOIN: NO LINE IMAGE
+                LD      HL, UNDOMOD_SZ
                 LD      A, (WORKBUF)
                 CP      TEXTCOLS + 1
-                JR      NC, .DROP       ; LONGER THAN A RECORD HOLDS
-                LD      A, (HL)
-                OR      A
-                JR      Z, .KEEP
-.DROP           LD      (HL), 1
-                CALL    UNDOSVC
-                XOR     A
-                LD      (REDOPTR), A
-                LD      (REDOPTR + 1), A
-                RET
-.KEEP
+                JR      C, .SIZED
+                SET     6, C            ; UNDOF_BIG: LONGER THAN TEXTCOLS
+                LD      HL, UNDOBIG_SZ
+.SIZED          LD      (UNDORSZ), HL
+
+                ; DOES THE GROUP STILL FIT THE RING WHOLE? DROP IT WHEN
+                ; GROUP + THIS RECORD + LARGEST RECORD - 1 > UNDOSIZ
+                EX      DE, HL          ; DE = THIS RECORD'S SIZE
+                LD      HL, (UNDOGMX)
+                CALL    CMPHLDE         ; CY = 1 WHEN THIS ONE IS LARGER
+                JR      NC, .MAXOK
+                LD      H, D
+                LD      L, E
+.MAXOK          LD      (UNDOGMX), HL
+                PUSH    BC
+                LD      BC, (UNDOGSZ)
+                ADD     HL, BC
+                ADD     HL, DE
+                LD      BC, -(UNDOSIZ + 2)
+                ADD     HL, BC          ; CY = 1 WHEN THE SUM PASSES UNDOSIZ + 1
+                POP     BC
+                JR      NC, .KEEP
+                LD      A, 1
+                LD      (UNDODRP), A
+                JP      UNDOINIT        ; TOO BIG TO KEEP: FORGET THE HISTORY
+.KEEP           LD      HL, (UNDOGSZ)
+                ADD     HL, DE
+                LD      (UNDOGSZ), HL
 
                 PUSH    BC
                 CALL    UNDOSVC         ; THE REDO CHAIN GOES: SO MAY THE SAVE
@@ -213,7 +246,7 @@ UNDOREC         LD      C, A            ; C = OP_TYPE
 .HAVENX         ; DOES IT FIT BEFORE END OF RING BUFFER?
                 ; RANGE: [UNDOBAS, UNDOBAS + UNDOSIZ)
                 PUSH    HL              ; SAVE CANDIDATE
-                LD      DE, UNDOMOD_SZ
+                LD      DE, (UNDORSZ)
                 ADD     HL, DE          ; HL = END OF CANDIDATE RECORD
                 LD      DE, UNDOBAS + UNDOSIZ
                 OR      A
@@ -222,11 +255,34 @@ UNDOREC         LD      C, A            ; C = OP_TYPE
                 JR      C, .FITS
                 JR      Z, .FITS
 
-                ; DOES NOT FIT AT END: WRAP TO START OF BUFFER
-                LD      HL, UNDOBAS
+                ; DOES NOT FIT AT END: WRAP TO START OF BUFFER. THE TOP, FROM
+                ; HERE TO THE END, IS LEFT UNUSED -- BUT WITH RECORDS OF THREE
+                ; SIZES AN OLDER, SMALLER ONE CAN STILL LIVE IN IT, AND LEFT
+                ; THERE IT STAYS UNDOBOT WHILE THE RECORDS AFTER IT ARE WRITTEN
+                ; OVER AT THE BOTTOM: THE CHAIN THEN RUNS THROUGH DEAD RECORDS.
+                ; WHAT STARTS IN THE GAP IS EVICTED FIRST.
+                LD      A, (UNDOPTR)
+                LD      E, A
+                LD      A, (UNDOPTR + 1)
+                OR      E
+                JR      Z, .WRAP        ; BUFFER EMPTY: NOTHING TO EVICT
+                PUSH    BC              ; PRESERVE C (OP_TYPE)
+                LD      DE, (UNDORSZ)
+                PUSH    DE
+                EX      DE, HL          ; DE = CANDIDATE
+                LD      HL, UNDOBAS + UNDOSIZ
+                OR      A
+                SBC     HL, DE          ; HL = SIZE OF THE GAP
+                LD      (UNDORSZ), HL
+                EX      DE, HL          ; HL = CANDIDATE
+                CALL    UNDOEVC
+                POP     DE
+                LD      (UNDORSZ), DE
+                POP     BC
+.WRAP           LD      HL, UNDOBAS
 
 .FITS           ; HL = WRITE ADDRESS FOR NEW RECORD
-                ; 2. EVICT OLDEST TRANSACTIONS IF OVERLAPPING [HL, HL + UNDOMOD_SZ)
+                ; 2. EVICT OLDEST TRANSACTIONS IF OVERLAPPING [HL, HL + UNDORSZ)
                 LD      A, (UNDOPTR)
                 LD      E, A
                 LD      A, (UNDOPTR + 1)
@@ -278,12 +334,20 @@ UNDOREC         LD      C, A            ; C = OP_TYPE
                 LD      (HL), D
                 INC     HL              ; HL = HL + 10 (PAYLOAD BASE)
 
-                ; 4. PACK WORKBUF (LINEREC BYTES) TO PAYLOAD
+                ; 4. PACK WORKBUF INTO THE PAYLOAD, IF THE RECORD KEEPS ONE
                 EX      DE, HL          ; DE = DESTINATION (HL + 10)
-                LD      HL, WORKBUF     ; HL = SOURCE
-                CALL    UNDOPAK         ; DE ADVANCES BY LINEREC BYTES
+                LD      A, C
+                AND     UNDOT_MSK
+                CP      UNDOT_SPL
+                JR      NC, .NOPAY      ; SPLIT, JOIN: THE HEADER IS THE RECORD
+                LD      A, TEXTCOLS
+                BIT     6, C            ; UNDOF_BIG
+                JR      Z, .PAKCAP
+                LD      A, MAXCOLS
+.PAKCAP         LD      HL, WORKBUF     ; HL = SOURCE
+                CALL    UNDOPAK         ; DE ADVANCES BY THE PAYLOAD
 
-                POP     HL              ; HL = START OF THIS RECORD
+.NOPAY          POP     HL              ; HL = START OF THIS RECORD
 
                 ; 5. LINK PREVIOUS RECORD'S NEXT_TRN TO THIS RECORD
                 LD      BC, (UNDOPTR)
@@ -305,7 +369,7 @@ UNDOREC         LD      C, A            ; C = OP_TYPE
 
 .LNKDON         ; 6. UPDATE GLOBAL UNDO STATE
                 LD      (UNDOPTR), HL   ; NEW HEAD OF UNDO CHAIN
-                EX      DE, HL          ; HL = DE (END OF RECORD: BASE + 171)
+                EX      DE, HL          ; HL = DE (END OF RECORD: BASE + UNDORSZ)
                 LD      (UNDONXT), HL   ; NEXT WRITE LOCATION
                 XOR     A
                 LD      (REDOPTR), A    ; NEW EDIT INVALIDATES REDO
@@ -392,9 +456,9 @@ UNDOSPL         LD      A, (UNDOHLD)
 
 
 ; - UNDOJON ----------------------------
-; - RECORD LINE JOIN IN UNDO RING BUFFER
-; - IN:  WORKBUF2 HAS LINE B RECORD (DELETED LINE)
-; -      JOINLA HAS LINE A NUMBER
+; - RECORD LINE JOIN IN UNDO RING BUFFER: THE HEADER ALONE, AT LINE A AND
+; - THE SEAM -- THE UNDO SPLITS LINE A THERE AGAIN, SO NO IMAGE IS KEPT
+; - IN:  JOINLA HAS LINE A NUMBER
 ; -      JOINCOL HAS SEAM COLUMN
 ; - OUT: NONE
 ; - CLOBBERS: ALL
@@ -425,20 +489,20 @@ UNDOJON         LD      A, (UNDOHLD)
 
 
 ; - UNDOEVC ----------------------------
-; - EVICT TRANSACTIONS AT (UNDOBOT) THAT COLLIDE WITH [HL, HL + UNDOMOD_SZ),
+; - EVICT TRANSACTIONS AT (UNDOBOT) THAT COLLIDE WITH [HL, HL + UNDORSZ),
 ; - AND WITH EACH ONE THE REST OF ITS GROUP
 ; - IN:  HL = WRITE BASE ADDRESS
 ; - OUT: NONE
 ; - CLOBBERS: AF, DE, IX (PRESERVES BC, HL)
 ; -
 
-UNDOEVC         ; EVICT TRANSACTIONS AT (UNDOBOT) THAT COLLIDE WITH [HL, HL + UNDOMOD_SZ)
+UNDOEVC         ; EVICT TRANSACTIONS AT (UNDOBOT) THAT COLLIDE WITH [HL, HL + UNDORSZ)
 .EVCLP          LD      DE, (UNDOBOT)
                 LD      A, D
                 OR      E
                 RET     Z               ; NO MORE RECORDS: DONE
 
-                ; COLLISION WHEN 0 <= UNDOBOT - WRITE BASE < UNDOMOD_SZ. ONE
+                ; COLLISION WHEN 0 <= UNDOBOT - WRITE BASE < UNDORSZ. ONE
                 ; SUBTRACTION FOR BOTH BOUNDS: THE OLD SECOND TEST RE-DID IT
                 ; AFTER EX DE, HL HAD LEFT THE WRITE BASE IN BOTH REGISTERS,
                 ; GOT 0 EVERY TIME, AND SO EVICTED EVERY RECORD ABOVE THE
@@ -448,7 +512,7 @@ UNDOEVC         ; EVICT TRANSACTIONS AT (UNDOBOT) THAT COLLIDE WITH [HL, HL + UN
                 OR      A
                 SBC     HL, DE          ; HL = UNDOBOT - WRITE BASE
                 JR      C, .EVCBEL      ; BELOW THE WINDOW
-                LD      DE, UNDOMOD_SZ
+                LD      DE, (UNDORSZ)
                 SBC     HL, DE          ; CY = 1 INSIDE THE WINDOW (CY WAS 0)
                 POP     HL              ; HL = WRITE BASE
                 JR      NC, .EVCDON     ; PAST THE WINDOW -> DONE
@@ -497,8 +561,9 @@ UNDOEVC         ; EVICT TRANSACTIONS AT (UNDOBOT) THAT COLLIDE WITH [HL, HL + UN
 ; - UNDOSWP ----------------------------
 ; - SWAP DOCUMENT LINE RECORD WITH UNDO PAYLOAD AND RESTORE CURSOR
 ; - IN:  IX = UNDO TRANSACTION ADDRESS
-; - OUT: CY = 0 APPLIED, CY = 1 REFUSED (NOTHING CHANGED). NOTHING IS
-; -      PAINTED: THE CALLER REPAINTS ONCE, THROUGH UNDOPNT
+; - OUT: CY = 0 APPLIED, CY = 1 REFUSED (NO MEMORY FOR THE LONGER LINE:
+; -      NOTHING CHANGED, THE RECORD INCLUDED). NOTHING IS PAINTED: THE
+; -      CALLER REPAINTS ONCE, THROUGH UNDOPNT
 ; - CLOBBERS: ALL
 ; -
 
@@ -522,19 +587,24 @@ UNDOSWP         ; 1. SET TARGET DOCLINE
                 LD      DE, UNDOHDR_SZ
                 ADD     HL, DE          ; HL = IX + 10 (PAYLOAD)
                 LD      DE, WORKBUF
+                CALL    UNDOCAP
                 CALL    UNDOUPK         ; WORKBUF NOW HOLDS RESTORED LINE
 
                 ; 5. WRITE RESTORED LINE TO DOCUMENT
                 LD      HL, (DOCLINE)
                 CALL    LINEWRT
+                RET     C               ; NO MEMORY: THE PAYLOAD IS UNTOUCHED
 
                 ; 6. PACK DISPLACED LINE (WORKBUF2) BACK INTO UNDO PAYLOAD (IX + 10).
-                ;    UNDOREC NEVER RECORDS A LINE LONGER THAN TEXTCOLS, BUT THE
-                ;    EDIT MAY HAVE MADE IT LONGER: THEN THE UNDO IS EXACT AND
-                ;    ONLY ITS REDO IS LOST (ACTUNDO DROPS IT AT THE END).
+                ;    A NORMAL RECORD HOLDS TEXTCOLS CHARACTERS, AND THE EDIT MAY
+                ;    HAVE MADE ITS LINE LONGER: THEN THE UNDO IS EXACT AND ONLY
+                ;    ITS REDO IS LOST (ACTUNDO DROPS IT AT THE END).
+                CALL    UNDOCAP
+                LD      B, A
                 LD      A, (WORKBUF2)
-                CP      TEXTCOLS + 1
+                CP      B
                 JR      C, .PACK
+                JR      Z, .PACK
                 LD      (UNDONRD), A    ; NON-ZERO: NO REDO FOR THIS ACTION
 .PACK           PUSH    IX
                 POP     DE
@@ -542,6 +612,7 @@ UNDOSWP         ; 1. SET TARGET DOCLINE
                 ADD     HL, DE
                 EX      DE, HL          ; DE = IX + 10
                 LD      HL, WORKBUF2
+                CALL    UNDOCAP
                 CALL    UNDOPAK         ; PAYLOAD SWAPPED FOR REDO!
 
                 ; 6. SWAP CURX IN RECORD (IX + 7) WITH CURRENT CURX
@@ -626,16 +697,10 @@ UNDODSP         LD      A, (IX + 4)
                 SCF
                 RET
 
-.DOMOD          ; RECORD BEING UNDONE BECOMES HEAD OF REDO
-                LD      (REDOPTR), IX
-
-                ; ADVANCE UNDOPTR BACKWARDS: UNDOPTR = PREV_TRN (IX + 0)
-                LD      L, (IX + 0)
-                LD      H, (IX + 1)
-                LD      (UNDOPTR), HL
-
-                ; SWAP DOCUMENT WITH PAYLOAD (RESTORING PRE-MUTATION STATE)
-                JP      UNDOSWP
+.DOMOD          ; SWAP DOCUMENT WITH PAYLOAD (RESTORING PRE-MUTATION STATE)
+                CALL    UNDOSWP
+                RET     C
+                JP      UNDOBCK         ; THE RECORD NOW HEADS THE REDO CHAIN
 
 
 ; --- ACTREDO                   ----------------------------------------
@@ -713,16 +778,10 @@ REDODSP         LD      A, (IX + 4)
                 SCF
                 RET
 
-.DOMOD          ; RECORD BEING REDONE BECOMES HEAD OF UNDO
-                LD      (UNDOPTR), IX
-
-                ; ADVANCE REDOPTR FORWARD: REDOPTR = NEXT_TRN (IX + 2)
-                LD      L, (IX + 2)
-                LD      H, (IX + 3)
-                LD      (REDOPTR), HL
-
-                ; SWAP DOCUMENT WITH PAYLOAD (RESTORES MUTATION STATE)
-                JP      UNDOSWP
+.DOMOD          ; SWAP DOCUMENT WITH PAYLOAD (RESTORES MUTATION STATE)
+                CALL    UNDOSWP
+                RET     C
+                JP      UNDOFWD         ; THE RECORD NOW HEADS THE UNDO CHAIN
 
 
 ; --- UNDOPNT                   ----------------------------------------
@@ -803,8 +862,8 @@ UNDOLNR         LD      DE, (DOCLINE)
 ; - SELSTRL AS UNDOT_MOD (THE GROUP'S FIRST RECORD), THEN EVERY FOLLOWING
 ; - LINE UP TO SELENDL CHAINED. EVERY RECORD CARRIES CURX = SELSTRX, THE
 ; - CURSOR BOTH UNDO AND REDO LEAVE.
-; - A GROUP LARGER THAN UNDOGMAX IS NOT RECORDED HALF: THE HISTORY IS
-; - DROPPED INSTEAD, SINCE EVERY RECORD IN IT WOULD NAME LINES THIS EDIT
+; - A GROUP TOO BIG FOR THE RING IS NOT RECORDED HALF: UNDOREC DROPS THE
+; - HISTORY INSTEAD, SINCE EVERY RECORD IN IT WOULD NAME LINES THIS EDIT
 ; - IS ABOUT TO MOVE.
 ; - IN:  A = OP FOR THE FOLLOWING LINES:
 ; -          UNDOT_DEL  THEY ARE ABOUT TO BE DELETED; EACH IS RECORDED AT
@@ -820,19 +879,7 @@ UNDOSEL         PUSH    AF              ; OP FOR THE FOLLOWING LINES
                 LD      A, (CURX)
                 PUSH    AF              ; CURX, PUT BACK ON EXIT
 
-                ; RECORDS = SELENDL - SELSTRL + 1, AT MOST UNDOGMAX
-                LD      HL, (SELENDL)
-                LD      DE, (SELSTRL)
-                OR      A
-                SBC     HL, DE          ; HL = RECORDS - 1
-                LD      DE, UNDOGMAX
-                CALL    CMPHLDE
-                JR      C, .FITS
-                POP     AF
-                POP     AF
-                JP      UNDOINIT        ; TOO BIG TO KEEP: FORGET THE HISTORY
-
-.FITS           LD      A, (SELSTRX)
+                LD      A, (SELSTRX)
                 LD      (CURX), A
                 LD      HL, (SELSTRL)
                 CALL    LINEREAD
@@ -896,10 +943,7 @@ UNDORST         ; 1. CHECK IF LINE DIRECTORY IS FULL
                 LD      (NROFF), DE
 
                 ; 3. UPDATE UNDOPTR AND REDOPTR
-                LD      (REDOPTR), IX
-                LD      L, (IX + 0)
-                LD      H, (IX + 1)
-                LD      (UNDOPTR), HL
+                CALL    UNDOBCK
 
                 ; 4. WRITE PAYLOAD (IX + 10) INTO (NRSEG, NROFF)
                 PUSH    IX
@@ -907,6 +951,7 @@ UNDORST         ; 1. CHECK IF LINE DIRECTORY IS FULL
                 LD      BC, UNDOHDR_SZ
                 ADD     HL, BC          ; HL = SOURCE (IX + 10)
                 LD      DE, WORKBUF
+                CALL    UNDOCAP
                 CALL    UNDOUPK
                 LD      HL, WORKBUF
                 LD      A, (NRSEG)
@@ -929,14 +974,7 @@ UNDORST         ; 1. CHECK IF LINE DIRECTORY IS FULL
                 LD      (TOTLINES), HL
 
                 ; 7. RESTORE DOCLINE, CURX, TOPLINE
-                LD      L, (IX + 5)
-                LD      H, (IX + 6)
-                LD      (DOCLINE), HL
-                LD      A, (IX + 7)
-                LD      (CURX), A
-                LD      L, (IX + 8)
-                LD      H, (IX + 9)
-                LD      (TOPLINE), HL
+                CALL    UNDOCUR
 
                 ; 8. MARK MODIFIED; ACTUNDO / ACTREDO PAINT ONCE PER GROUP
                 JP      UNDOOK
@@ -954,10 +992,7 @@ UNDORST         ; 1. CHECK IF LINE DIRECTORY IS FULL
 ; -
 
 UNDOKIL         ; 1. ADVANCE REDOPTR AND UPDATE UNDOPTR
-                LD      (UNDOPTR), IX
-                LD      L, (IX + 2)
-                LD      H, (IX + 3)
-                LD      (REDOPTR), HL
+                CALL    UNDOFWD
 
                 ; 2. DELETE LINE AT (IX + 5)
                 LD      L, (IX + 5)
@@ -987,7 +1022,137 @@ UNDOKIL         ; 1. ADVANCE REDOPTR AND UPDATE UNDOPTR
                 JP      UNDOOK
 
 
-; --- UNDOSPU                   ----------------------------------------
+; --- STRUCTURAL PRIMITIVES     ----------------------------------------
+;
+; A SPLIT AND A JOIN KEEP NO LINE IMAGE: EACH IS UNDONE AND REDONE BY THE
+; EDIT THAT IS ITS INVERSE, RUN ON THE LINES AS THEY ARE -- JOIN2L MERGES
+; THE TWO HALVES OF A SPLIT, EDNWLIN SPLITS A JOINED LINE AT ITS SEAM.
+; RESTORING A STORED IMAGE COULD NOT DO IT: A RECORD HELD TEXTCOLS
+; CHARACTERS AND A LINE REACHES MAXCOLS, SO THE TAIL OF A LONG LINE WAS
+; LOST. EVERY PRIMITIVE APPLIES ITS EDIT FIRST AND MOVES THE POINTERS
+; ONLY ONCE IT HAS SUCCEEDED, SO A REFUSAL LEAVES DOCUMENT AND HISTORY
+; AS THEY WERE.
+
+
+; - UNDOBCK ----------------------------
+; - THE RECORD AT IX HAS BEEN UNDONE: IT HEADS THE REDO CHAIN, AND ITS
+; - PREDECESSOR THE UNDO CHAIN
+; - IN:  IX = RECORD
+; - OUT: NONE (FLAGS PRESERVED)
+; - CLOBBERS: HL
+; -
+
+UNDOBCK         LD      (REDOPTR), IX
+                LD      L, (IX + 0)
+                LD      H, (IX + 1)
+                LD      (UNDOPTR), HL
+                RET
+
+
+; - UNDOFWD ----------------------------
+; - THE RECORD AT IX HAS BEEN REDONE: IT HEADS THE UNDO CHAIN, AND ITS
+; - SUCCESSOR THE REDO CHAIN
+; - IN:  IX = RECORD
+; - OUT: NONE (FLAGS PRESERVED)
+; - CLOBBERS: HL
+; -
+
+UNDOFWD         LD      (UNDOPTR), IX
+                LD      L, (IX + 2)
+                LD      H, (IX + 3)
+                LD      (REDOPTR), HL
+                RET
+
+
+; - UNDOCUR ----------------------------
+; - PUT THE CURSOR AND THE VIEWPORT WHERE THE RECORD AT IX SAYS
+; - IN:  IX = RECORD
+; - OUT: DOCLINE, CURX, TOPLINE
+; - CLOBBERS: AF, HL
+; -
+
+UNDOCUR         LD      L, (IX + 5)
+                LD      H, (IX + 6)
+                LD      (DOCLINE), HL
+                LD      A, (IX + 7)
+                LD      (CURX), A
+                LD      L, (IX + 8)
+                LD      H, (IX + 9)
+                LD      (TOPLINE), HL
+                RET
+
+
+; - UNDOJ2L ----------------------------
+; - JOIN LINE (IX + 5) AND THE ONE BELOW IT, WITHOUT RECORDING
+; - IN:  IX = RECORD
+; - OUT: CY = 1 REFUSED (NOTHING CHANGED); IX PRESERVED
+; - CLOBBERS: ALL BUT IX
+; -
+
+UNDOJ2L         LD      L, (IX + 5)
+                LD      H, (IX + 6)     ; HL = LINE A
+                LD      E, L
+                LD      D, H
+                INC     DE              ; DE = LINE B (LINE A + 1)
+                LD      A, 1
+                LD      (UNDOHLD), A
+                PUSH    IX
+                CALL    JOIN2L
+                POP     IX
+                LD      A, 0            ; KEEPS THE CARRY
+                LD      (UNDOHLD), A
+                RET
+
+
+; - UNDONWX ----------------------------
+; - SPLIT LINE (IX + 5) AT COLUMN (IX + 7) EXACTLY, WITHOUT RECORDING OR
+; - PAINTING: THE UNDO OF A JOIN. WRAP_DEV FOR THE CALL, SINCE IN WRAP_TXT
+; - EFFCURX MOVES A SPLIT ON THE MARGIN OF A FULL LINE ONE COLUMN ON.
+; - UNDONWL ----------------------------
+; - THE SAME, IN THE CURRENT WRAP MODE: THE REDO OF AN ENTER, WHICH
+; - RECORDED THE CURSOR AND RE-DERIVES THE COLUMN JUST AS THE KEY DID.
+; - IN:  IX = RECORD
+; - OUT: CY = 1 REFUSED (NOTHING CHANGED); IX PRESERVED. EDNWLIN REFUSES
+; -      IN SILENCE (DIRECTORY FULL, NO RECORD), SO THE LINE COUNT TELLS.
+; -      THE CURSOR IS WHERE EDNWLIN LEFT IT: ON THE NEW LINE, COLUMN 0.
+; - CLOBBERS: ALL BUT IX
+; -
+
+UNDONWX         LD      A, WRAP_DEV
+                JR      UNDONW0
+
+UNDONWL         LD      A, (WRAPMODE)
+UNDONW0         LD      B, A
+                CALL    UNDOCUR
+                CALL    SETCURY
+                LD      HL, (TOTLINES)
+                PUSH    HL
+                LD      A, (WRAPMODE)
+                PUSH    AF
+                LD      A, (RNDHOLD)
+                PUSH    AF
+                LD      A, B
+                LD      (WRAPMODE), A
+                LD      A, 1
+                LD      (UNDOHLD), A
+                LD      (RNDHOLD), A    ; UNDOPNT REPAINTS ONCE, LATER
+                PUSH    IX
+                CALL    EDNWLIN
+                POP     IX
+                XOR     A
+                LD      (UNDOHLD), A
+                POP     AF
+                LD      (RNDHOLD), A
+                POP     AF
+                LD      (WRAPMODE), A
+                POP     DE
+                LD      HL, (TOTLINES)
+                OR      A
+                SBC     HL, DE
+                SCF
+                RET     Z               ; NO NEW LINE: REFUSED
+                OR      A
+                RET
 
 
 ; - UNDOSPU ----------------------------
@@ -998,39 +1163,11 @@ UNDOKIL         ; 1. ADVANCE REDOPTR AND UPDATE UNDOPTR
 ; - CLOBBERS: ALL
 ; -
 
-UNDOSPU         ; 1. UPDATE UNDOPTR AND REDOPTR
-                LD      (REDOPTR), IX
-                LD      L, (IX + 0)
-                LD      H, (IX + 1)
-                LD      (UNDOPTR), HL
-
-                ; 2. RE-JOIN LINE A (DOCLINE) AND LINE B (DOCLINE + 1)
-                LD      A, 1
-                LD      (UNDOHLD), A
-                LD      L, (IX + 5)
-                LD      H, (IX + 6)     ; HL = LINE A (DOCLINE)
-                LD      E, L
-                LD      D, H
-                INC     DE              ; DE = LINE B (DOCLINE + 1)
-                CALL    JOIN2L
-                XOR     A
-                LD      (UNDOHLD), A
-
-                ; 4. RESTORE DOCLINE, CURX, TOPLINE
-                LD      L, (IX + 5)
-                LD      H, (IX + 6)
-                LD      (DOCLINE), HL
-                LD      A, (IX + 7)
-                LD      (CURX), A
-                LD      L, (IX + 8)
-                LD      H, (IX + 9)
-                LD      (TOPLINE), HL
-
-                ; 5. MARK MODIFIED; ACTUNDO / ACTREDO PAINT ONCE PER GROUP
+UNDOSPU         CALL    UNDOJ2L
+                RET     C
+                CALL    UNDOBCK
+                CALL    UNDOCUR
                 JP      UNDOOK
-
-
-; --- REDOSPL                   ----------------------------------------
 
 
 ; - REDOSPL ----------------------------
@@ -1040,116 +1177,29 @@ UNDOSPU         ; 1. UPDATE UNDOPTR AND REDOPTR
 ; -      PAINTED: THE CALLER REPAINTS ONCE, THROUGH UNDOPNT
 ; - CLOBBERS: ALL
 ; -
+; - A REFUSED SPLIT MUST NOT ADVANCE THE POINTERS, OR THE NEXT CTRL+Z RUNS
+; - UNDOSPU AND MERGES AWAY AN UNRELATED LINE.
+; -
 
-REDOSPL         ; 1. UPDATE UNDOPTR AND REDOPTR
-                LD      (UNDOPTR), IX
-                LD      L, (IX + 2)
-                LD      H, (IX + 3)
-                LD      (REDOPTR), HL
-
-                ; 2. POSITION CURSOR AT THE SPLIT POINT
-                LD      L, (IX + 5)
-                LD      H, (IX + 6)
-                LD      (DOCLINE), HL
-                LD      A, (IX + 7)
-                LD      (CURX), A
-                LD      L, (IX + 8)
-                LD      H, (IX + 9)
-                LD      (TOPLINE), HL
-                CALL    SETCURY
-
-                ; 3. EXECUTE EDNWLIN WITH UNDOHLD = 1. IT REFUSES IN SILENCE
-                ;    (NO RECORD, DIRECTORY FULL), SO THE LINE COUNT TELLS: A
-                ;    REFUSED SPLIT MUST NOT ADVANCE THE POINTERS, OR THE NEXT
-                ;    CTRL+Z RUNS UNDOSPU AND MERGES AWAY AN UNRELATED LINE.
-                LD      HL, (TOTLINES)
-                PUSH    HL
-                PUSH    IX              ; S2ED'S REPAINT IN EDNWLIN USES IX
-                LD      A, 1
-                LD      (UNDOHLD), A
-                CALL    EDNWLIN
-                XOR     A
-                LD      (UNDOHLD), A
-                POP     IX
-                POP     DE
-                LD      HL, (TOTLINES)
-                OR      A
-                SBC     HL, DE
-                JP      NZ, UNDOOK      ; SPLIT: MARK MODIFIED, PAINTED ONCE LATER
-                LD      (REDOPTR), IX   ; REFUSED: PUT BOTH POINTERS BACK
-                LD      L, (IX + 0)
-                LD      H, (IX + 1)
-                LD      (UNDOPTR), HL
-                SCF
-                RET
-
-
-; --- UNDOJNU                   ----------------------------------------
+REDOSPL         CALL    UNDONWL
+                RET     C
+                CALL    UNDOFWD
+                JP      UNDOOK
 
 
 ; - UNDOJNU ----------------------------
-; - REVERSE LINE JOIN: RESTORE DELETED LINE B AND TRUNCATE LINE A
+; - REVERSE LINE JOIN: SPLIT LINE A AGAIN AT THE SEAM
 ; - IN:  IX = UNDO TRANSACTION ADDRESS
 ; - OUT: CY = 0 APPLIED, CY = 1 REFUSED (NOTHING CHANGED). NOTHING IS
 ; -      PAINTED: THE CALLER REPAINTS ONCE, THROUGH UNDOPNT
 ; - CLOBBERS: ALL
 ; -
 
-UNDOJNU         ; 1. UPDATE UNDOPTR AND REDOPTR
-                LD      (REDOPTR), IX
-                LD      L, (IX + 0)
-                LD      H, (IX + 1)
-                LD      (UNDOPTR), HL
-
-                ; 2. POSITION CURSOR AT THE JOIN SEAM ON LINE A
-                LD      L, (IX + 5)
-                LD      H, (IX + 6)
-                LD      (DOCLINE), HL
-                LD      A, (IX + 7)
-                LD      (CURX), A
-                LD      L, (IX + 8)
-                LD      H, (IX + 9)
-                LD      (TOPLINE), HL
-                CALL    SETCURY
-
-                ; 3. EXECUTE EDNWLIN WITH UNDOHLD = 1 (SPLIT LINE A AT SEAM)
-                LD      HL, (TOTLINES)
-                PUSH    HL
-                PUSH    IX              ; S2ED'S REPAINT IN EDNWLIN USES IX
-                LD      A, 1
-                LD      (UNDOHLD), A
-                CALL    EDNWLIN
-                XOR     A
-                LD      (UNDOHLD), A
-                POP     IX
-                POP     DE
-                LD      HL, (TOTLINES)
-                OR      A
-                SBC     HL, DE
-                JR      Z, .REFUSED
-
-                ; 4. RESTORE DOCLINE AT LINE A, CURX AT SEAM, RESTORE TOPLINE
-                LD      L, (IX + 5)
-                LD      H, (IX + 6)
-                LD      (DOCLINE), HL
-                LD      A, (IX + 7)
-                LD      (CURX), A
-                LD      L, (IX + 8)
-                LD      H, (IX + 9)
-                LD      (TOPLINE), HL
-
-                ; 5. MARK MODIFIED; ACTUNDO / ACTREDO PAINT ONCE PER GROUP
+UNDOJNU         CALL    UNDONWX
+                RET     C
+                CALL    UNDOBCK
+                CALL    UNDOCUR
                 JP      UNDOOK
-
-.REFUSED        LD      (UNDOPTR), IX   ; REFUSED: PUT BOTH POINTERS BACK
-                LD      L, (IX + 2)
-                LD      H, (IX + 3)
-                LD      (REDOPTR), HL
-                SCF
-                RET
-
-
-; --- REDOJON                   ----------------------------------------
 
 
 ; - REDOJON ----------------------------
@@ -1160,65 +1210,58 @@ UNDOJNU         ; 1. UPDATE UNDOPTR AND REDOPTR
 ; - CLOBBERS: ALL
 ; -
 
-REDOJON         ; 1. UPDATE UNDOPTR AND REDOPTR
-                LD      (UNDOPTR), IX
-                LD      L, (IX + 2)
-                LD      H, (IX + 3)
-                LD      (REDOPTR), HL
-
-                ; 2. JOIN LINE A AND LINE A + 1 WITH UNDOHLD = 1
-                LD      A, 1
-                LD      (UNDOHLD), A
-                LD      L, (IX + 5)
-                LD      H, (IX + 6)     ; HL = LINE A
-                LD      E, L
-                LD      D, H
-                INC     DE              ; DE = LINE B (LINE A + 1)
-                CALL    JOIN2L
-                XOR     A
-                LD      (UNDOHLD), A
-
-                ; 3. RESTORE CURX AT SEAM
-                LD      A, (IX + 7)
-                LD      (CURX), A
-                LD      L, (IX + 5)
-                LD      H, (IX + 6)
-                LD      (DOCLINE), HL
-                LD      L, (IX + 8)
-                LD      H, (IX + 9)
-                LD      (TOPLINE), HL
-
-                ; 4. MARK MODIFIED; ACTUNDO / ACTREDO PAINT ONCE PER GROUP
+REDOJON         CALL    UNDOJ2L
+                RET     C
+                CALL    UNDOFWD
+                CALL    UNDOCUR
                 JP      UNDOOK
 
 
 ; --- UNDOPAK                   ----------------------------------------
 
 
+; - UNDOCAP ----------------------------
+; - PAYLOAD CAPACITY OF A RECORD, IN CHARACTERS
+; - IN:  IX = RECORD
+; - OUT: A = TEXTCOLS, OR MAXCOLS FOR A RECORD FLAGGED UNDOF_BIG
+; - CLOBBERS: AF
+; -
+
+UNDOCAP         LD      A, (IX + 4)
+                AND     UNDOF_BIG
+                LD      A, TEXTCOLS
+                RET     Z
+                LD      A, MAXCOLS
+                RET
+
+
 ; - UNDOPAK ----------------------------
-; - PACK LINE BUFFER INTO UNDO RECORD PAYLOAD (LINEREC BYTES)
+; - PACK LINE BUFFER INTO UNDO RECORD PAYLOAD (1 + 2 * CAPACITY BYTES)
 ; - IN:  HL = SOURCE BUFFER (WORKBUF OR WORKBUF2)
 ; -      DE = DESTINATION IN UNDO RING BUFFER
-; - OUT: DE ADVANCED BY LINEREC BYTES
+; -      A  = CAPACITY (TEXTCOLS OR MAXCOLS)
+; - OUT: DE ADVANCED BY 1 + 2 * CAPACITY BYTES
 ; - CLOBBERS: AF, BC, DE, HL
 ; -
 
 UNDOPAK         ; 1. COPY LENGTH (1 BYTE)
                 LDI                     ; (DE)=(HL), HL++, DE++
 
-                ; 2. COPY TEXT (TEXTCOLS BYTES)
+                ; 2. COPY TEXT (CAPACITY BYTES)
+                LD      C, A
+                LD      B, 0
+                PUSH    BC              ; SAVE BC = CAPACITY
                 PUSH    HL              ; SAVE HL = SOURCE BUFFER + 1
-                LD      BC, TEXTCOLS
-                LDIR                    ; COPIES TEXTCOLS BYTES OF TEXT
+                LDIR
 
                 ; 3. ADVANCE HL TO ATTRIBUTES (SOURCE BUFFER + 1 + WORKATTR)
                 POP     HL              ; HL = SOURCE BUFFER + 1
                 LD      BC, WORKATTR
                 ADD     HL, BC          ; HL = SOURCE BUFFER + 1 + WORKATTR
 
-                ; 4. COPY ATTRIBUTES (TEXTCOLS BYTES)
-                LD      BC, TEXTCOLS
-                LDIR                    ; COPIES TEXTCOLS BYTES OF ATTRS
+                ; 4. COPY ATTRIBUTES (CAPACITY BYTES)
+                POP     BC
+                LDIR
                 RET
 
 
@@ -1226,9 +1269,10 @@ UNDOPAK         ; 1. COPY LENGTH (1 BYTE)
 
 
 ; - UNDOUPK ----------------------------
-; - UNPACK UNDO RECORD PAYLOAD (LINEREC BYTES) INTO LINE BUFFER
+; - UNPACK UNDO RECORD PAYLOAD (1 + 2 * CAPACITY BYTES) INTO LINE BUFFER
 ; - IN:  HL = SOURCE PAYLOAD IN UNDO RING BUFFER
 ; -      DE = DESTINATION BUFFER (WORKBUF OR WORKBUF2)
+; -      A  = CAPACITY (TEXTCOLS OR MAXCOLS)
 ; - OUT: NONE
 ; - CLOBBERS: AF, BC, DE, HL
 ; -
@@ -1236,10 +1280,12 @@ UNDOPAK         ; 1. COPY LENGTH (1 BYTE)
 UNDOUPK         ; 1. COPY LENGTH (1 BYTE)
                 LDI                     ; (DE)=(HL), HL++, DE++
 
-                ; 2. COPY TEXT (TEXTCOLS BYTES)
+                ; 2. COPY TEXT (CAPACITY BYTES)
+                LD      C, A
+                LD      B, 0
+                PUSH    BC              ; SAVE BC = CAPACITY
                 PUSH    DE              ; SAVE DE = DEST BUFFER + 1
-                LD      BC, TEXTCOLS
-                LDIR                    ; HL = SRC ATTR, DE = DEST BUFFER + 1 + TEXTCOLS
+                LDIR                    ; HL = SRC ATTR
 
                 ; 3. ADVANCE DEST TO ATTRIBUTES (DEST BUFFER + 1 + WORKATTR)
                 POP     DE              ; DE = DEST BUFFER + 1
@@ -1248,8 +1294,7 @@ UNDOUPK         ; 1. COPY LENGTH (1 BYTE)
                 ADD     HL, BC          ; HL = DEST BUFFER + 1 + WORKATTR
                 EX      DE, HL          ; DE = DEST BUFFER + 1 + WORKATTR, HL = SRC ATTR
 
-                ; 4. COPY ATTRIBUTES (TEXTCOLS BYTES)
-                LD      BC, TEXTCOLS
-                LDIR                    ; COPIES TEXTCOLS BYTES OF ATTRS
+                ; 4. COPY ATTRIBUTES (CAPACITY BYTES)
+                POP     BC
+                LDIR
                 RET
-

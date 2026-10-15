@@ -540,10 +540,101 @@ class S6212CursorShape(H43CursorShape):
         return forms.index(got) if got in forms and prev == pwant else None
 
 
+
+# --- S62-13  UNDO ON LINES LONGER THAN TEXTCOLS -------------------------
+
+
+class S6213UndoLongJoin(S62Case):
+    name = 'S62-13-undo-long-join'
+    desc = ('join the TEST lines with a space at every seam, past 61 columns, '
+            'go to the end of the line, undo everything; then redo')
+    origin = ('reported on S6ED 2026-10-15: an undo record held TEXTCOLS '
+              'characters, so an edit on a longer line could not be recorded '
+              '-- Ctrl+Z did nothing, or split a join with the typed space '
+              'inside.  S61ED has 61 columns, so the third character typed '
+              'after a join already crosses it')
+    variants = ('undo', 'redo')
+    LINES = ['Hello MSX2 World!',
+             'This is S61ED: Screen 6 (512x212, 4 colors, 2 bpp).',
+             '61 columns x 24 rows with native 8x8 font.',
+             'Byte-aligned HMMM burst transfers with CRT safe margins!']
+    UNDOS = 5           # three joins and two spaces
+
+    def joined(self):
+        return self.LINES[0] + self.LINES[1] + ' ' + ' '.join(self.LINES[2:])
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.wait(1.0)
+        for i in range(len(self.LINES) - 1):
+            t.press('DOWN')
+            t.press('LEFT', mods=['CTRL'])
+            t.press('BS')
+            if i:
+                t.press('SPACE')
+        t.press('RIGHT', mods=['CTRL'])
+        t.wait(1.0)
+        t.snap('joined')
+        for _ in range(self.UNDOS):
+            t.press('Z', mods=['CTRL'])
+        t.wait(1.0)
+        t.snap('undone', vram='screen')
+        if variant == 'redo':
+            for _ in range(self.UNDOS):
+                t.press('Z', mods=['SHIFT', 'CTRL'])
+            t.wait(1.0)
+            t.snap('redone')
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        checks = []
+        joined = self.joined()
+        for variant, run in sorted(runs.items()):
+            pre = 'S62-13/%s' % variant
+            got = run.session.extract(run.dsk, 'DOC.TXT')
+            want = crlf([joined] if variant == 'redo' else self.LINES)
+            checks.append(Check(
+                '%s/joined' % pre,
+                run.var('joined', 'TOTLINES') == 1 and
+                run.var('joined', 'CURX') == len(joined) and
+                run.var('joined', 'LEFTCOL') > 0,
+                'TOTLINES %s, CURX %s (want %d), LEFTCOL %s'
+                % (run.var('joined', 'TOTLINES'), run.var('joined', 'CURX'),
+                   len(joined), run.var('joined', 'LEFTCOL'))))
+            checks.append(Check(
+                '%s/undone' % pre,
+                run.var('undone', 'TOTLINES') == len(self.LINES) and
+                run.var('undone', 'UNDOPTR') == 0 and
+                run.var('undone', 'MODIFIED') == 0,
+                'TOTLINES %s, UNDOPTR %s, MODIFIED %s after %d x Ctrl+Z'
+                % (run.var('undone', 'TOTLINES'), run.var('undone', 'UNDOPTR'),
+                   run.var('undone', 'MODIFIED'), self.UNDOS)))
+            checks += screen_checks('%s/screen' % pre, ctx, run, 'undone',
+                                    self.LINES)[:1]
+            if variant == 'redo':
+                checks.append(Check(
+                    '%s/redone' % pre,
+                    run.var('redone', 'TOTLINES') == 1 and
+                    run.var('redone', 'MODIFIED') == 0xFF,
+                    'TOTLINES %s, MODIFIED %s after %d x Ctrl+Shift+Z'
+                    % (run.var('redone', 'TOTLINES'),
+                       run.var('redone', 'MODIFIED'), self.UNDOS)))
+            checks.append(Check('%s/content' % pre, got == want,
+                                'byte for byte' if got == want else
+                                'got %r, want %r' % (got, want)))
+        return checks
+
+
 CASES = [S621Render(), S622Edit(), S623Scroll(), S624HScroll(),
          S625Windows(), S626Browse(), S627DatForeign(), S628LoadProgress(),
          S629BrowseBusy(), S6210ShippedDisk(), S6211SaveAsAfterOpen(),
-         S6212CursorShape()]
+         S6212CursorShape(), S6213UndoLongJoin()]
 
 
 def run(ctx, cases=None):

@@ -345,7 +345,8 @@ converted back on save.
 
  ---- 6.4.- WORD WRAP & TEXT WIDTH.
 
-Two wrap modes, toggled with Ctrl+W or WRAP= in the CFG:
+Two wrap modes, chosen in Help > Settings or with WRAP=
+in the CFG:
 
     WRAP=DEV   Developer mode (default): no wrapping, lines
                grow up to 255 columns with horizontal scroll.
@@ -410,9 +411,9 @@ or re-weights styled spans without modifying the file:
     OFF  Raw text (best for source code).
 
 [S6ED/S61ED] render bold/italic with the font weights;
-[S2ED] renders them in theme colors. Ctrl+T cycles the mode.
-Ctrl+B / Ctrl+I (STD profile) insert a delimiter pair or wrap
-the current selection.
+[S2ED] renders them in theme colors. Help > Settings chooses
+the mode. Ctrl+B / Ctrl+I (STD profile) insert a delimiter
+pair or wrap the current selection.
 
 
 
@@ -468,8 +469,6 @@ Classic CUA-style editing (the default):
     Ctrl+O                   Open... (file browser)
     Ctrl+Shift+S             Save as... (file browser)
     Ctrl+B / Ctrl+I          Bold / italic delimiters
-    Ctrl+T                   Cycle markup mode
-    Ctrl+W                   Toggle wrap mode
     Ctrl+Z / Ctrl+Shift+Z    Undo / redo
     ESC                      Cancel selection, else quit
 
@@ -523,8 +522,6 @@ block:
     GRAPH+Left/Right         Word left / right
     GRAPH+Up / GRAPH+Down    Page up / down
     GRAPH+BS                 Delete word left
-    Ctrl+T                   Cycle markup mode
-    Ctrl+W                   Toggle wrap mode
     Ctrl+Z / Ctrl+Shift+Z    Undo / redo
     ESC                      Cancel selection, else quit
 
@@ -580,7 +577,6 @@ Miscellaneous:
 
     :    Ex command line (see 8.4)
     Ctrl+G  Go to line...    Ctrl+S  Save    Ctrl+Q  Quit
-    Ctrl+T  Cycle markup mode
 
 Leader sequences: after "d", "g", or "y" the editor waits for
 the next key ("dd", "gg", "yy"). Any other key cancels the
@@ -594,7 +590,6 @@ ESC returns to Normal mode. While inserting:
     Cursor keys              Move (staying in Insert)
     RETURN / TAB / BS / DEL  As usual
     Ctrl+B / Ctrl+I          Bold / italic delimiters
-    Ctrl+T                   Cycle markup mode
     Any printable key        Typed into the document
 
 

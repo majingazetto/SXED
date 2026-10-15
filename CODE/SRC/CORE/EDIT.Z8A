@@ -680,38 +680,6 @@ SETCURY         LD      HL, (DOCLINE)
                 RET
 
 
-; --- EDTGLWRP                  ----------------------------------------
-
-
-; - EDTGLWRP ---------------------------
-; - TOGGLE WRAP MODE (WRAP_DEV <-> WRAP_TXT)
-; - IN:  NONE
-; - OUT: NONE
-; - CLOBBERS: AF
-; -
-
-EDTGLWRP        LD      A, (WRAPMODE)
-                XOR     1
-                LD      (WRAPMODE), A
-                OR      A
-                JR      Z, .TGLDEV
-                ; TOGGLED TO WRAP_TXT: RESTORE TXTWIDTH FROM SAVETW
-                LD      A, (SAVETW)
-                OR      A
-                JR      NZ, .SETTW
-                LD      A, TEXTCOLS
-.SETTW          LD      (TXTWIDTH), A
-                RET
-.TGLDEV         ; TOGGLED TO WRAP_DEV: SAVE TXTWIDTH AND SET TO 0
-                LD      A, (TXTWIDTH)
-                OR      A
-                JR      Z, .SAVZERO
-                LD      (SAVETW), A
-.SAVZERO        XOR     A
-                LD      (TXTWIDTH), A
-                RET
-
-
 ; --- EDOVRCHR                  ----------------------------------------
 
 
@@ -1139,7 +1107,8 @@ RECBL80         LD      A, (WORKBUF)
 ; - IN:  HL = LINE A (TARGET LINE NUMBER)
 ; -      DE = LINE B (SOURCE TO DELETE)
 ; - OUT: CY = 0 : SUCCESS, JOINCOL = LEN A
-; -      CY = 1 : FAILED (> MAXCOLS)
+; -      CY = 1 : FAILED (> MAXCOLS, OR NO MEMORY FOR THE LONGER LINE A):
+; -               NOTHING CHANGED, NOTHING RECORDED
 ; - CLOBBERS: ALL
 ; -
 
@@ -1167,11 +1136,6 @@ JOIN2L          LD      (JOINLA), HL
                 LD      A, (WORKBUF2)   ; A = LEN_B
                 ADD     A, B            ; A = LEN_A + LEN_B
                 JR      C, .JNBIG       ; 8-BIT OVERFLOW > 255: REJECT
-
-                ; RECORD JOIN IN UNDO RING BUFFER
-                CALL    UNDOJON
-                LD      HL, (JOINLA)
-                CALL    LINEREAD        ; RESTORE WORKBUF = LINE A
 
                 ; APPEND LINE B TEXT & ATTRS IF LEN_B > 0
                 LD      A, (WORKBUF2)
@@ -1215,8 +1179,14 @@ JOIN2L          LD      (JOINLA), HL
                 ; WRITE UPDATED LINE A BACK
                 LD      HL, (JOINLA)
                 CALL    LINEWRT
+                RET     C               ; NO MEMORY: LINE A AS IT WAS, B KEPT
 
-.JNDEL          ; DELETE LINE B FROM DIRECTORY
+.JNDEL          ; RECORD THE JOIN NOW THAT IT CANNOT FAIL. RECORDED BEFORE THE
+                ; WRITE, AN OOM IN LINEWRT LEFT A JOIN IN THE HISTORY THAT NEVER
+                ; HAPPENED -- AND LINE B WAS DELETED ANYWAY, ITS TEXT LOST.
+                CALL    UNDOJON
+
+                ; DELETE LINE B FROM DIRECTORY
                 LD      HL, (JOINLB)
                 CALL    LINEDEL
 
