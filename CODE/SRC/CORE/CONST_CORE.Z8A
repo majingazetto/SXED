@@ -8,7 +8,7 @@
 
 VERSION
 .MAJOR          EQU     '0'
-.MINOR          EQU     '5'
+.MINOR          EQU     '6'
 
 
 ; --- CHARACTER ATTRIBUTES      ----------------------------------------
@@ -326,7 +326,13 @@ ACVICPY         EQU     73              ; VI y IN VISUAL MODE (YANK AND EXIT)
 ACVICUT         EQU     74              ; VI d/x IN VISUAL MODE (CUT AND EXIT)
 ACVIREP         EQU     75              ; VI R (REPLACE MODE)
 ACVILER         EQU     76              ; VI LEADER 'r' (REPLACE ONE CHARACTER)
-ACMAX           EQU     77
+ACDUPLN         EQU     77              ; CTRL + D: DUPLICATE LINE
+ACVILEY         EQU     78              ; VI LEADER 'y' (YANK PENDING)
+ACVILOW         EQU     79              ; VI 'u' IN VISUAL (LOWERCASE SELECTION)
+ACVIUPC         EQU     80              ; VI 'U' IN VISUAL (UPPERCASE SELECTION)
+ACVITGC         EQU     81              ; VI '~' (TOGGLE CASE: CHAR IN NORMAL, SELECTION IN VISUAL)
+ACVIYNL         EQU     82              ; VI 'Y' / 'yy': YANK WHOLE LINE
+ACMAX           EQU     83
 
 SRCHMAX         EQU     18              ; MAX SEARCH / REPLACE PATTERN LENGTH
 SRCH_FND        EQU     0               ; ACTION: FIND NEXT

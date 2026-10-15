@@ -6,6 +6,27 @@ Newest first. The manual is SXED.TXT.
 -------------------------------------------------------------
 
 
+ -------- v0.6 (2026-10-15)
+
+New
+- Ctrl+D duplicates the current line immediately below in the
+  STD and TED profiles, leaving the cursor on the new line.
+- Vi profile: yy or Y yanks the whole current line to
+  clipboard (with CRLF), so lines duplicate with p.
+- Vi profile: visual selection supports u (lowercase),
+  U (uppercase), and ~ (toggle case).
+- Vi profile: ~ in normal mode toggles the case of the
+  character under the cursor and advances one column.
+- Dynamic VDP I/O port detection across all three targets via
+  BIOS #0006/#0007, and 19T VRAM font bus upload pacing.
+- S2ED: clean boot without text mode residual artifacts
+  (ERAFNK before INITVDP) and sprite suppression (#D0).
+
+Changed
+- Removed legacy Ctrl+K shortcut; profile cycling is managed
+  exclusively via the Settings dialog.
+
+
  -------- v0.5 (2026-10-14)
 
 New

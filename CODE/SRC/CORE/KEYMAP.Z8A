@@ -53,6 +53,7 @@ KMAPSTD         ; UNMODIFIED CURSORS & HOME
                 DEFB    CTRL_A,  MODCTRL, ACSELAL
                 DEFB    CTRL_B,  MODCTRL, ACTGLBD
                 DEFB    CTRL_C,  MODCTRL, ACCOPY
+                DEFB    CTRL_D,  MODCTRL, ACDUPLN
                 DEFB    CTRL_I,  MODCTRL, ACTGLIT
                 DEFB    CTRL_X,  MODCTRL, ACCUT
                 DEFB    CTRL_V,  MODCTRL, ACPAST
@@ -151,6 +152,7 @@ KMAPTED         ; UNMODIFIED CURSORS
                 ; CLIPBOARD & COMMON ATOMS
                 DEFB    CTRL_A,  MODCTRL, ACSELAL
                 DEFB    CTRL_C,  MODCTRL, ACCOPY
+                DEFB    CTRL_D,  MODCTRL, ACDUPLN
                 DEFB    CTRL_X,  MODCTRL, ACCUT
                 DEFB    CTRL_V,  MODCTRL, ACPAST
                 DEFB    CTRL_S,  MODCTRL, ACSAVE
@@ -252,9 +254,12 @@ KMAPVIN         ; VI NORMAL MOVEMENT
                 DEFB    'R',     MODANY,  ACVIREP
                 DEFB    'v',     MODNONE, ACVIVIS
                 DEFB    'V',     MODANY,  ACVILIN
-                DEFB    'y',     MODNONE, ACCOPY
-                DEFB    'p',     MODNONE, ACPAST
+                DEFB    'y',     MODNONE, ACVILEY
+                DEFB    'Y',     MODANY,  ACVIYNL
+                DEFB    'p',     MODANY,  ACPAST
+                DEFB    'P',     MODANY,  ACPAST
                 DEFB    'u',     MODNONE, ACUNDO
+                DEFB    '~',     MODANY,  ACVITGC
                 DEFB    CTRL_R,  MODCTRL, ACREDO
                 DEFB    CTRL_F,  MODCTRL, ACPGDN
                 DEFB    CTRL_B,  MODCTRL, ACPGUP
@@ -349,8 +354,12 @@ KMAPVIV         ; VI VISUAL MODE (SELECTION EXTENSION)
 
                 ; ACTIONS ON VISUAL SELECTION
                 DEFB    'y',     MODNONE, ACVICPY
+                DEFB    'Y',     MODANY,  ACVICPY
                 DEFB    'd',     MODNONE, ACVICUT
                 DEFB    'x',     MODNONE, ACVICUT
+                DEFB    'u',     MODNONE, ACVILOW
+                DEFB    'U',     MODANY,  ACVIUPC
+                DEFB    '~',     MODANY,  ACVITGC
                 DEFB    'v',     MODNONE, ACVIVIS ; v IN v LEAVES, IN V SWITCHES
                 DEFB    'V',     MODANY,  ACVILIN ; V IN V LEAVES, IN v SWITCHES
                 DEFB    ESC,     MODANY,  ACVINRM

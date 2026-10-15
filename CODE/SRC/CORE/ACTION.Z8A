@@ -86,6 +86,12 @@ ACTTBL          DEFW    ACTNONE         ; 0
                 DEFW    ACTVICUT        ; 74 (VI d/x / CUT VISUAL SELECTION)
                 DEFW    ACTVIREP        ; 75 (VI R / REPLACE MODE)
                 DEFW    ACTVILER        ; 76 (VI LEADER 'r')
+                DEFW    ACTDUPLN        ; 77 (CTRL + D / DUPLICATE LINE)
+                DEFW    ACTVILEY        ; 78 (VI LEADER 'y')
+                DEFW    ACTVILOW        ; 79 (VI 'u' / LOWERCASE SELECTION)
+                DEFW    ACTVIUPC        ; 80 (VI 'U' / UPPERCASE SELECTION)
+                DEFW    ACTVITGC        ; 81 (VI '~' / TOGGLE CASE)
+                DEFW    ACTVIYNL        ; 82 (VI 'Y' / YANK WHOLE LINE)
                 ASSERT  ($ - ACTTBL) / 2 == ACMAX
 
 
@@ -815,6 +821,59 @@ ACTOPNAB        CALL    ACTBOL
                 LD      A, CUP
                 CALL    EDMOVROW
                 JP      ACTVIINS
+
+
+; --- ACTDUPLN                  ----------------------------------------
+
+
+; - ACTDUPLN ---------------------------
+; - DUPLICATE CURRENT LINE IMMEDIATELY BELOW
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTDUPLN        CALL    UNDOCLS
+                ; REFUSE IF DIRECTORY FULL
+                LD      HL, (TOTLINES)
+                LD      DE, MAXLINES
+                CALL    CMPHLDE
+                RET     NC
+
+                ; SAVE ENTRY CURSOR X POSITION
+                LD      A, (CURX)
+                PUSH    AF
+
+                ; GO TO EOL AND INSERT NEWLINE
+                CALL    ACTEOL
+                LD      HL, (TOTLINES)
+                PUSH    HL
+                CALL    EDNWLIN
+                POP     DE
+                LD      HL, (TOTLINES)
+                CALL    CMPHLDE
+                JR      Z, .DUPOOM
+
+                ; READ ORIGINAL LINE FROM (DOCLINE - 1) INTO WORKBUF
+                LD      HL, (DOCLINE)
+                DEC     HL
+                CALL    LINEREAD
+
+                ; WRITE IT TO THE NEW DUPLICATED LINE (DOCLINE)
+                LD      HL, (DOCLINE)
+                CALL    LINEWRT
+
+                POP     AF              ; RESTORE SAVED CURX
+                LD      (CURX), A
+                CALL    SETCURY
+                CALL    REDRAW
+                LD      A, #FF
+                LD      (MODIFIED), A
+                JP      DRWSTAT
+
+.DUPOOM         POP     AF
+                LD      (CURX), A
+                RET
 
 
 ; --- ACTTGLIN                  ----------------------------------------
@@ -2081,6 +2140,285 @@ ACTVICPY        CALL    ACTCOPY
 
 ACTVICUT        CALL    ACTCUT
                 JP      ACTVINRM
+
+
+; --- ACTVILEY                  ----------------------------------------
+
+
+; - ACTVILEY ---------------------------
+; - SET VI YANK LEADER PENDING
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: AF
+; -
+
+ACTVILEY        LD      A, 'y'
+                LD      (VILEAD), A
+                RET
+
+
+; --- ACTVIYNL                  ----------------------------------------
+
+
+; - ACTVIYNL ---------------------------
+; - YANK ENTIRE CURRENT LINE (VI 'yy')
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTVIYNL        LD      HL, (DOCLINE)
+                CALL    LINEREAD
+                LD      A, (WORKBUF)
+                LD      C, A
+                LD      B, 0
+                LD      HL, WORKBUF + 1
+                LD      DE, CLIPBUF
+                LD      A, C
+                OR      A
+                JR      Z, .YNLNL
+                LDIR
+.YNLNL          EX      DE, HL
+                LD      (HL), #0D
+                INC     HL
+                LD      (HL), #0A
+                INC     HL
+                LD      DE, CLIPBUF
+                OR      A
+                SBC     HL, DE
+                LD      (CLIPLEN), HL
+                JP      DRWSTAT
+
+
+; --- ACTVILOW                  ----------------------------------------
+
+
+; - ACTVILOW ---------------------------
+; - CONVERT VISUAL SELECTION TO LOWERCASE (VI 'u')
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTVILOW        LD      B, 0
+                JR      ACTCASEC
+
+
+; --- ACTVIUPC                  ----------------------------------------
+
+
+; - ACTVIUPC ---------------------------
+; - CONVERT VISUAL SELECTION TO UPPERCASE (VI 'U')
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTVIUPC        LD      B, 1
+                JR      ACTCASEC
+
+
+; --- ACTVITGC                  ----------------------------------------
+
+
+; - ACTVITGC ---------------------------
+; - TOGGLE CASE (VI '~'): SELECTION IN VISUAL, CHAR AT CURSOR IN NORMAL
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTVITGC        LD      A, (SELACT)
+                OR      A
+                JR      NZ, .VISTOG
+
+                ; NORMAL MODE: TOGGLE SINGLE CHAR AT CURSOR
+                LD      HL, (DOCLINE)
+                CALL    LINEREAD
+                LD      A, (WORKBUF)
+                OR      A
+                RET     Z
+                LD      HL, CURX
+                CP      (HL)
+                RET     Z
+                RET     C
+
+                ; ADDRESS OF CHAR IN WORKBUF
+                LD      A, (CURX)
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                LD      A, (HL)
+                CALL    TOGGLEC
+                LD      (HL), A
+
+                LD      HL, (DOCLINE)
+                CALL    LINEWRT
+
+                ; ADVANCE CURSOR IF NOT PAST LINE END
+                LD      A, (CURX)
+                INC     A
+                LD      HL, WORKBUF
+                CP      (HL)
+                JR      NC, .NOTADV
+                LD      (CURX), A
+
+.NOTADV         LD      A, (CURY)
+                INC     A
+                LD      B, A
+                CALL    RENDIFF
+                LD      A, #FF
+                LD      (MODIFIED), A
+                JP      DRWSTAT
+
+.VISTOG         LD      B, 2
+                ; FALL THROUGH INTO ACTCASEC
+
+
+; --- ACTCASEC                  ----------------------------------------
+
+
+; - ACTCASEC ---------------------------
+; - CONVERT CASE OF ACTIVE SELECTION
+; - IN:  B = 0 LOWERCASE, 1 UPPERCASE, 2 TOGGLE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTCASEC        LD      A, (SELACT)
+                OR      A
+                RET     Z
+                CALL    SELNORM
+                LD      HL, (SELSTRL)
+                LD      (SELTMPL), HL
+                LD      IXH, B
+
+.CASELIN        LD      HL, (SELTMPL)
+                CALL    LINEREAD
+
+                LD      HL, (SELTMPL)
+                CALL    LNEXT
+                JR      C, .CASENXT
+
+                LD      HL, WORKBUF + 1
+                LD      C, D
+                LD      B, 0
+                ADD     HL, BC
+.CASECHR        LD      A, D
+                CP      E
+                JR      NC, .CASEWRT
+                LD      A, (HL)
+                CALL    CONVCASE
+                LD      (HL), A
+                INC     HL
+                INC     D
+                JR      .CASECHR
+
+.CASEWRT        LD      HL, (SELTMPL)
+                CALL    LINEWRT
+
+.CASENXT        LD      HL, (SELTMPL)
+                LD      DE, (SELENDL)
+                CALL    CMPHLDE
+                JR      Z, .CASEDON
+                INC     HL
+                LD      (SELTMPL), HL
+                JR      .CASELIN
+
+.CASEDON        CALL    ACTDSEL
+                CALL    ACTVINRM
+                LD      A, #FF
+                LD      (MODIFIED), A
+                CALL    REDRAW
+                JP      DRWSTAT
+
+
+; --- CONVCASE                  ----------------------------------------
+
+
+; - CONVCASE ---------------------------
+; - CONVERT CHAR A BY MODE IN IXH (0: LOW, 1: UPP, 2: TOGGLE)
+; - IN:  A = CHAR, IXH = MODE
+; - OUT: A = CONVERTED CHAR
+; - CLOBBERS: F
+; -
+
+CONVCASE        PUSH    AF
+                LD      A, IXH
+                OR      A
+                JR      Z, .DOLOW
+                DEC     A
+                JR      Z, .DOUPP
+                POP     AF
+                JP      TOGGLEC
+
+.DOLOW          POP     AF
+                JP      TOLOWER
+
+.DOUPP          POP     AF
+                JP      TOUPPER
+
+
+; --- TOGGLEC                   ----------------------------------------
+
+
+; - TOGGLEC ----------------------------
+; - TOGGLE CHAR A: LOWER TO UPPER, UPPER TO LOWER
+; - IN:  A = CHAR
+; - OUT: A = TOGGLED CHAR
+; - CLOBBERS: F
+; -
+
+TOGGLEC         CP      'a'
+                JR      C, .CHKUP
+                CP      'z' + 1
+                JR      NC, .NOTLET
+                AND     #DF
+                RET
+.CHKUP          CP      'A'
+                RET     C
+                CP      'Z' + 1
+                RET     NC
+                OR      #20
+                RET
+.NOTLET         RET
+
+
+; --- TOLOWER                   ----------------------------------------
+
+
+; - TOLOWER ----------------------------
+; - CONVERT CHAR A TO LOWERCASE
+; - IN:  A = CHAR
+; - OUT: A = LOWERCASE CHAR
+; - CLOBBERS: F
+; -
+
+TOLOWER         CP      'A'
+                RET     C
+                CP      'Z' + 1
+                RET     NC
+                OR      #20
+                RET
+
+
+; --- TOUPPER                   ----------------------------------------
+
+
+; - TOUPPER ----------------------------
+; - CONVERT CHAR A TO UPPERCASE
+; - IN:  A = CHAR
+; - OUT: A = UPPERCASE CHAR
+; - CLOBBERS: F
+; -
+
+TOUPPER         CP      'a'
+                RET     C
+                CP      'z' + 1
+                RET     NC
+                AND     #DF
+                RET
 
 
 ; --- SELBEG                    ----------------------------------------

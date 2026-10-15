@@ -71,7 +71,7 @@ DISPKEY         PUSH    AF              ; PRESERVE KEYCODE ACROSS READMOD
                 LD      A, C            ; VI r<c>
                 JP      ACTVIRPL
 .NOTVR          CP      'g'
-                JR      NZ, .NOLEAD
+                JR      NZ, .NOTVG
                 LD      A, C
                 CP      'g'
                 JR      NZ, .NOLEAD
@@ -79,6 +79,14 @@ DISPKEY         PUSH    AF              ; PRESERVE KEYCODE ACROSS READMOD
                 OR      A
                 JP      NZ, ACTSLTOP
                 JP      ACTTOP
+.NOTVG          CP      'y'
+                JR      NZ, .NOLEAD
+                LD      A, C
+                CP      'y'
+                JP      Z, ACTVIYNL
+                CP      'Y'
+                JP      Z, ACTVIYNL
+                JR      .NOLEAD
 
 .NOLEAD         ; SCAN ACTIVE KEYMAP TABLE
                 LD      HL, (KMAPPTR)

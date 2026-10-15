@@ -350,6 +350,7 @@ Classic CUA-style editing (the default):
 | `Shift+GRAPH+Up/Down` | Select to doc top / bottom |
 | `Ctrl+A` | Select all |
 | `` | Ctrl+X / Ctrl+C / Ctrl+V Cut / copy / paste |
+| `Ctrl+D` | Duplicate current line |
 | `Ctrl+Y` | Delete current line |
 | `GRAPH+BS` | Delete word left |
 | `Ctrl+F` | Find & replace... |
@@ -382,6 +383,7 @@ Compatible with the classic MSX TED 2.6 editor. Note: in TED Shift+cursor is wor
 | `Shift+GRAPH+Up/Down` | Select page up / down |
 | `Ctrl+A` | Select all |
 | `` | Ctrl+X / Ctrl+C / Ctrl+V Cut / copy / paste |
+| `Ctrl+D` | Duplicate current line |
 | `Ctrl+Y / Ctrl+DEL` | Delete current line |
 | `GRAPH+BS` | Delete word left |
 | `Ctrl+Z` | Find & replace... |
@@ -453,7 +455,9 @@ Editing:
 x / X                    Delete char under / before
 dd                       Delete current line
 D                        Delete to end of line
+yy / Y                   Yank (copy) current line
 p                        Paste clipboard
+~                        Toggle character case
 r<c>                     Replace one character
 R                        Replace mode, until ESC
 u / Ctrl+R               Undo / redo
@@ -471,10 +475,10 @@ Miscellaneous:
 ```text
 :    Ex command line (see 8.4)
 Ctrl+G  Go to line...    Ctrl+S  Save    Ctrl+Q  Quit
-Ctrl+K  Cycle profile    Ctrl+T  Cycle markup mode
+Ctrl+T  Cycle markup mode
 ```
 
-Leader sequences: after "d" or "g" the editor waits for the next key ("dd", "gg"). Any other key cancels the leader and is processed normally.
+Leader sequences: after "d", "g", or "y" the editor waits for the next key ("dd", "gg", "yy"). Any other key cancels the leader and is processed normally.
 
 ### 8.2.- INSERT MODE
 
@@ -502,6 +506,8 @@ Ctrl+B / Ctrl+U          Extend one page up
 Cursor keys              Also extend
 y                        Yank (copy), back to Normal
 d / x                    Cut, back to Normal
+u / U                    Lowercase / uppercase selection
+~                        Toggle case of selection
 ESC                      Cancel, back to Normal
 ```
 
