@@ -61,29 +61,43 @@ DOMNU           LD      A, (MNUID)
                 JR      Z, .KEYLP
 
                 CP      ESC
-                JP      Z, .CANCEL
+                JR      Z, .CANCEL
                 CP      SELKEY
-                JP      Z, .CANCEL
+                JR      Z, .CANCEL
 
                 CP      CR
-                JP      Z, .ACCEPT
+                JR      Z, .ACCEPT
                 CP      ' '
-                JP      Z, .ACCEPT
+                JR      Z, .ACCEPT
 
                 CP      CUP
                 JP      Z, .UP
                 CP      CDOWN
-                JP      Z, .DOWN
+                JR      Z, .DOWN
                 CP      CRIGHT
-                JP      Z, .RIGHT
+                JR      Z, .RIGHT
                 CP      CLEFT
-                JP      Z, .LEFT
+                JR      Z, .LEFT
 
                 ; ONLY F1 BELONGS TO THE MENUS: IT GOES BACK TO FILE
                 CP      F1KEY
                 JR      NZ, .ACCEL
                 XOR     A
                 JP      MNUSWCH
+
+.CANCEL         CALL    WINCLOS
+                CALL    MNUTITL         ; UN-HIGHLIGHT TITLE
+                SCF                     ; CY = 1 (CANCELLED)
+                RET
+
+.ACCEPT         CALL    WINCLOS
+                CALL    MNUTITL         ; UN-HIGHLIGHT TITLE
+                LD      A, (MNUID)
+                LD      D, A            ; D = MNUID
+                LD      A, (MNUSEL)
+                LD      E, A            ; E = MNUSEL
+                OR      A               ; CY = 0 (ACCEPTED)
+                RET
 
 .RIGHT          LD      A, (MNUID)
                 INC     A
@@ -130,7 +144,7 @@ DOMNU           LD      A, (MNUID)
                 JR      .ACCLP
 .ACCHIT         LD      A, (HL)
                 LD      (MNUSEL), A
-                JP      .ACCEPT
+                JR      .ACCEPT
 
 .DOWN           LD      A, (MNUSEL)
                 LD      C, A            ; C = OLD SELECTION
@@ -168,20 +182,6 @@ DOMNU           LD      A, (MNUID)
 .ITEM           CALL    MNUPNT          ; A = ITEM, B = STYLE
                 LD      A, (MNUTMPY)
                 JP      WDUMPR
-
-.CANCEL         CALL    WINCLOS
-                CALL    MNUTITL         ; UN-HIGHLIGHT TITLE
-                SCF                     ; CY = 1 (CANCELLED)
-                RET
-
-.ACCEPT         CALL    WINCLOS
-                CALL    MNUTITL         ; UN-HIGHLIGHT TITLE
-                LD      A, (MNUID)
-                LD      D, A            ; D = MNUID
-                LD      A, (MNUSEL)
-                LD      E, A            ; E = MNUSEL
-                OR      A               ; CY = 0 (ACCEPTED)
-                RET
 
                 ; TITLE SPANS IN ROW 0, AS PAIRS [CHAR COLUMN, WIDTH]. THEY
                 ; MUST MATCH .MNUTXT IN S2/UI.Z8A:

@@ -21,6 +21,87 @@
 ; NO TXTBANK, NO PUTP2.
 
 
+; --- HELPERS                   ----------------------------------------
+
+
+                ASSERT  WINC == WINR + 1
+                ASSERT  WINNR == WINR + 2
+                ASSERT  WINNC == WINR + 3
+
+
+; - WINPOS4 ----------------------------
+; - SET WINDOW RECTANGLE VARIABLES (WINR, WINC, WINNR, WINNC)
+; - IN:  C = WINR, B = WINC, E = WINNR, D = WINNC
+; - OUT: NONE
+; - CLOBBERS: NONE
+; -
+
+WINPOS4         LD      (WINR), BC
+                LD      (WINNR), DE
+                RET
+
+
+
+
+; - WINOPN4 ----------------------------
+; - SET GEOMETRY AND OPEN WINDOW
+; - IN:  C = WINR, B = WINC, E = WINNR, D = WINNC, HL = TITLE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+WINOPN4         CALL    WINPOS4
+                JP      WINOPEN
+
+
+
+
+; - COLADDR ----------------------------
+; - CALCULATE COLMAP ADDRESS FOR CELL (ROW B, CELL A)
+; - IN:  B = ROW (0..23), A = CELL (0..31)
+; - OUT: HL = COLMAP + B * 32 + A
+; - CLOBBERS: AF
+; -
+
+COLADDR         PUSH    DE
+                LD      L, B
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL          ; HL = B * 32
+                ADD     A, L
+                LD      L, A
+                JR      NC, .NC
+                INC     H
+.NC             LD      DE, COLMAP
+                ADD     HL, DE
+                POP     DE
+                RET
+
+
+
+
+; - PATADDR ----------------------------
+; - CALCULATE PATSHAD ADDRESS FOR CELL (ROW B, CELL A)
+; - IN:  B = ROW (0..23), A = CELL (0..31)
+; - OUT: HL = PATSHAD + B * 256 + A * 8
+; - CLOBBERS: AF
+; -
+
+PATADDR         ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      L, A
+                LD      A, HIGH(PATSHAD) ; #80
+                ADD     A, B
+                LD      H, A
+                RET
+
+
+
+
 ; --- WINOPEN                   ----------------------------------------
 
 
@@ -196,14 +277,8 @@ WSAVE           LD      DE, WSVBUF
                 INC     A
                 LD      C, A            ; C = ROWS LEFT
 .SVPLP          PUSH    BC
-                LD      A, #80          ; HIGH(PATSHAD)
-                ADD     A, B
-                LD      H, A
                 LD      A, (WINC)
-                ADD     A, A
-                ADD     A, A
-                ADD     A, A
-                LD      L, A            ; HL = PATSHAD + ROW*256 + WINC*8
+                CALL    PATADDR         ; HL = PATSHAD + ROW*256 + WINC*8
                 LD      A, (WINNC)
                 INC     A
                 ADD     A, A
@@ -224,22 +299,8 @@ WSAVE           LD      DE, WSVBUF
                 INC     A
                 LD      C, A
 .SVCLP          PUSH    BC
-                LD      L, B
-                LD      H, 0
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL          ; HL = ROW*32
                 LD      A, (WINC)
-                ADD     A, L
-                LD      L, A
-                JR      NC, .SVCNC
-                INC     H
-.SVCNC          PUSH    DE
-                LD      DE, COLMAP
-                ADD     HL, DE          ; HL = COLMAP + ROW*32 + WINC
-                POP     DE
+                CALL    COLADDR         ; HL = COLMAP + ROW*32 + WINC
                 LD      A, (WINNC)
                 INC     A
                 LD      C, A
@@ -250,6 +311,8 @@ WSAVE           LD      DE, WSVBUF
                 DEC     C
                 JR      NZ, .SVCLP
                 RET
+
+
 
 
 ; --- WRSTOR                    ----------------------------------------
@@ -269,14 +332,11 @@ WRSTOR          LD      HL, WSVBUF
                 INC     A
                 LD      C, A
 .RSPLP          PUSH    BC
-                LD      A, #80          ; HIGH(PATSHAD)
-                ADD     A, B
-                LD      D, A
+                PUSH    HL              ; SAVE RUNNING SOURCE IN WSVBUF
                 LD      A, (WINC)
-                ADD     A, A
-                ADD     A, A
-                ADD     A, A
-                LD      E, A            ; DE = DST PATTERN SLICE
+                CALL    PATADDR
+                EX      DE, HL          ; DE = DST PATTERN SLICE
+                POP     HL              ; HL = RUNNING SOURCE IN WSVBUF
                 LD      A, (WINNC)
                 INC     A
                 ADD     A, A
@@ -298,20 +358,8 @@ WRSTOR          LD      HL, WSVBUF
                 LD      C, A
 .RSCLP          PUSH    BC
                 PUSH    HL              ; SAVE RUNNING SOURCE
-                LD      L, B
-                LD      H, 0
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL          ; HL = ROW*32
                 LD      A, (WINC)
-                ADD     A, L
-                LD      L, A
-                JR      NC, .RSCNC
-                INC     H
-.RSCNC          LD      DE, COLMAP
-                ADD     HL, DE          ; HL = DST
+                CALL    COLADDR         ; HL = DST
                 EX      DE, HL          ; DE = DST
                 POP     HL              ; HL = SRC
                 LD      A, (WINNC)
@@ -356,20 +404,8 @@ WBOX            PUSH    HL              ; TITLE
                 LD      A, (WINNR)
                 LD      C, A            ; C = ROWS LEFT
 .CRLP           PUSH    BC
-                LD      L, B
-                LD      H, 0
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL          ; HL = ROW*32
                 LD      A, (WINC)
-                ADD     A, L
-                LD      L, A
-                JR      NC, .CRNC
-                INC     H
-.CRNC           LD      DE, COLMAP
-                ADD     HL, DE
+                CALL    COLADDR
                 LD      A, (WINR)
                 CP      B               ; B IS STILL THE ROW HERE
                 JR      NZ, .CBODY
@@ -400,14 +436,8 @@ WBOX            PUSH    HL              ; TITLE
                 LD      A, (WINNR)
                 LD      C, A
 .PRLP           PUSH    BC
-                LD      A, #80          ; HIGH(PATSHAD)
-                ADD     A, B
-                LD      H, A
                 LD      A, (WINC)
-                ADD     A, A
-                ADD     A, A
-                ADD     A, A
-                LD      L, A            ; HL = FIRST CELL OF THE ROW
+                CALL    PATADDR         ; HL = FIRST CELL OF THE ROW
                 LD      A, (WINNC)
                 ADD     A, A
                 ADD     A, A
@@ -429,14 +459,8 @@ WBOX            PUSH    HL              ; TITLE
                 LD      A, (WINNR)
                 LD      C, A
 .VRLP           PUSH    BC
-                LD      A, #80          ; HIGH(PATSHAD)
-                ADD     A, B
-                LD      H, A
                 LD      A, (WINC)
-                ADD     A, A
-                ADD     A, A
-                ADD     A, A
-                LD      L, A            ; LEFT CELL
+                CALL    PATADDR         ; LEFT CELL
                 LD      B, 8
                 LD      A, #C0
 .LBOR           LD      (HL), A
@@ -462,13 +486,9 @@ WBOX            PUSH    HL              ; TITLE
 
                 ; 4. TOP EDGE: SCANLINE 0 OF EVERY CELL
                 LD      A, (WINR)
-                ADD     A, #80          ; HIGH(PATSHAD)
-                LD      H, A
+                LD      B, A
                 LD      A, (WINC)
-                ADD     A, A
-                ADD     A, A
-                ADD     A, A
-                LD      L, A
+                CALL    PATADDR
                 LD      A, (WINNC)
                 LD      B, A
                 LD      DE, 8
@@ -483,13 +503,11 @@ WBOX            PUSH    HL              ; TITLE
                 LD      A, (WINNR)
                 ADD     A, B
                 DEC     A               ; LAST WINDOW ROW
-                ADD     A, #80          ; HIGH(PATSHAD)
-                LD      H, A
+                LD      B, A
                 LD      A, (WINC)
-                ADD     A, A
-                ADD     A, A
-                ADD     A, A
-                ADD     A, 7            ; SCANLINE 7 OF THE FIRST CELL
+                CALL    PATADDR
+                LD      A, 7
+                ADD     A, L
                 LD      L, A
                 LD      A, (WINNC)
                 LD      B, A
@@ -606,23 +624,10 @@ WSHDW           LD      A, (SHDWOFF)
                 LD      A, (WINNR)
                 LD      C, A            ; C = ROWS LEFT
 .RSLP           PUSH    BC
-                LD      L, B
-                LD      H, 0
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL          ; HL = ROW*32
                 LD      A, (WINC)
-                LD      E, A
-                LD      A, (WINNC)
-                ADD     A, E            ; A = WINC+WINNC
-                ADD     A, L
-                LD      L, A
-                JR      NC, .RSNC
-                INC     H
-.RSNC           LD      DE, COLMAP
-                ADD     HL, DE
+                LD      HL, WINNC
+                ADD     A, (HL)         ; A = WINC+WINNC
+                CALL    COLADDR
                 CALL    SHDCOL          ; THE THEME'S, OR SHADOW=<HEX>
                 LD      (HL), A
                 POP     BC
@@ -634,22 +639,11 @@ WSHDW           LD      A, (SHDWOFF)
                 LD      A, (WINR)
                 LD      B, A
                 LD      A, (WINNR)
-                ADD     A, B            ; A = SHADOW ROW
-                LD      L, A
-                LD      H, 0
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL
+                ADD     A, B            ; B = SHADOW ROW
+                LD      B, A
                 LD      A, (WINC)
                 INC     A
-                ADD     A, L
-                LD      L, A
-                JR      NC, .BSNC
-                INC     H
-.BSNC           LD      DE, COLMAP
-                ADD     HL, DE
+                CALL    COLADDR
                 LD      A, (WINNC)
                 LD      B, A            ; B = WINNC CELLS
                 CALL    SHDCOL          ; THE THEME'S, OR SHADOW=<HEX>
@@ -699,14 +693,8 @@ WDUMP           LD      A, (WINR)
 WDUMPR          LD      B, A            ; B = ROW
                 PUSH    BC
                 ; PATTERN SLICE
-                LD      A, #80          ; HIGH(PATSHAD)
-                ADD     A, B
-                LD      H, A
                 LD      A, (WINC)
-                ADD     A, A
-                ADD     A, A
-                ADD     A, A
-                LD      L, A            ; HL = SRC
+                CALL    PATADDR         ; HL = SRC
                 LD      D, B
                 LD      E, L            ; DE = VRAM DEST (PGBASE = #0000)
                 LD      A, (WINNC)
@@ -720,20 +708,8 @@ WDUMPR          LD      B, A            ; B = ROW
                 ; COLOR SLICE
                 POP     BC
                 PUSH    BC
-                LD      L, B
-                LD      H, 0
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL          ; HL = ROW*32
                 LD      A, (WINC)
-                ADD     A, L
-                LD      L, A
-                JR      NC, .DNC
-                INC     H
-.DNC            LD      DE, COLMAP
-                ADD     HL, DE          ; HL = SRC IN COLMAP
+                CALL    COLADDR         ; HL = SRC IN COLMAP
                 LD      A, B
                 ADD     A, #20          ; HIGH(CTBASE)
                 LD      D, A
@@ -768,37 +744,17 @@ WINPUTC         PUSH    BC              ; ROW/COL FOR THE CALLER
                 LD      E, A            ; E = CHAR
 
                 ; CELL PATTERN ADDRESS -> IX
-                LD      A, #80          ; HIGH(PATSHAD)
-                ADD     A, B
-                LD      H, A
-                LD      L, 0            ; HL = PATSHAD + ROW*256
                 LD      A, C
                 SRL     A               ; A = CELL, CF = 1 IF RIGHT COLUMN
                 PUSH    AF              ; SAVE THE HALF
-                ADD     A, A
-                ADD     A, A
-                ADD     A, A
-                LD      L, A            ; HL = PATSHAD + ROW*256 + CELL*8
+                CALL    PATADDR         ; HL = PATSHAD + ROW*256 + CELL*8
                 PUSH    HL
                 POP     IX
 
                 ; COLOR BYTE: COLMAP + ROW*32 + CELL
-                LD      L, B
-                LD      H, 0
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL          ; HL = ROW*32
                 LD      A, C
                 SRL     A
-                ADD     A, L
-                LD      L, A
-                JR      NC, .CNC
-                INC     H
-.CNC            LD      A, H
-                ADD     A, #98          ; HIGH(COLMAP)
-                LD      H, A
+                CALL    COLADDR
                 LD      A, D
                 LD      (HL), A         ; COLOR BYTE
 
@@ -869,16 +825,10 @@ WINPUTS         LD      E, A            ; E = COLOR
 ; - CLOBBERS: ALL
 ; -
 
-DOABT           LD      A, 6
-                LD      (WINR), A
-                LD      A, 9
-                LD      (WINC), A
-                LD      A, 11
-                LD      (WINNR), A
-                LD      A, 13
-                LD      (WINNC), A
+DOABT           LD      BC, (#09 << 8) | 6
+                LD      DE, (#0D << 8) | 11
                 LD      HL, .TITABT
-                CALL    WINOPEN
+                CALL    WINOPN4
 
                 LD      HL, .ABTTBL
                 LD      B, 8
@@ -999,17 +949,9 @@ DONEW           LD      HL, DOASK.TITNEW
 DOASK           LD      A, 1            ; SHOW UNSAVED WARNING IF DIRTY
 .ASKGO          PUSH    AF              ; WARN FLAG
                 PUSH    DE              ; QUESTION, FOR AFTER WINOPEN
-                PUSH    HL              ; TITLE
-                LD      A, 8
-                LD      (WINR), A
-                LD      A, 9
-                LD      (WINC), A
-                LD      A, 8
-                LD      (WINNR), A
-                LD      A, 13
-                LD      (WINNC), A
-                POP     HL
-                CALL    WINOPEN
+                LD      BC, (#09 << 8) | 8
+                LD      DE, (#0D << 8) | 8
+                CALL    WINOPN4
 
                 ; DEFAULT: NO SELECTED, RESULT CANCELLED
                 LD      A, 1
@@ -1311,16 +1253,10 @@ EDFLD           LD      A, (EDWID)
 ; - CLOBBERS: ALL
 ; -
 
-DOGOTO          LD      A, 8
-                LD      (WINR), A
-                LD      A, 8
-                LD      (WINC), A
-                LD      A, 7
-                LD      (WINNR), A
-                LD      A, 15
-                LD      (WINNC), A
+DOGOTO          LD      BC, (#08 << 8) | 8
+                LD      DE, (#0F << 8) | 7
                 LD      HL, .TITGO
-                CALL    WINOPEN
+                CALL    WINOPN4
 
                 ; "Line number (1-NNNN):" IN THREE PIECES. B2D16 HANDS BACK
                 ; HL AT THE FIRST DIGIT AND C THE COUNT, SO NO PROMPT BUFFER
@@ -1423,16 +1359,10 @@ EDBTNS          LD      A, (WINSEL)
 ; - CLOBBERS: ALL
 ; -
 
-DOFIND          LD      A, 8
-                LD      (WINR), A
-                LD      A, 7
-                LD      (WINC), A
-                LD      A, 7
-                LD      (WINNR), A
-                LD      A, 18
-                LD      (WINNC), A
+DOFIND          LD      BC, (#07 << 8) | 8
+                LD      DE, (#12 << 8) | 7
                 LD      HL, .TITFND
-                CALL    WINOPEN
+                CALL    WINOPN4
 
                 XOR     A
                 LD      (FNDFOC), A     ; DEFAULT FOCUS: FIND FIELD
@@ -1837,16 +1767,10 @@ DOFIND          LD      A, 8
 ; - CLOBBERS: ALL
 ; -
 
-DOSETT          LD      A, 5
-                LD      (WINR), A
-                LD      A, 10
-                LD      (WINC), A
-                LD      A, 12
-                LD      (WINNR), A
-                LD      A, 12
-                LD      (WINNC), A
+DOSETT          LD      BC, (#0A << 8) | 5
+                LD      DE, (#0C << 8) | 12
                 LD      HL, .TITSET
-                CALL    WINOPEN
+                CALL    WINOPN4
 
                 ; INITIALIZE TEMPORARY VALUES FROM ACTIVE SETTINGS
                 LD      A, (KMAPID)
@@ -2106,16 +2030,8 @@ DOSETT          LD      A, 5
                 ; CLOBBERS: DE, HL
                 PUSH    BC
                 PUSH    AF
-                LD      A, B
-                LD      L, A
-                LD      H, 0
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL          ; HL = ROW * 32
-                LD      DE, COLMAP + 11 ; WINC + 1 = 11
-                ADD     HL, DE          ; HL = COLMAP + ROW * 32 + 11
+                LD      A, 11           ; WINC + 1 = 11
+                CALL    COLADDR         ; HL = COLMAP + ROW * 32 + 11
                 POP     AF
                 LD      B, 10           ; WINNC - 2 = 10 CELLS
 .BARLP          LD      (HL), A

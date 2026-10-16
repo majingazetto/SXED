@@ -40,6 +40,11 @@ Changed
 - Unused code removed (the old profile cycling among it):
   about 150 bytes freed in every editor, which is what
   makes room for the above on S2ED.
+- S2ED memory headroom: clipboard reduced to 1 KB (CLIPMAX
+  1024), freeing 1024 bytes of TPA RAM in Page 1 (TPAFREE
+  reaches 1024 B). Dialog and window engine refactored
+  with shared address helpers (WINPOS4, WINOPN4, COLADDR,
+  PATADDR), saving 188 bytes in S2ED.DAT (FTRFREE 445 B).
 
 Fixed
 - The manuals named v0.5 in their header since v0.6; they

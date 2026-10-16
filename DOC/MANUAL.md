@@ -104,6 +104,30 @@ Notes per editor:
 - [S6ED/S61ED] need an MSX2 or higher. On a 128 KB machine they run under MSX-DOS 2 (101 lines of text capacity on S6ED, 133 on S61ED) but NOT under Nextor, which reserves one segment more; with Nextor use 256 KB or more. More mapper memory means bigger documents (up to 5461 lines).
 - [S2ED] runs on MSX1. MSX-DOS 2 does not run on MSX1, so on MSX1 you need Nextor (a 128 KB mapper machine with a disk interface works fine).
 
+### Mapper memory and document capacity
+
+The MSX memory mapper allocates RAM in 16 KB segments. MSX-DOS 2 and Nextor reserve 6 segments for kernel and system use. When SXED starts, it reserves 2 mandatory segments:
+1. **Line directory (`DIRSEG`)**: flat index array mapping each document line to its segment and offset.
+2. **Feature container (`FTRSEG`)**: resident feature code loaded from `.DAT`.
+
+**Text storage:**
+The first lines live in `DEFSEG2` (the initial TPA Page 2 segment at `#8000`), requiring no additional mapper allocations. Any remaining free segments (`SEGAVL`) are claimed dynamically as the document grows.
+Each 16 KB segment stores fixed line records (text characters + markup formatting attributes):
+- **S6ED** (80 columns, 161 bytes/line): **101 lines per segment**.
+- **S2ED / S61ED** (61 columns, 123 bytes/line): **133 lines per segment**.
+
+Total text capacity: `(SEGAVL + 1) * lines_per_segment`.
+
+| RAM Total | Segments | Free at boot | Text segments | Lines in S2ED / S61ED (133 l/seg) | Lines in S6ED (101 l/seg) |
+| :---: | :---: | :---: | :---: | :---: | :---: |
+| **128 KB** | 8 | 2 (0 spare) | 1 (`DEFSEG2`) | **133 lines** *(low memory warning)* | **101 lines** *(low memory warning)* |
+| **256 KB** | 16 | 10 (8 spare) | 9 | **1,197 lines** | **909 lines** |
+| **512 KB** | 32 | 26 (24 spare) | 25 | **3,325 lines** | **2,525 lines** |
+| **1024 KB (1 MB)** | 64 | 58 (56 spare) | 31 *(max 30 spare)* | **4,123 lines** | **3,131 lines** |
+
+> [!NOTE]
+> The line directory lives in a single 16 KB mapper segment (`DIRSEG`) with 3 bytes per entry (`[1B segment][2B offset]`). This sets a structural ceiling of **5,461 lines** (`MAXLINES = 16384 / 3`) for a single document regardless of installed RAM.
+
 Each editor is made of four files, named after it (S6ED.*, S61ED.* or S2ED.*):
 
 | Key / Command | Description |
@@ -159,6 +183,25 @@ S2ED  [file] [/V] [/H | /?]
 | `` | /H, /?  Shows a short help and exits to DOS. |
 
 With no parameters the editor starts with an empty document.
+
+When started with `/V`, the editor prints a memory report before starting graphics mode and pauses:
+
+```text
+S2ED v0.7 - Screen 2 text editor for MSX1
+(c) 2024-2026 Armando Perez Abad
+
+Total mapper:   16 segments (256 KB)
+Available:      10 segments (160 KB)
+Reserved:       2 segments (Directory, Features)
+Text capacity:  1197 lines
+
+Press any key to continue...
+```
+
+- **Total mapper**: all segments detected on the system.
+- **Available**: free segments at boot (including the 2 reserved).
+- **Reserved**: 2 segments claimed by SXED (`DIRSEG` + `FTRSEG`).
+- **Text capacity**: maximum document lines with current RAM. If capacity is below 500 lines (e.g. on a 128 KB machine), a warning is displayed: `Warning: Low mapper memory (no spare segments for growth).`
 
 The boot process checks the machine BEFORE entering graphics mode and aborts with a clear message if something is missing:
 

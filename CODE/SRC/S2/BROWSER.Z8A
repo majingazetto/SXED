@@ -42,14 +42,9 @@ DOBRW           XOR     A
 .INIT           PUSH    AF
                 LD      A, 1
                 LD      (WINNOSV), A    ; NO BACKGROUND SAVE: WINDOW TOO LARGE FOR WSVBUF
-                LD      A, BRWWINR
-                LD      (WINR), A
-                LD      A, BRWWINC
-                LD      (WINC), A
-                LD      A, BRWWINNR
-                LD      (WINNR), A
-                LD      A, BRWWINNC
-                LD      (WINNC), A
+                LD      BC, (BRWWINC << 8) | BRWWINR
+                LD      DE, (BRWWINNC << 8) | BRWWINNR
+                CALL    WINPOS4
                 LD      A, BRWFLDR
                 LD      (EDROW), A
                 LD      A, 10           ; FIELD CHAR COLUMN

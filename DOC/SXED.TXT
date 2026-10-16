@@ -160,6 +160,42 @@ Notes per editor:
       so on MSX1 you need Nextor (a 128 KB mapper machine
       with a disk interface works fine).
 
+Mapper memory and document capacity:
+
+    The MSX mapper allocates memory in 16 KB segments.
+    MSX-DOS 2 and Nextor reserve 6 segments for system
+    use. When the editor starts, it reserves 2 mandatory
+    segments:
+      1. Line directory (DIRSEG): line index table.
+      2. Feature container (FTRSEG): resident features
+         loaded from .DAT.
+
+    Text storage:
+    The first lines live in DEFSEG2 (the initial Page 2
+    segment at #8000), which requires no extra mapper
+    allocation. Any extra free segments (SEGAVL) are
+    claimed dynamically as the document grows.
+    Each 16 KB segment stores fixed line records (text +
+    markup attributes):
+      - S6ED (80 cols, 161 B/line): 101 lines / segment.
+      - S2ED / S61ED (61 cols, 123 B/line): 133 lines / seg.
+
+    Total text capacity: (SEGAVL + 1) * lines_per_segment.
+
+      RAM     Segments  Free  Text segs   S2/S61ED    S6ED
+      ----------------------------------------------------
+      128 KB     8        2       1        133 l.   101 l.
+      256 KB    16       10       9       1197 l.   909 l.
+      512 KB    32       26      25       3325 l.  2525 l.
+      1024 KB   64       58      31 *     4123 l.  3131 l.
+
+      * Up to 30 extra segments tracked (MAXSEGS = 32).
+
+    Note: the line directory lives in a single 16 KB
+    segment (DIRSEG) with 3 bytes per entry. This sets a
+    structural ceiling of 5461 lines (MAXLINES = 16384/3)
+    for a single document regardless of installed RAM.
+
 Each editor is made of four files, named after it (S6ED.*,
 S61ED.* or S2ED.*):
 
@@ -221,6 +257,29 @@ Usage:
     /H, /?  Shows a short help and exits to DOS.
 
 With no parameters the editor starts with an empty document.
+
+When started with /V, the editor prints a memory report
+before starting graphics mode and pauses:
+
+    S2ED v0.7 - Screen 2 text editor for MSX1
+    (c) 2024-2026 Armando Perez Abad
+
+    Total mapper:   16 segments (256 KB)
+    Available:      10 segments (160 KB)
+    Reserved:       2 segments (Directory, Features)
+    Text capacity:  1197 lines
+
+    Press any key to continue...
+
+  - Total mapper: all segments detected on the system.
+  - Available: free segments at boot (including the 2
+    reserved).
+  - Reserved: 2 segments claimed by SXED (DIRSEG + FTRSEG).
+  - Text capacity: maximum document lines with current RAM.
+    If capacity is below 500 lines (e.g. 128 KB machine),
+    a warning is displayed:
+    "Warning: Low mapper memory
+    (no spare segments for growth)."
 
 The boot process checks the machine BEFORE entering graphics
 mode and aborts with a clear message if something is missing:
