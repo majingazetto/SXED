@@ -1,6 +1,6 @@
 # SXED User Manual & Reference Guide
 
-**SXED Screen X Text Editor v0.7 (2026-10-15)**  
+**SXED Screen X Text Editor v0.8 (2026-10-16)**  
 *(c) 2024 - 2026 Armando Pérez Abad*  
 *Fonts by Miguel A. Fernandez*
 
@@ -101,7 +101,7 @@ Minimum requirements (all editors):
 
 Notes per editor:
 
-- [S6ED/S61ED] need an MSX2 or higher. On a 128 KB machine they run under MSX-DOS 2 (101 lines of text capacity on S6ED, 133 on S61ED) but NOT under Nextor, which reserves one segment more; with Nextor use 256 KB or more. More mapper memory means bigger documents (up to 5461 lines).
+- [S6ED/S61ED] need an MSX2 or higher. On a 128 KB machine they run under MSX-DOS 2 (202 lines of text capacity on S6ED, 264 on S61ED) but NOT under Nextor, which reserves one segment more; with Nextor use 256 KB or more. More mapper memory means bigger documents (up to 5461 lines).
 - [S2ED] runs on MSX1. MSX-DOS 2 does not run on MSX1, so on MSX1 you need Nextor (a 128 KB mapper machine with a disk interface works fine).
 
 ### Mapper memory and document capacity
@@ -112,18 +112,18 @@ The MSX memory mapper allocates RAM in 16 KB segments. MSX-DOS 2 and Nextor rese
 
 **Text storage:**
 The first lines live in `DEFSEG2` (the initial TPA Page 2 segment at `#8000`), requiring no additional mapper allocations. Any remaining free segments (`SEGAVL`) are claimed dynamically as the document grows.
-Each 16 KB segment stores fixed line records (text characters + markup formatting attributes):
-- **S6ED** (80 columns, 161 bytes/line): **101 lines per segment**.
-- **S2ED / S61ED** (61 columns, 123 bytes/line): **133 lines per segment**.
+Each 16 KB segment stores line records holding text only (bold, italic and the delimiters' colour are derived from the markup each time a line is painted). A record is sized to its line, 36 bytes for up to 32 characters, so the figures below are the editors' planning estimate:
+- **S6ED** (80 columns): **202 lines per segment** (455 lines of up to 32 characters, 163 full 80-column ones).
+- **S2ED / S61ED** (61 columns): **264 lines per segment**.
 
-Total text capacity: `(SEGAVL + 1) * lines_per_segment`.
+Total text capacity: `(SEGAVL + 1) * lines_per_segment`, up to the 5,461-line directory ceiling.
 
-| RAM Total | Segments | Free at boot | Text segments | Lines in S2ED / S61ED (133 l/seg) | Lines in S6ED (101 l/seg) |
+| RAM Total | Segments | Free at boot | Text segments | Lines in S2ED / S61ED (264 l/seg) | Lines in S6ED (202 l/seg) |
 | :---: | :---: | :---: | :---: | :---: | :---: |
-| **128 KB** | 8 | 2 (0 spare) | 1 (`DEFSEG2`) | **133 lines** *(low memory warning)* | **101 lines** *(low memory warning)* |
-| **256 KB** | 16 | 10 (8 spare) | 9 | **1,197 lines** | **909 lines** |
-| **512 KB** | 32 | 26 (24 spare) | 25 | **3,325 lines** | **2,525 lines** |
-| **1024 KB (1 MB)** | 64 | 58 (56 spare) | 31 *(max 30 spare)* | **4,123 lines** | **3,131 lines** |
+| **128 KB** | 8 | 2 (0 spare) | 1 (`DEFSEG2`) | **264 lines** *(low memory warning)* | **202 lines** *(low memory warning)* |
+| **256 KB** | 16 | 10 (8 spare) | 9 | **2,376 lines** | **1,818 lines** |
+| **512 KB** | 32 | 26 (24 spare) | 25 | **5,461 lines** *(directory ceiling)* | **5,050 lines** |
+| **1024 KB (1 MB)** | 64 | 58 (56 spare) | 31 *(max 30 spare)* | **5,461 lines** *(directory ceiling)* | **5,461 lines** *(directory ceiling)* |
 
 > [!NOTE]
 > The line directory lives in a single 16 KB mapper segment (`DIRSEG`) with 3 bytes per entry (`[1B segment][2B offset]`). This sets a structural ceiling of **5,461 lines** (`MAXLINES = 16384 / 3`) for a single document regardless of installed RAM.
@@ -187,7 +187,7 @@ With no parameters the editor starts with an empty document.
 When started with `/V`, the editor prints a memory report before starting graphics mode and pauses:
 
 ```text
-S2ED v0.7 - Screen 2 text editor for MSX1
+S2ED v0.8 - Screen 2 text editor for MSX1
 (c) 2024-2026 Armando Perez Abad
 
 Total mapper:   16 segments (256 KB)

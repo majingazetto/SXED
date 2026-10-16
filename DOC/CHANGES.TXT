@@ -6,6 +6,50 @@ Newest first. The manual is SXED.TXT.
 -------------------------------------------------------------
 
 
+ -------- v0.8 (2026-10-16)
+
+Improved
+- S2ED edits much faster on the MSX1: Enter ~200 -> ~120
+  ms, a BS / DEL join ~380 -> ~130 ms, a one-row scroll
+  ~210 -> ~115 ms, a page of long lines ~600 -> ~310 ms.
+  Only the rows whose colours changed are sent to the
+  screen, rows are composed twice as fast, a join moves the
+  rows below instead of redrawing the page, and new rows
+  are composed before the screen is updated, so no line is
+  seen twice for a moment.
+- All editors: a line without * or _ skips the markup scan.
+- Line records hold text only (styles come from the markup
+  when a line is painted): twice the lines per mapper
+  segment (S6ED 202, S2ED / S61ED 264) and twice the undo
+  steps (about 45 on S6ED, 56 on S2ED / S61ED).
+
+Changed
+- TXT mode: BS at column 0 or DEL at the end of a line
+  joins those two lines only. The words of the second that
+  fit go up, the rest stays, and the lines below are left
+  alone; the join used to merge the whole paragraph (BS on
+  a line under an empty one also took the next line).
+- Ctrl+B / Ctrl+I write the delimiters of the markup mode
+  (MD or LIT). With MARKUP=OFF they do nothing.
+- A selection larger than the clipboard (2 KB, 1 KB on
+  S2ED): Ctrl+C copies its first part and shows
+  [CLIPBOARD FULL], and Ctrl+X leaves it in the document.
+
+Fixed
+- Ctrl+X on a selection larger than the clipboard deleted
+  all of it but kept only the first part: the rest was lost.
+- Ctrl+Z after a BS / DEL join in TXT mode did nothing (the
+  join cleared the history), and Ctrl+Z after Ctrl+D joined
+  the copy onto the original line.
+- LEFT at column 0 of the top row, with UP keys pending,
+  could leave the cursor past the end of the line.
+- Shift+LEFT / Shift+RIGHT over a line end that scrolls
+  could leave inverted cells on a line exactly as long as
+  the margin.
+- A line longer than the screen kept the bold or colour of
+  its markup after MARKUP was set to OFF.
+
+
  -------- v0.7 (2026-10-15)
 
 New

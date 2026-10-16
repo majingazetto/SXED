@@ -1,5 +1,5 @@
 -------------------------------------------------------------
-SXED Screen X Text Editor v0.7 (2026-10-15)
+SXED Screen X Text Editor v0.8 (2026-10-16)
 2024 - 2026 Armando Pérez Abad
 
 S6ED  - Screen 6 text editor for MSX2, 80 columns
@@ -151,8 +151,8 @@ Minimum requirements (all editors):
 Notes per editor:
 
     - [S6ED/S61ED] need an MSX2 or higher. On a 128 KB
-      machine they run under MSX-DOS 2 (101 lines of text
-      capacity on S6ED, 133 on S61ED) but NOT under Nextor,
+      machine they run under MSX-DOS 2 (202 lines of text
+      capacity on S6ED, 264 on S61ED) but NOT under Nextor,
       which reserves one segment more; with Nextor use 256 KB
       or more. More mapper memory means bigger documents (up
       to 5461 lines).
@@ -175,19 +175,22 @@ Mapper memory and document capacity:
     segment at #8000), which requires no extra mapper
     allocation. Any extra free segments (SEGAVL) are
     claimed dynamically as the document grows.
-    Each 16 KB segment stores fixed line records (text +
-    markup attributes):
-      - S6ED (80 cols, 161 B/line): 101 lines / segment.
-      - S2ED / S61ED (61 cols, 123 B/line): 133 lines / seg.
+    Each 16 KB segment stores line records holding text
+    only (styles come from the markup when a line is
+    painted). A record is sized to its line, 36 bytes for
+    up to 32 characters, so these are estimates:
+      - S6ED (80 cols): 202 lines / segment.
+      - S2ED / S61ED (61 cols): 264 lines / segment.
 
-    Total text capacity: (SEGAVL + 1) * lines_per_segment.
+    Total text capacity: (SEGAVL + 1) * lines_per_segment,
+    up to the 5461-line directory ceiling (+).
 
       RAM     Segments  Free  Text segs   S2/S61ED    S6ED
       ----------------------------------------------------
-      128 KB     8        2       1        133 l.   101 l.
-      256 KB    16       10       9       1197 l.   909 l.
-      512 KB    32       26      25       3325 l.  2525 l.
-      1024 KB   64       58      31 *     4123 l.  3131 l.
+      128 KB     8        2       1        264 l.   202 l.
+      256 KB    16       10       9       2376 l.  1818 l.
+      512 KB    32       26      25       5461 l.+ 5050 l.
+      1024 KB   64       58      31 *     5461 l.+ 5461 l.+
 
       * Up to 30 extra segments tracked (MAXSEGS = 32).
 
@@ -261,7 +264,7 @@ With no parameters the editor starts with an empty document.
 When started with /V, the editor prints a memory report
 before starting graphics mode and pauses:
 
-    S2ED v0.7 - Screen 2 text editor for MSX1
+    S2ED v0.8 - Screen 2 text editor for MSX1
     (c) 2024-2026 Armando Perez Abad
 
     Total mapper:   16 segments (256 KB)
