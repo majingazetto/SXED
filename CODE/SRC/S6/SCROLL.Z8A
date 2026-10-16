@@ -188,3 +188,47 @@ SHIFTDNN        ; NUMBER OF ROWS TO MOVE = 25 - C - B
                 LD      (VDP_ARG), A
                 LD      HL, VDPCMBLK
                 JP      YMMM
+
+
+; --- EDIT PAINT HOOKS          ----------------------------------------
+
+
+; - NWPAINT ----------------------------
+; - A LINE WAS SPLIT (ENTER, PUSH-WRAP): SHIFT THE ROWS BELOW, REPAINT THE
+; - SHORTENED HEAD (ROW B - 1) AND THE NEW LINE (ROW B). S2ED COMPOSES
+; - BEFORE IT PUSHES; HERE THE BLIT IS ONE COMMAND AND THIS IS AS BEFORE.
+; - IN:  B = SCREEN ROW OF THE NEW LINE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+NWPAINT         PUSH    BC
+                CALL    SHIFTDN
+                POP     BC
+                DEC     B
+                CALL    RENDEROW        ; THE SHORTENED HEAD
+                INC     B
+                JP      RENDEROW        ; THE NEW LINE
+
+
+; - NWSCRL -----------------------------
+; - A LINE WAS SPLIT ON THE LAST ROW AND TOPLINE ADVANCED
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+NWSCRL          CALL    SCROLLDN
+                LD      B, ROWSVIS - 1  ; THE SHORTENED HEAD
+                JP      RENDEROW
+
+
+; - JNSHIFT ----------------------------
+; - A JOIN TOOK THE LINE BELOW THE ONE AT ROW B. NO SHIFT-UP PRIMITIVE
+; - HERE YET: THE FULL REDRAW THE JOINS ALWAYS DID.
+; - IN:  B = SCREEN ROW OF THE JOINED LINE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+JNSHIFT         JP      REDRAW

@@ -8,8 +8,18 @@
 ; MOVED BAND OUT TO VRAM, AND RE-COMPOSE THE NEWLY EXPOSED ROW(S).
 ;
 ; THE PATTERN BAND GOES OUT IN ONE CONTIGUOUS VDPDUMP BECAUSE SCREEN ROWS ARE
-; 256 CONSECUTIVE BYTES OF THE PATTERN TABLE. THE COLOR BAND GOES ROW BY ROW
-; THROUGH COLBAND, WHICH EXPANDS EACH CELL BACK TO ITS EIGHT SCANLINES.
+; 256 CONSECUTIVE BYTES OF THE PATTERN TABLE. THE COLOR BAND GOES ROW BY ROW,
+; AND ONLY THE ROWS WHOSE COLOURS CHANGED (COLDIFF BEFORE THE MOVE, COLRNDR
+; FOR A COMPOSED ROW, COLBCHG ON THE WAY OUT): COLMAP MIRRORS THE VRAM COLOUR
+; TABLE, SO A ROW THAT MOVED ONTO EQUAL COLOURS IS ALREADY RIGHT THERE.
+;
+; EVERY PAINT COMPOSES FIRST AND PUSHES ONCE (SHUPN / SHDNMV, THEN TXTPSHB):
+; PUSHING THE MOVED BAND BEFORE COMPOSING SHOWED A ROW TWICE FOR A MOMENT.
+; NWPAINT / NWSCRL / JNSHIFT ARE THE TARGET'S HALF OF ENTER AND OF A JOIN.
+;
+; MEASURED 2026-10-16 ON THE STOCK MSX1 (CUSTOM_MSX1_DOS2, MARKUP=MD): ENTER
+; 194 -> ~110 MS, BS JOIN 417 -> ~110 MS (NO REDRAW), ONE-ROW SCROLL 202 ->
+; ~115 MS. THE PATTERN PUSH ITSELF (29 T A BYTE, ~2.1 MS A ROW) IS THE FLOOR.
 
 
 ; --- SCROLLDN                  ----------------------------------------
@@ -32,48 +42,78 @@ SCROLLDN        LD      C, 1
 ; - CLOBBERS: ALL
 ; -
 
-SCRLDNN         XOR     A
-                LD      (PREVROW), A    ; CACHE INVALIDATED
-
-                ; K = ROWS THAT SURVIVE THE SCROLL = ROWSVIS - C
-                LD      A, ROWSVIS
+SCRLDNN         LD      A, ROWSVIS
                 SUB     C
-                RET     Z
+                RET     Z               ; A PAGE OR MORE: THE CALLER REDRAWS
                 RET     C
-                LD      B, A            ; B = K, C = ROWS SCROLLED
+                LD      B, TXRFIRST
+                CALL    SHUPN
+                JP      TXTPUSH
 
+
+; - SHUPN ------------------------------
+; - MOVE ROWS (B + C)..TXRLAST UP TO B..(TXRLAST - C) IN THE SHADOWS, NOTE
+; - WHICH OF THEM CHANGE COLOUR, AND COMPOSE THE C EXPOSED ROWS AT THE
+; - BOTTOM. NOTHING GOES TO VRAM: RNDNODMP IS LEFT SET FOR THE CALLER'S
+; - OWN COMPOSES, AND TXTPSHB PUSHES THE BAND ONCE, ALREADY RIGHT.
+; - IN:  B = FIRST ROW THAT RECEIVES (TXRFIRST..TXRLAST), C = ROWS (1..21)
+; - OUT: COLCHG FLAGS B..TXRLAST
+; - CLOBBERS: ALL
+; -
+
+SHUPN           XOR     A
+                LD      (PREVROW), A    ; RENDIFF'S ROW HAS MOVED
                 PUSH    BC
                 CALL    VIDBANK
+                POP     BC
+                LD      A, TXRLAST + 1
+                SUB     B
+                SUB     C               ; A = K, THE ROWS THAT MOVE
+                JR      Z, .EXPOSE
+                JR      C, .EXPOSE
+                LD      (SHRK), A
 
-                ; 1. MOVE THE PATTERN BAND UP: K * ROWLEN BYTES
+                ; WHICH ROWS B..TXRLAST - C GET NEW COLOURS (SOURCE ROW + C)
+                PUSH    BC
+                LD      E, C
+                LD      A, TXRLAST
+                SUB     C
+                LD      C, A
+                CALL    COLDIFF
                 POP     BC
                 PUSH    BC
-                LD      A, C
-                INC     A
+
+                ; 1. PATTERNS: K * ROWLEN BYTES FROM ROW B + C TO ROW B
+                LD      A, B
+                ADD     A, C
                 LD      H, A
-                LD      L, 0            ; HL = (1 + C) * ROWLEN
+                LD      L, 0
                 LD      DE, PATSHAD
                 ADD     HL, DE          ; HL = SOURCE
-                LD      DE, PATSHAD + ROWLEN
+                LD      D, B
+                LD      E, 0
+                PUSH    HL
+                LD      HL, PATSHAD
+                ADD     HL, DE
+                EX      DE, HL          ; DE = DESTINATION
+                POP     HL
+                LD      A, (SHRK)
+                LD      B, A
                 LD      C, 0            ; BC = K * ROWLEN
-                LDIR
-
-                ; 2. MOVE THE COLOR BAND UP: K * CELLROW BYTES
+                CALL    FASTUP
                 POP     BC
                 PUSH    BC
-                LD      A, C
-                INC     A
+
+                ; 2. COLOURS: K * CELLROW BYTES FROM ROW B + C TO ROW B
+                LD      A, B
+                ADD     A, C
+                CALL    COLROW
+                PUSH    HL              ; SOURCE
+                LD      A, B
+                CALL    COLROW
+                EX      DE, HL          ; DE = DESTINATION
+                LD      A, (SHRK)
                 LD      L, A
-                LD      H, 0
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL          ; HL = (1 + C) * CELLROW
-                LD      DE, COLMAP
-                ADD     HL, DE          ; HL = SOURCE
-                PUSH    HL
-                LD      L, B
                 LD      H, 0
                 ADD     HL, HL
                 ADD     HL, HL
@@ -81,30 +121,26 @@ SCRLDNN         XOR     A
                 ADD     HL, HL
                 ADD     HL, HL          ; HL = K * CELLROW
                 LD      B, H
-                LD      C, L            ; BC = BYTE COUNT
-                POP     HL              ; HL = SOURCE
-                LD      DE, COLMAP + CELLROW
+                LD      C, L
+                POP     HL
                 LDIR
+                POP     BC
 
-                ; 3. COMPOSE THE C EXPOSED ROWS AT THE BOTTOM -- INTO THE
-                ;    SHADOWS ONLY. PUSHING THE MOVED BAND FIRST AND THE NEW ROWS
-                ;    AFTER LEFT THE BOTTOM ROW SHOWING THE LINE ABOVE IT TWICE
-                ;    WHILE THE NEW ONE WAS COMPOSED; NOW THE WHOLE BAND GOES OUT
-                ;    ONCE, ALREADY RIGHT (THE SAME ROWS AS BEFORE, NOT MORE).
-                POP     BC              ; B = K, C = ROWS SCROLLED
-                LD      A, ROWSVIS + 1
+.EXPOSE         ; 3. COMPOSE ROWS MAX(B, TXRLAST + 1 - C)..TXRLAST
+                LD      A, TXRLAST + 1
                 SUB     C
-                LD      B, A            ; B = FIRST EXPOSED ROW
+                CP      B
+                JR      NC, .EXPOK
+                LD      A, B
+.EXPOK          LD      B, A
                 LD      A, 1
                 LD      (RNDNODMP), A
-.RLOOP          PUSH    BC
-                CALL    RENDEROW
-                POP     BC
+.EXPLP          CALL    COLRNDR
                 INC     B
                 LD      A, B
                 CP      TXRLAST + 1
-                JR      NZ, .RLOOP
-                JP      TXTPUSH
+                JR      NZ, .EXPLP
+                RET
 
 
 
@@ -142,9 +178,20 @@ SCRLUPN         XOR     A
                 SBC     HL, DE          ; HL = SOURCE END
                 LD      DE, PATSHAD + (TXRLAST + 1) * ROWLEN - 1
                 LD      C, 0            ; BC = K * ROWLEN
-                LDDR
+                CALL    FASTDN
 
-                ; 2. MOVE THE COLOR BAND DOWN: K * CELLROW BYTES
+                ; 2. MOVE THE COLOR BAND DOWN: K * CELLROW BYTES, NOTING FIRST
+                ;    WHICH ROWS C + 1 .. TXRLAST CHANGE COLOUR (SOURCE ROW - C)
+                POP     BC
+                PUSH    BC
+                LD      A, C
+                NEG
+                LD      E, A            ; E = -C
+                LD      A, C
+                ADD     A, TXRFIRST
+                LD      B, A            ; FIRST = C + 1
+                LD      C, TXRLAST
+                CALL    COLDIFF
                 POP     BC
                 PUSH    BC
                 LD      L, C
@@ -178,9 +225,7 @@ SCRLUPN         XOR     A
                 LD      B, TXRFIRST
                 LD      A, 1
                 LD      (RNDNODMP), A
-.UPLOOP         PUSH    BC
-                CALL    RENDEROW
-                POP     BC
+.UPLOOP         CALL    COLRNDR
                 INC     B
                 LD      A, C
                 CP      B
@@ -194,21 +239,44 @@ SCRLUPN         XOR     A
 ; - TXTPUSH ----------------------------
 ; - PUSH THE WHOLE TEXT BAND (ROWS 1..22) FROM THE SHADOWS TO VRAM, AND
 ; - END THE COMPOSE-ONLY MODE THE SCROLLS RENDER THEIR NEW ROWS IN
-; - IN:  NONE
+; - IN:  COLCHG FLAGS FOR EVERY TEXT ROW
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; -
 
-TXTPUSH         XOR     A
+TXTPUSH         LD      B, TXRFIRST
+
+
+; - TXTPSHB ----------------------------
+; - PUSH ROWS B..TXRLAST: THE PATTERNS IN ONE STREAM, THE COLOURS OF THE
+; - ROWS COLCHG FLAGS. ENDS THE COMPOSE-ONLY MODE.
+; - IN:  B = FIRST ROW, COLCHG FLAGS FOR B..TXRLAST
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+TXTPSHB         XOR     A
                 LD      (RNDNODMP), A
+                PUSH    BC
                 CALL    VIDBANK
-                LD      HL, PATSHAD + TXRFIRST * ROWLEN
-                LD      DE, PGBASE + TXRFIRST * ROWLEN
-                LD      BC, ROWSVIS * ROWLEN
+                POP     BC
+                PUSH    BC
+                LD      D, B
+                LD      E, 0            ; DE = ROW * ROWLEN
+                LD      HL, PGBASE
+                ADD     HL, DE
+                PUSH    HL              ; VRAM DESTINATION
+                LD      HL, PATSHAD
+                ADD     HL, DE          ; HL = SOURCE
+                POP     DE
+                LD      A, TXRLAST + 1
+                SUB     B
+                LD      B, A
+                LD      C, 0            ; BC = ROWS * ROWLEN
                 CALL    VDPDUMP
-                LD      B, TXRFIRST
+                POP     BC
                 LD      C, TXRLAST
-                CALL    COLBAND
+                CALL    COLBCHG         ; ONLY THE ROWS WHOSE COLOURS CHANGED
                 JP      TXTBANK
 
 
@@ -234,12 +302,54 @@ SHIFTDN         LD      C, 1
 ; - CLOBBERS: ALL
 ; -
 
-SHIFTDNN        ; N = ROWS THAT MOVE = TXRLAST + 1 - C - B
+SHIFTDNN        PUSH    BC
+                CALL    SHDNMV
+                POP     BC
+                RET     C               ; NOTHING BELOW TO MOVE
+
+                ; DUMP ROWS (B + C) .. TXRLAST
+                LD      A, B
+                ADD     A, C
+                LD      B, A            ; B = FIRST ROW TO DUMP
+                PUSH    BC
+
+                ; PATTERN BAND: ONE CONTIGUOUS STREAM
+                LD      D, B
+                LD      E, 0            ; DE = ROW * ROWLEN
+                LD      HL, PGBASE
+                ADD     HL, DE
+                PUSH    HL              ; VRAM DESTINATION
+                LD      HL, PATSHAD
+                ADD     HL, DE          ; HL = SOURCE
+                POP     DE              ; DE = VRAM DESTINATION
+                LD      A, TXRLAST + 1
+                SUB     B
+                LD      B, A
+                LD      C, 0            ; BC = ROWS * ROWLEN
+                CALL    VDPDUMP
+
+                ; COLOR BAND: ONLY THE ROWS WHOSE COLOURS CHANGED
+                POP     BC              ; B = FIRST ROW TO DUMP
+                LD      C, TXRLAST
+                CALL    COLBCHG
+
+                JP      TXTBANK
+
+
+; - SHDNMV -----------------------------
+; - THE MOVE HALF OF SHIFTDNN: ROWS B..(TXRLAST - C) DOWN BY C IN THE
+; - SHADOWS, COLOURS DIFFED INTO COLCHG FOR (B + C)..TXRLAST. NO VRAM.
+; - IN:  B = FIRST ROW THAT MOVES, C = ROWS TO SHIFT BY
+; - OUT: CY = 1 NOTHING MOVED. VIDSEG LEFT BANKED.
+; - CLOBBERS: ALL
+; -
+
+SHDNMV          ; N = ROWS THAT MOVE = TXRLAST + 1 - C - B
                 LD      A, TXRLAST + 1
                 SUB     C
                 SUB     B
-                RET     Z
-                RET     C
+                JR      Z, .NONE
+                RET     C               ; CY: NOTHING MOVES
 
                 XOR     A
                 LD      (PREVROW), A    ; CACHE INVALIDATED
@@ -261,9 +371,20 @@ SHIFTDNN        ; N = ROWS THAT MOVE = TXRLAST + 1 - C - B
                 SUB     B
                 LD      B, A
                 LD      C, 0            ; BC = N * ROWLEN
-                LDDR
+                CALL    FASTDN
 
-                ; 2. MOVE THE COLOR BAND DOWN: N * CELLROW BYTES
+                ; 2. MOVE THE COLOR BAND DOWN: N * CELLROW BYTES, NOTING FIRST
+                ;    WHICH ROWS B + C .. TXRLAST CHANGE COLOUR (SOURCE ROW - C)
+                POP     BC
+                PUSH    BC
+                LD      A, C
+                NEG
+                LD      E, A            ; E = -C
+                LD      A, B
+                ADD     A, C
+                LD      B, A            ; FIRST = B + C
+                LD      C, TXRLAST
+                CALL    COLDIFF
                 POP     BC
                 PUSH    BC
                 LD      L, C
@@ -293,32 +414,220 @@ SHIFTDNN        ; N = ROWS THAT MOVE = TXRLAST + 1 - C - B
                 POP     HL              ; HL = SOURCE END
                 LD      DE, COLMAP + (TXRLAST + 1) * CELLROW - 1
                 LDDR
-
-                ; 3. DUMP ROWS (B + C) .. TXRLAST
                 POP     BC
-                LD      A, B
-                ADD     A, C
-                LD      B, A            ; B = FIRST ROW TO DUMP
+                OR      A               ; CY = 0: MOVED
+                RET
+.NONE           SCF                     ; CY: NOTHING MOVES
+                RET
+
+
+; --- EDIT PAINT HOOKS          ----------------------------------------
+
+
+; - NWPAINT ----------------------------
+; - A LINE WAS SPLIT (ENTER, PUSH-WRAP): THE NEW ONE IS AT ROW B, THE
+; - SHORTENED HEAD AT ROW B - 1. ROWS B.. MOVE DOWN ONE, BOTH ROWS ARE
+; - COMPOSED, AND B - 1..TXRLAST GO TO VRAM ONCE. PUSHING THE MOVED BAND
+; - FIRST LEFT ROW B SHOWING THE OLD LINE TWICE WHILE THE TWO ROWS WERE
+; - COMPOSED AND PUSHED AFTER IT.
+; - IN:  B = SCREEN ROW OF THE NEW LINE (2..TXRLAST)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+NWPAINT         PUSH    BC
+                LD      C, 1
+                CALL    SHDNMV          ; ROWS B..TXRLAST - 1 DOWN, COLOURS DIFFED
+                POP     BC
+                LD      A, 1
+                LD      (RNDNODMP), A
+                DEC     B
+                CALL    COLRNDR         ; THE SHORTENED HEAD
+                INC     B
+                CALL    COLRNDR         ; THE NEW LINE
+                DEC     B
+                JP      TXTPSHB
+
+
+; - NWSCRL -----------------------------
+; - A LINE WAS SPLIT ON THE LAST ROW AND TOPLINE ADVANCED: SCROLL UP ONE,
+; - COMPOSE THE NEW LAST ROW AND THE SHORTENED HEAD ABOVE IT, PUSH ONCE
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+NWSCRL          LD      BC, TXRFIRST * 256 + 1
+                CALL    SHUPN
+                LD      B, TXRLAST - 1
+                CALL    COLRNDR
+                JP      TXTPUSH
+
+
+; - JNSHIFT ----------------------------
+; - A JOIN TOOK THE LINE BELOW THE ONE AT ROW B: ROWS B + 2.. MOVE UP ONE,
+; - THE EXPOSED LAST ROW AND ROW B ARE COMPOSED, B..TXRLAST GO OUT ONCE.
+; - A FULL REDRAW COMPOSED ALL 22 ROWS (~300-600 MS).
+; - IN:  B = SCREEN ROW OF THE JOINED LINE (TXRFIRST..TXRLAST - 1)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+JNSHIFT         PUSH    BC
+                INC     B
+                LD      C, 1
+                CALL    SHUPN
+                POP     BC
+                CALL    COLRNDR         ; RNDNODMP STILL SET BY SHUPN
+                JP      TXTPSHB
+
+
+; --- FAST BLOCK MOVES         ----------------------------------------
+
+
+; - FASTUP -----------------------------
+; - LDIR FOR A COUNT THAT IS A MULTIPLE OF 16: SIXTEEN LDI A PASS, 18 T A
+; - BYTE ON MSX AGAINST LDIR'S 23. THE SHADOW MOVES OF A SCROLL ARE 5 KB.
+; - IN:  HL = SOURCE, DE = DESTINATION, BC = COUNT (16..65520, BY 16)
+; - OUT: AS LDIR
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+FASTUP          DUP     16
+                LDI
+                EDUP
+                JP      PE, FASTUP      ; P/V: BC NOT YET 0
+                RET
+
+
+; - FASTDN -----------------------------
+; - LDDR FOR A COUNT THAT IS A MULTIPLE OF 16, AS FASTUP
+; - IN:  HL = SOURCE END, DE = DESTINATION END, BC = COUNT (BY 16)
+; - OUT: AS LDDR
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+FASTDN          DUP     16
+                LDD
+                EDUP
+                JP      PE, FASTDN
+                RET
+
+
+; --- COLOUR BAND DIFF          ----------------------------------------
+
+
+; - COLDIFF ----------------------------
+; - BEFORE A SCROLL MOVES COLMAP: NOTE WHICH DESTINATION ROWS WILL GET
+; - COLOURS THAT DIFFER FROM THE ONES THEY HOLD NOW. COLMAP MIRRORS THE
+; - VRAM COLOUR TABLE, SO A ROW WHOSE NEW COLOURS EQUAL ITS OLD ONES NEEDS
+; - NO DUMP -- IN TEXT WITHOUT STYLES THAT IS EVERY ROW, AND THE COLOUR
+; - BAND (~3.5 MS A ROW) WAS MOST OF EVERY SCROLL AND EVERY ENTER.
+; - IN:  B = FIRST ROW, C = LAST ROW (INCLUSIVE), E = SOURCE ROW - ROW
+; - OUT: COLCHG[B..C] = 0 SAME / 1 DIFFERENT
+; - CLOBBERS: AF, BC, DE, HL
+; - NOTE: CALLER MUST HAVE VIDSEG BANKED AT PAGE 2
+; -
+
+COLDIFF         LD      A, C
+                CP      B
+                RET     C               ; LAST < FIRST: NOTHING
                 PUSH    BC
+                PUSH    DE
+                LD      A, B
+                ADD     A, E            ; A = SOURCE ROW
+                CALL    COLROW
+                EX      DE, HL          ; DE = SOURCE ROW IN COLMAP
+                LD      A, B
+                CALL    COLROW          ; HL = DESTINATION ROW IN COLMAP
+                LD      B, CELLROW
+.CMP            LD      A, (DE)
+                CP      (HL)
+                JR      NZ, .DIFF
+                INC     DE
+                INC     HL
+                DJNZ    .CMP
+                XOR     A               ; THE SAME ALL ALONG
+                JR      .SET
+.DIFF           LD      A, 1
+.SET            POP     DE
+                POP     BC
+                CALL    COLFLAG         ; COLCHG[B] = A
+                INC     B
+                JR      COLDIFF
 
-                ; PATTERN BAND: ONE CONTIGUOUS STREAM
-                LD      D, B
-                LD      E, 0            ; DE = ROW * ROWLEN
-                LD      HL, PGBASE
+
+; - COLRNDR ----------------------------
+; - A SCROLL'S EXPOSED ROW: COMPOSE IT (RNDNODMP SET) AND FLAG ITS COLOURS
+; - AS RENDEROW'S COMROW FOUND THEM. A ROW PAST THE END GOES THROUGH
+; - CLRROW, WHICH LEAVES COLDIRT ALONE: IT STAYS FLAGGED, AS PRESET.
+; - IN:  B = SCREEN ROW
+; - OUT: NONE (BC PRESERVED)
+; - CLOBBERS: AF, DE, HL, IX, IY
+; -
+
+COLRNDR         LD      A, 1
+                LD      (COLDIRT), A
+                CALL    RENDEROW        ; BC PRESERVED
+                LD      A, (COLDIRT)
+
+
+; - COLFLAG ----------------------------
+; - COLCHG[B] = A
+; - IN:  A = FLAG, B = ROW
+; - OUT: NONE
+; - CLOBBERS: HL (AF, BC, DE PRESERVED)
+; -
+
+COLFLAG         PUSH    DE
+                LD      E, B
+                LD      D, 0
+                LD      HL, COLCHG
                 ADD     HL, DE
-                PUSH    HL              ; VRAM DESTINATION
-                LD      HL, PATSHAD
-                ADD     HL, DE          ; HL = SOURCE
-                POP     DE              ; DE = VRAM DESTINATION
-                LD      A, TXRLAST + 1
-                SUB     B
-                LD      B, A
-                LD      C, 0            ; BC = ROWS * ROWLEN
-                CALL    VDPDUMP
+                LD      (HL), A
+                POP     DE
+                RET
 
-                ; COLOR BAND: ROW BY ROW
-                POP     BC              ; B = FIRST ROW TO DUMP
-                LD      C, TXRLAST
-                CALL    COLBAND
 
-                JP      TXTBANK
+; - COLROW -----------------------------
+; - ADDRESS OF A ROW IN COLMAP
+; - IN:  A = ROW (0..23)
+; - OUT: HL = COLMAP + A * CELLROW
+; - CLOBBERS: AF
+; -
+
+COLROW          LD      L, A
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                LD      A, H
+                ADD     A, HIGH(COLMAP)
+                LD      H, A
+                RET
+
+                ASSERT  LOW(COLMAP) == 0
+
+
+; - COLBCHG ----------------------------
+; - DUMPS THE COLOURS OF THE ROWS B..C THAT COLCHG FLAGS
+; - IN:  B = FIRST ROW, C = LAST ROW
+; - OUT: NONE
+; - CLOBBERS: ALL
+; - NOTE: CALLER MUST HAVE VIDSEG BANKED AT PAGE 2
+; -
+
+COLBCHG         LD      A, C
+                CP      B
+                RET     C
+                LD      E, B
+                LD      D, 0
+                LD      HL, COLCHG
+                ADD     HL, DE
+                LD      A, (HL)
+                OR      A
+                CALL    NZ, COLDUMP     ; BC PRESERVED
+                INC     B
+                JR      COLBCHG

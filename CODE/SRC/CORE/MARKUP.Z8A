@@ -39,7 +39,24 @@ SCANMKUP        LD      A, (MKUPMD)
                 CP      2
                 RET     C               ; LEN < 2: CANNOT CONTAIN PAIR
 
-                LD      A, (MKUPMD)
+                ; 3. A LINE WITHOUT A SINGLE DELIMITER CHARACTER HAS NOTHING TO
+                ;    STAMP: TWO CPIR (~46 T A CHARACTER) INSTEAD OF THE PASSES
+                ;    BELOW, WHICH COST ~400 T A CHARACTER (8 MS OF A FULL S2ED
+                ;    ROW). BOTH MODES DELIMIT WITH '*' AND '_' ONLY
+                LD      C, A
+                LD      B, 0            ; BC = LENGTH
+                LD      HL, WORKBUF + 1
+                LD      A, '*'
+                CPIR
+                JR      Z, .DELIM
+                LD      A, (WORKBUF)
+                LD      C, A            ; B IS 0 AGAIN
+                LD      HL, WORKBUF + 1
+                LD      A, '_'
+                CPIR
+                RET     NZ              ; NEITHER: A PLAIN LINE
+
+.DELIM          LD      A, (MKUPMD)
                 CP      MKUP_LIT
                 JP      Z, SCNLIT
                 JP      SCNMD

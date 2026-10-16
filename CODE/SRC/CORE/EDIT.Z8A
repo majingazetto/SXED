@@ -401,24 +401,14 @@ EDPSHWR         CALL    UNDOCLS
                 INC     A
                 INC     A
                 LD      B, A            ; B = SCREEN ROW OF THE NEW LINE (2..24)
-                PUSH    BC
-                CALL    SHIFTDN
-                POP     BC
-
-                DEC     B
-                CALL    RENDEROW        ; SHORTENED HEAD
-                INC     B
-                CALL    RENDEROW        ; THE WORD THAT MOVED DOWN
+                CALL    NWPAINT         ; SHORTENED HEAD, THE WORD THAT MOVED DOWN
                 JP      SETCURY
 
 .PWBOT          ; AT THE BOTTOM THE NEW LINE ONLY FITS IF THE VIEW SCROLLS
                 LD      HL, (TOPLINE)
                 INC     HL
                 LD      (TOPLINE), HL
-                CALL    SCROLLDN        ; RENDERS ROW 24
-
-                LD      B, TXRLAST - 1  ; ROW 23 NOW HOLDS THE SHORTENED HEAD
-                CALL    RENDEROW
+                CALL    NWSCRL          ; THE NEW LAST ROW, THEN THE SHORTENED HEAD
                 JP      SETCURY
 
 .PWHOLD         ; PAINTING IS DEFERRED, BUT THE VIEWPORT STILL HAS TO FOLLOW
@@ -1278,7 +1268,9 @@ JOIN2L          LD      (JOINLA), HL
 ; - CLOBBERS: ALL
 ; -
 
-EDJNDEV         LD      HL, (DOCLINE)
+EDJNDEV         LD      HL, (TOTLINES)
+                LD      (JNTOT), HL     ; FOR JNPAINT: LINES BEFORE THE JOIN
+                LD      HL, (DOCLINE)
                 DEC     HL              ; LINE A = DOCLINE - 1
                 LD      DE, (DOCLINE)   ; LINE B = DOCLINE
                 CALL    JOIN2L
@@ -1300,9 +1292,11 @@ EDJNDEV         LD      HL, (DOCLINE)
                 LD      HL, (TOPLINE)
                 DEC     HL
                 LD      (TOPLINE), HL
+                CALL    SETCURY
+                JP      REDRAW          ; THE VIEW MOVED: NOTHING ON SCREEN STAYS
 
 .JNTOP          CALL    SETCURY
-                JP      REDRAW
+                JP      JNPAINT
 
 
 ; --- EDDELDV                   ----------------------------------------
@@ -1315,7 +1309,9 @@ EDJNDEV         LD      HL, (DOCLINE)
 ; - CLOBBERS: ALL
 ; -
 
-EDDELDV         LD      HL, (DOCLINE)   ; LINE A = DOCLINE
+EDDELDV         LD      HL, (TOTLINES)
+                LD      (JNTOT), HL     ; FOR JNPAINT: LINES BEFORE THE JOIN
+                LD      HL, (DOCLINE)   ; LINE A = DOCLINE
                 LD      DE, (DOCLINE)
                 INC     DE              ; LINE B = DOCLINE + 1
                 CALL    JOIN2L
@@ -1326,6 +1322,68 @@ EDDELDV         LD      HL, (DOCLINE)   ; LINE A = DOCLINE
                 LD      (CURX), A
 
                 ; DOCLINE, TOPLINE, CURY DO NOT CHANGE
+                JP      JNPAINT
+
+
+; --- JNPAINT                   ----------------------------------------
+
+
+; - JNPAINT ----------------------------
+; - REPAINT AFTER A KEY JOINED DOCLINE WITH THE LINE BELOW (BS AT COLUMN 0,
+; - DEL AT THE END; JOIN2L OR REFLOW). ONE LINE GONE: THE ROWS BELOW SHIFT UP
+; - (JNSHIFT); NONE GONE (A PARTIAL REFLOW): THE TWO ROWS ARE REPAINTED.
+; - ANYTHING ELSE -- A SELECTION, THE HORIZONTAL VIEW MOVING, A REFLOW THAT
+; - SPLIT LINES, DOCLINE OFF SCREEN -- IS A FULL REDRAW, AS EVERY JOIN WAS.
+; - IN:  JNTOT = TOTLINES BEFORE THE JOIN, TOPLINE UNCHANGED BY THE CALLER
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+JNPAINT         LD      A, (SELACT)
+                OR      A
+                JP      NZ, REDRAW
+                CALL    ADJLCOL
+                JP      C, REDRAW       ; LEFTCOL MOVED: EVERY ROW CHANGES
+                LD      HL, (JNTOT)
+                LD      DE, (TOTLINES)
+                OR      A
+                SBC     HL, DE          ; HL = LINES THE JOIN REMOVED
+                LD      A, H
+                OR      A
+                JP      NZ, REDRAW      ; LINES WERE ADDED (A SPLIT)
+                LD      A, L
+                CP      2
+                JP      NC, REDRAW
+                PUSH    AF              ; A = 0 OR 1
+                LD      HL, (DOCLINE)
+                LD      DE, (TOPLINE)
+                OR      A
+                SBC     HL, DE          ; HL = DOCLINE - TOPLINE
+                JR      C, .JNRDR
+                LD      A, H
+                OR      A
+                JR      NZ, .JNRDR
+                LD      A, L
+                CP      ROWSVIS
+                JR      NC, .JNRDR
+                ADD     A, TXRFIRST
+                LD      B, A            ; B = THE JOINED LINE'S ROW
+                POP     AF
+                OR      A
+                JR      Z, .JNTWO
+                LD      A, B
+                CP      TXRLAST
+                JP      C, JNSHIFT      ; THE ROWS BELOW MOVE UP
+                JP      RENDEROW        ; THE LAST ROW: WHAT LEFT WAS BELOW IT
+
+.JNTWO          CALL    RENDEROW        ; BC PRESERVED
+                LD      A, B
+                CP      TXRLAST
+                RET     NC
+                INC     B
+                JP      RENDEROW
+
+.JNRDR          POP     AF
                 JP      REDRAW
 
 
@@ -1442,7 +1500,10 @@ EDDELBK         LD      A, (CURX)
                 LD      (DOCLINE), HL
 
                 ; IF WE WERE AT THE TOP ROW OF VIEWPORT (CURY == 0), SCROLL TOPLINE UP
+                LD      HL, (TOTLINES)
+                LD      (JNTOT), HL     ; FOR JNPAINT: LINES BEFORE THE JOIN
                 LD      A, (CURY)
+                LD      (JNVIEW), A     ; 0: THE VIEW MOVES, JNPAINT REDRAWS
                 OR      A
                 JR      NZ, .NOTOP
                 LD      HL, (TOPLINE)
@@ -1451,11 +1512,14 @@ EDDELBK         LD      A, (CURX)
 
 .NOTOP          CALL    SETCURY         ; RECOMPUTE CURY = DOCLINE - TOPLINE
 
-                ; CASCADE REFLOW STARTING AT DOCLINE
+                ; THE KEY'S JOIN OF DOCLINE AND THE LINE BELOW
                 LD      HL, (DOCLINE)
                 CALL    REFLOW
 
-                JP      REDRAW          ; TAIL CALL: FULL REDRAW
+                LD      A, (JNVIEW)
+                OR      A
+                JP      Z, REDRAW       ; THE VIEW MOVED: NOTHING ON SCREEN STAYS
+                JP      JNPAINT
 
 
 ; --- EDDELCHR                  ----------------------------------------
@@ -1560,11 +1624,13 @@ EDDELCHR        LD      HL, (DOCLINE)
                 LD      A, (WORKBUF)
                 LD      (CURX), A
 
-                ; CASCADE REFLOW STARTING AT DOCLINE
+                ; THE KEY'S JOIN OF DOCLINE AND THE LINE BELOW
+                LD      HL, (TOTLINES)
+                LD      (JNTOT), HL     ; FOR JNPAINT: LINES BEFORE THE JOIN
                 LD      HL, (DOCLINE)
                 CALL    REFLOW
 
-                JP      REDRAW          ; TAIL CALL
+                JP      JNPAINT
 
 
 ; --- EDKILCHR                  ----------------------------------------
@@ -1750,17 +1816,7 @@ EDNWLIN         CALL    UNDOCLS
                 LD      A, (CURY)
                 INC     A
                 LD      B, A            ; B = SCREEN ROW OF NEW LINE
-                PUSH    BC
-                CALL    SHIFTDN
-                POP     BC
-
-                ; RENDER SHORTENED HEAD (ROW B - 1)
-                DEC     B
-                CALL    RENDEROW
-
-                ; RENDER NEW LINE (ROW B)
-                INC     B
-                CALL    RENDEROW
+                CALL    NWPAINT         ; SHIFT, HEAD (B - 1) AND NEW LINE (B)
                 JR      .NWDONE
 
 .NWATBOT        ; AT BOTTOM OF SCREEN: THE VIEWPORT FOLLOWS THE NEW LINE. THE
@@ -1773,11 +1829,7 @@ EDNWLIN         CALL    UNDOCLS
                 LD      A, (RNDHOLD)
                 OR      A
                 JR      NZ, .NWDONE
-                CALL    SCROLLDN
-
-                ; RENDER SHORTENED HEAD (THE ROW ABOVE THE LAST VISIBLE ONE)
-                LD      B, ROWSVIS - 1
-                CALL    RENDEROW
+                CALL    NWSCRL          ; SCROLL, THEN THE SHORTENED HEAD ABOVE
 
 .NWDONE         LD      A, #FF
                 LD      (MODIFIED), A

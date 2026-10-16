@@ -96,17 +96,17 @@ MUTATIONS = [
     {
         'name': 's2-scroll-band-first',
         'target': 'S2ED',
-        'why': 'SCRLDNN pushes the moved band before composing the exposed row, which shows the row above twice',
+        'why': 'SHUPN pushes the moved band before composing the exposed row, which shows the row above twice',
         'file': 'SCROLL.Z8A',
         'old': """                LD      A, 1
                 LD      (RNDNODMP), A
-.RLOOP          PUSH    BC""",
+.EXPLP          CALL    COLRNDR""",
         'new': """                PUSH    BC
                 CALL    TXTPUSH         ; MUTATION: THE BAND GOES OUT FIRST
                 POP     BC
                 LD      A, 1
                 LD      (RNDNODMP), A
-.RLOOP          PUSH    BC""",
+.EXPLP          CALL    COLRNDR""",
         'filter': 'S2-42',
         'expect': ['S2-42/no-dup'],
     },
@@ -160,28 +160,28 @@ MUTATIONS = [
         'why': 'COMROW blanks the right margin only past the end of the line, '
                'so a long line paints its column 61 on screen column 63',
         'file': 'RENDER.Z8A',
-        'old': """                LD      A, B
-                CP      TXCELLS - 1
-                JR      Z, .RBLNK
-                ADD     A, A""",
-        'new': """                LD      A, B
-                                        ; MUTATION: MARGIN BY LENGTH ONLY
-                ADD     A, A""",
+        'old': """.NPOS           CP      TEXTCOLS + 1
+                JR      C, .NOK
+                LD      A, TEXTCOLS""",
+        'new': """.NPOS           CP      TEXTCOLS + 2    ; MUTATION: MARGIN BY LENGTH ONLY
+                JR      C, .NOK
+                LD      A, TEXTCOLS + 1""",
         'filter': 'S2-47',
         'expect': ['S2-47/boot-margin', 'S2-47/mid-margin'],
     },
     {
-        # TEXTCOLS is odd now, so TEXTCOLS / 2 is one cell short: the cell
-        # holding text column 60 would never be composed.
+        # TEXTCOLS is odd, so a row holds an odd number of characters: the
+        # lone last one has its own cell, and dropping it loses column 60.
         'name': 's2-txcells-half',
         'target': 'S2ED',
-        'why': 'COMROW stops at TEXTCOLS / 2 cells, so text column 60 is '
-               'never drawn',
+        'why': 'COMROW composes only the pairs, so text column 60 is never drawn',
         'file': 'RENDER.Z8A',
-        'old': """                CP      TXCELLS
-                JR      NZ, .CELLP""",
-        'new': """                CP      TEXTCOLS / 2    ; MUTATION: ONE CELL SHORT
-                JR      NZ, .CELLP""",
+        'old': """.HALF           LD      A, (CRN)
+                RRCA
+                JR      NC, .PTAIL""",
+        'new': """.HALF           LD      A, (CRN)
+                RRCA
+                JR      .PTAIL          ; MUTATION: NO LONE LAST CHARACTER""",
         'filter': 'S2-47',
         'expect': ['S2-47/boot'],
     },
@@ -299,6 +299,173 @@ MUTATIONS = [
                 NOP""",
         'filter': 'S2-58',
         'expect': ['S2-58/plain'],
+    },
+    {
+        'name': 's2-coldiff-same',
+        'target': 'S2ED',
+        'why': 'COLDIFF calls every moved row unchanged, so a scroll never sends the colours that moved',
+        'file': 'SCROLL.Z8A',
+        'old': """.DIFF           LD      A, 1
+.SET            POP     DE""",
+        'new': """.DIFF           XOR     A               ; MUTATION: ALWAYS THE SAME
+.SET            POP     DE""",
+        'filter': 'S2-59',
+        'expect': ['S2-59/scroll/colour-mirror', 'S2-59/enter/colour-mirror', 'S2-59/dev-bs/colour-mirror'],
+    },
+    {
+        'name': 's2-colrndr-flag',
+        'target': 'S2ED',
+        'why': "a scroll's exposed row is composed but never flagged, so its colours never reach VRAM",
+        'file': 'SCROLL.Z8A',
+        'old': """                CALL    RENDEROW        ; BC PRESERVED
+                LD      A, (COLDIRT)""",
+        'new': """                CALL    RENDEROW        ; BC PRESERVED
+                XOR     A               ; MUTATION: NEVER FLAGGED""",
+        'filter': 'S2-59',
+        'expect': ['S2-59/scroll/colour-mirror'],
+    },
+    {
+        'name': 's2-nwpaint-head',
+        'target': 'S2ED',
+        'why': 'NWPAINT composes the new line but not the shortened head above it',
+        'file': 'SCROLL.Z8A',
+        'old': """                DEC     B
+                CALL    COLRNDR         ; THE SHORTENED HEAD""",
+        'new': """                DEC     B
+                NOP                     ; MUTATION: NO HEAD
+                NOP
+                NOP""",
+        'filter': 'S2-59',
+        'expect': ['S2-59/enter/patterns'],
+    },
+    {
+        'name': 's2-nwscrl-head',
+        'target': 'S2ED',
+        'why': 'NWSCRL scrolls and composes the new last row but not the head above it',
+        'file': 'SCROLL.Z8A',
+        'old': """                LD      B, TXRLAST - 1
+                CALL    COLRNDR
+                JP      TXTPUSH""",
+        'new': """                LD      B, TXRLAST - 1
+                NOP                     ; MUTATION: NO HEAD
+                NOP
+                NOP
+                JP      TXTPUSH""",
+        'filter': 'S2-59',
+        'expect': ['S2-59/enter-bottom/patterns'],
+    },
+    {
+        'name': 's2-jnshift-noshift',
+        'target': 'S2ED',
+        'why': 'JNSHIFT repaints the joined row but leaves the rows below where they were',
+        'file': 'SCROLL.Z8A',
+        'old': """JNSHIFT         PUSH    BC
+                INC     B
+                LD      C, 1
+                CALL    SHUPN""",
+        'new': """JNSHIFT         PUSH    BC
+                INC     B
+                LD      C, 1
+                LD      A, 1            ; MUTATION: NO SHIFT
+                LD      (RNDNODMP), A""",
+        'filter': 'S2-59',
+        'expect': ['S2-59/dev-bs/patterns', 'S2-59/dev-del/patterns'],
+    },
+    {
+        'name': 's2-jnpaint-two',
+        'target': 'S2ED',
+        'why': 'a join that removed no line repaints the first row only, not the second',
+        'file': 'EDIT.Z8A',
+        'old': """.JNTWO          CALL    RENDEROW        ; BC PRESERVED
+                LD      A, B
+                CP      TXRLAST
+                RET     NC""",
+        'new': """.JNTWO          CALL    RENDEROW        ; BC PRESERVED
+                RET                     ; MUTATION: ONE ROW ONLY""",
+        'filter': 'S2-59',
+        'expect': ['S2-59/txt-partial/patterns'],
+    },
+    {
+        'name': 's2-txtpshb-head',
+        'target': 'S2ED',
+        'why': 'NWPAINT pushes from the new line, so the shortened head is composed but never sent',
+        'file': 'SCROLL.Z8A',
+        'old': """                CALL    COLRNDR         ; THE NEW LINE
+                DEC     B
+                JP      TXTPSHB""",
+        'new': """                CALL    COLRNDR         ; THE NEW LINE
+                NOP                     ; MUTATION: PUSH FROM THE NEW LINE
+                JP      TXTPSHB""",
+        'filter': 'S2-59',
+        'expect': ['S2-59/enter/patterns'],
+    },
+    {
+        'name': 's2-fastdn-short',
+        'target': 'S2ED',
+        'why': 'FASTDN moves one 16-byte pass and stops, so a shift leaves most rows behind',
+        'file': 'SCROLL.Z8A',
+        'old': """                JP      PE, FASTDN
+                RET""",
+        'new': """                RET                     ; MUTATION: ONE PASS
+                RET""",
+        'filter': 'S2-59',
+        'expect': ['S2-59/enter/patterns'],
+    },
+    {
+        'name': 'mk-quick-reject',
+        'target': 'S2ED',
+        'why': 'SCANMKUP returns as soon as the line has no asterisk, so an underscore span is never styled',
+        'file': 'MARKUP.Z8A',
+        'old': """                LD      A, '_'
+                CPIR
+                RET     NZ              ; NEITHER: A PLAIN LINE""",
+        'new': """                RET                     ; MUTATION: '*' ONLY
+                CPIR
+                RET     NZ              ; NEITHER: A PLAIN LINE""",
+        'filter': 'S2-14',
+        'expect': ['S2-14/line2'],
+    },
+    {
+        'name': 'perf-join-redraw',
+        'target': 'S2ED',
+        'why': 'every join redraws the page again, as before JNPAINT',
+        'file': 'EDIT.Z8A',
+        'old': """JNPAINT         LD      A, (SELACT)
+                OR      A
+                JP      NZ, REDRAW""",
+        'new': """JNPAINT         JP      REDRAW          ; MUTATION: THE OLD FULL REDRAW
+                OR      A
+                JP      NZ, REDRAW""",
+        'filter': 'S2-60',
+        'expect': ['S2-60/join'],
+    },
+    {
+        'name': 'perf-colband-all',
+        'target': 'S2ED',
+        'why': 'COLBCHG dumps every row whether its colours changed or not',
+        'file': 'SCROLL.Z8A',
+        'old': """                LD      A, (HL)
+                OR      A
+                CALL    NZ, COLDUMP     ; BC PRESERVED""",
+        'new': """                LD      A, (HL)
+                OR      A
+                CALL    COLDUMP         ; MUTATION: EVERY ROW""",
+        'filter': 'S2-60',
+        'expect': ['S2-60/enter', 'S2-60/scroll'],
+    },
+    {
+        'name': 'perf-no-reject',
+        'target': 'S2ED',
+        'why': 'SCANMKUP runs its full passes over a line with no delimiter',
+        'file': 'MARKUP.Z8A',
+        'old': """                LD      A, '*'
+                CPIR
+                JR      Z, .DELIM""",
+        'new': """                LD      A, '*'
+                CPIR
+                JR      .DELIM          ; MUTATION: NO QUICK REJECT""",
+        'filter': 'S2-60',
+        'expect': ['S2-60/page'],
     },
     {
         'name': 'x5-rollover-clamp',
@@ -1559,25 +1726,31 @@ MUTATIONS = [
         'why': 'EDNWLIN repaints the shortened head at a literal row 23, '
                'which on S2 is the status bar',
         'target': 'S2ED',
-        'file': 'EDIT.Z8A',
-        'old': """                LD      B, ROWSVIS - 1
-                CALL    RENDEROW""",
+        'file': 'SCROLL.Z8A',
+        'old': """                LD      B, TXRLAST - 1
+                CALL    COLRNDR
+                JP      TXTPUSH""",
         'new': """                LD      B, 23           ; MUTATION: THE S6 LITERAL
-                CALL    RENDEROW""",
+                CALL    COLRNDR
+                JP      TXTPUSH""",
         'filter': 'S2-7',
         'expect': ['S2-7/head-repainted'],
     },
     {
         'name': 's2-scroll-nodump',
-        'why': 'TXTPUSH composes the scrolled band and never pushes the pattern '
+        'why': 'TXTPSHB composes the scrolled band and never pushes the pattern '
                'band to VRAM -- the round-1 defect: the shadows are right and '
                'the screen is a scroll behind',
         'target': 'S2ED',
         'file': 'SCROLL.Z8A',
-        'old': """                LD      BC, ROWSVIS * ROWLEN
-                CALL    VDPDUMP""",
-        'new': """                LD      BC, ROWSVIS * ROWLEN
-                                        ; MUTATION: BAND NEVER PUSHED TO VRAM""",
+        'old': """                LD      C, 0            ; BC = ROWS * ROWLEN
+                CALL    VDPDUMP
+                POP     BC
+                LD      C, TXRLAST""",
+        'new': """                LD      C, 0            ; BC = ROWS * ROWLEN
+                                        ; MUTATION: BAND NEVER PUSHED TO VRAM
+                POP     BC
+                LD      C, TXRLAST""",
         'filter': 'S2-5',
         'expect': ['S2-5/scrolled-rows'],
     },
@@ -1597,16 +1770,18 @@ MUTATIONS = [
     {
         'name': 's2-coldirt',
         'target': 'S2ED',
-        'why': 'COMCELL changes COLMAP without flagging the row, so RENDEROW skips its COLDUMP and the new colours never reach VRAM',
+        'why': 'COMROW changes COLMAP without flagging the row, so RENDEROW skips its COLDUMP and the new colours never reach VRAM',
         'file': 'RENDER.Z8A',
-        'old': """                LD      (IY+0), A
-                LD      HL, COLDIRT
-                LD      (HL), H         ; NON-ZERO (H = HIGH(COLDIRT))
-.SAME           INC     IY""",
-        'new': """                LD      (IY+0), A
-                LD      HL, COLDIRT
+        'old': """                LD      (IY + 0), A
+                LD      A, #FF
+                LD      (COLDIRT), A
+.SAMEC          INC     IY""",
+        'new': """                LD      (IY + 0), A
+                LD      A, #FF
                 NOP                     ; MUTATION: THE ROW STAYS CLEAN
-.SAME           INC     IY""",
+                NOP
+                NOP
+.SAMEC          INC     IY""",
         'filter': 'S2-14',
         'expect': ['S2-14/line0', 'S2-14/line1'],
     },
@@ -2270,11 +2445,11 @@ MUTATIONS = [
                'theme byte nobody reads',
         'target': 'S2ED',
         'file': 'RENDER.Z8A',
-        'old': """.NOTUN          BIT     4, C            ; ATRMARK ?
-                JR      Z, .SETCOL
+        'old': """.NOTUN          BIT     4, A            ; ATRMARK ?
+                JR      Z, .MDEF
                 LD      A, (VCOLMARK)""",
-        'new': """.NOTUN          BIT     4, C            ; ATRMARK ?
-                JR      .SETCOL         ; MUTATION: DELIMITERS UNMARKED
+        'new': """.NOTUN          BIT     4, A            ; ATRMARK ?
+                JR      .MDEF           ; MUTATION: DELIMITERS UNMARKED
                 LD      A, (VCOLMARK)""",
         'filter': 'S2-14',
         'expect': ['S2-14/line0', 'S2-14/line1'],
@@ -2290,16 +2465,16 @@ MUTATIONS = [
                'cell with a delimiter is painted as a delimiter',
         'target': 'S2ED',
         'file': 'RENDER.Z8A',
-        'old': """                LD      A, (VCOLTXT)    ; DEFAULT COLOR
-                BIT     0, C            ; ATRBOLD ?
-                JR      Z, .NOTBD""",
-        'new': """                LD      A, (VCOLTXT)    ; DEFAULT COLOR
-                BIT     4, C            ; MUTATION: DELIMITER WINS
+        'old': """.MAPC           OR      A
+                JR      Z, .MDEF
+                BIT     0, A            ; ATRBOLD ?""",
+        'new': """.MAPC           OR      A
+                JR      Z, .MDEF
+                BIT     4, A            ; MUTATION: DELIMITER WINS
                 JR      Z, .MUTBD
                 LD      A, (VCOLMARK)
-                JR      .SETCOL
-.MUTBD          BIT     0, C            ; ATRBOLD ?
-                JR      Z, .NOTBD""",
+                RET
+.MUTBD          BIT     0, A            ; ATRBOLD ?""",
         'filter': 'S2-14',
         'expect': ['S2-14/line1'],
     },
@@ -2315,10 +2490,12 @@ MUTATIONS = [
                'cell -- invisible on any aligned example',
         'target': 'S2ED',
         'file': 'RENDER.Z8A',
-        'old': """                LD      A, D
-                OR      E               ; A = LATTR | RATTR""",
-        'new': """                LD      A, D
-                                        ; MUTATION: RIGHT ATTRIBUTE IGNORED""",
+        'old': """.CPAIRL         LD      A, (HL)
+                INC     HL
+                OR      (HL)""",
+        'new': """.CPAIRL         LD      A, (HL)
+                INC     HL
+                NOP                     ; MUTATION: RIGHT ATTRIBUTE IGNORED""",
         'filter': 'S2-14',
         'expect': ['S2-14/line1'],
     },

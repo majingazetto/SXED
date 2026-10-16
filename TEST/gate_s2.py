@@ -27,7 +27,7 @@ from gate import (BRW_BYTES, H30NewDocument, H36BrowseSaveAs,
 from cases import (Case, DEFAULT_CFG, HomePathCase, LongPathCase,
                    ShippedDiskCase, crlf, io_fixture, numbered)
 from harness import MACH_MSX1, Session
-from keys import Timeline
+from keys import KEY, Timeline
 from result import Check
 
 # The shipped defaults, minus the clock.  A case whose defect is a race must
@@ -270,11 +270,16 @@ class S23Cursor(S2Case):
             t.snap('s%d' % i, vram='pat')
             t.wait(0.1 * i)
         t.press('LEFT')
-        # A short tail on purpose: .DRAWCUR runs just after key-down, and the
-        # blink toggles 20 JIFFY ticks later.  The default 0.35 s tail puts
-        # the sample 30 ticks after the keystroke -- past the toggle, cursor
-        # already erased.  0.05 s puts it at ~15.
-        t.press('RIGHT', tail=0.05)
+        # .DRAWCUR runs just after key-down and restarts the blink: the cursor
+        # stays up BLNKTCK ticks (0.3 s at 50 Hz).  A full press (0.25 s held)
+        # plus a 0.05 s tail sampled ~0.30 s after the draw -- ON the toggle,
+        # and any change to the edit path's speed flipped it (2026-10-16: the
+        # faster S2 renderer did).  A short press samples mid-phase instead.
+        row, bit = KEY['RIGHT']
+        t.at('keymatrixdown %d 0x%02X' % (row, bit))
+        t.wait(0.08)
+        t.at('keymatrixup %d 0x%02X' % (row, bit))
+        t.wait(0.07)
         t.snap('drawn', vram='pat')
         return t
 
@@ -1305,10 +1310,13 @@ class S214Markup(S2Case):
     #            0123456789...              bold 2..5, italic 14..19
     #   line 1  " **BOLD** odd"             bold 3..6 -- deliberately odd, so
     #                                       the span starts mid-cell
+    # Line 2 has underscores and no asterisk: SCANMKUP's quick reject looks
+    # for both, and a reject on the first one alone would leave it plain.
     LINES = ['**BOLD** and *ITALIC* end',
-             ' **BOLD** odd']
+             ' **BOLD** odd',
+             ' _UNDER_ end']
     BOLD = [(0, 2, 5), (1, 3, 6)]
-    ITAL = [(0, 14, 19)]
+    ITAL = [(0, 14, 19), (2, 2, 6)]
     # Only the TWO-character delimiter is marked.  The single '*' of an
     # italic span is not: it can never own a cell, so colouring it would
     # claim a content character instead of marking anything.
@@ -3902,7 +3910,7 @@ class S242ScrollNoDup(S2Case):
         t = Timeline()
         t.press('DOWN', repeat=21)              # cursor on the bottom row
         t.wait(1.0)
-        t.snap('mid', vram='pat', at='SCRLDNN.RLOOP')
+        t.snap('mid', vram='pat', at='SHUPN.EXPLP')
         t.press('DOWN')                         # scrolls one row
         t.wait(1.0)
         return t
@@ -3911,7 +3919,7 @@ class S242ScrollNoDup(S2Case):
         run = one(runs)
         pat = run.blob('mid', 'pat')
         if pat is None:
-            return [Check('S2-42/no-dup', False, 'no dump at SCRLDNN.RLOOP')]
+            return [Check('S2-42/no-dup', False, 'no dump at SHUPN.EXPLP')]
         last = pattern.row_of(pat, pattern.TXRLAST)
         above = pattern.row_of(pat, pattern.TXRLAST - 1)
         return [Check('S2-42/no-dup', last != above,
@@ -4841,6 +4849,192 @@ class S258LongAttrs(S2Case):
         ]
 
 
+# --- S2-59  EDIT PAINTS: SHIFTS, JOINS AND THE COLOUR DIFF ------------
+
+
+def colmap_of(ctx, run, label):
+    """COLMAP as the snapshot's Main RAM dump holds it (FTRSEG is VIDSEG)."""
+    ram = run.blob(label, 'ram')
+    seg = run.var(label, 'FTRSEG')
+    if ram is None or seg is None:
+        return None
+    base = seg * 16384 + ctx.sym['COLMAP'] - 0x8000
+    return ram[base:base + 24 * 32]
+
+
+class S259EditPaint(S2Case):
+    name = 'S2-59-edit-paint'
+    desc = ('every shift, scroll and join paint leaves the screen as the '
+            'document says, and the VRAM colour table equal to COLMAP')
+    origin = ('2026-10-16, the S2 render optimisation: scrolls dump only the '
+              'rows whose colours change (COLDIFF / COLBCHG), Enter composes '
+              'before it pushes (NWPAINT / NWSCRL) and a join shifts instead '
+              'of redrawing (JNPAINT / JNSHIFT).  All of it rests on COLMAP '
+              'mirroring the VRAM colour table, so that is checked directly, '
+              'with the bold spans at a different column on every line')
+    variants = ('enter', 'enter-bottom', 'scroll', 'dev-bs', 'dev-del',
+                'dev-bottom', 'txt-partial', 'txt-empty')
+    LINES = ['L%02d %s**BOLD** tail' % (i, 'x' * (i % 9)) for i in range(60)]
+    TXT = ['alpha beta gamma delta epsilon',
+           'zeta eta theta iota kappa lambda', 'mu', '', 'next one', ''] + \
+        LINES[:40]
+
+    def config(self, ctx, variant=None):
+        cfg = self.cfg.replace('MARKUP=OFF', 'MARKUP=MD')
+        if variant.startswith('txt'):
+            return cfg.replace('WRAP=TXT', 'WRAP=TXT\nTEXTWIDTH=40')
+        return cfg.replace('WRAP=TXT', 'WRAP=DEV')
+
+    def fixture(self, ctx, variant=None):
+        if variant == 'txt-empty':
+            return crlf(['', 'alpha beta', 'gamma'] + self.LINES[:40])
+        return crlf(self.TXT if variant.startswith('txt') else self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.wait(1.0)
+        if variant == 'enter':
+            t.press('DOWN', repeat=4)
+            t.press('RIGHT', repeat=6)
+            t.press('RETURN')
+        elif variant == 'enter-bottom':
+            t.press('DOWN', repeat=21)
+            t.press('RIGHT', repeat=6)
+            t.press('RETURN')
+        elif variant == 'scroll':
+            t.press('DOWN', repeat=22)
+        elif variant == 'dev-bs':
+            t.press('DOWN', repeat=5)
+            t.press('BS')
+        elif variant == 'dev-del':
+            t.press('DOWN', repeat=5)
+            t.press('RIGHT', mods=['CTRL'])
+            t.press('DEL')
+        elif variant == 'dev-bottom':
+            t.press('DOWN', repeat=21)
+            t.press('BS')
+        elif variant == 'txt-partial':
+            t.press('DOWN')
+            t.press('BS')
+        elif variant == 'txt-empty':
+            t.press('DOWN')
+            t.press('BS')
+        t.wait(0.5)
+        t.snap('edited', vram='patcol', mainram=True)
+        t.press('DOWN', mods=['CTRL'])      # page down and back: a REDRAW
+        t.press('UP', mods=['CTRL'])
+        t.wait(0.5)
+        t.snap('redrawn', vram='patcol')
+        return t
+
+    def verify(self, ctx, runs):
+        checks = []
+        f = font(ctx)
+        for variant, run in sorted(runs.items()):
+            tag = 'S2-59/%s' % variant
+            got = run.blob('edited', 'patcol')
+            again = run.blob('redrawn', 'patcol')
+            lines = S246ViVisualWalk.doc_from_ram(run, 'edited')
+            cmap = colmap_of(ctx, run, 'edited')
+            if got is None or again is None or lines is None or cmap is None:
+                checks.append(Check(tag + '/dump', False, 'missing dump'))
+                continue
+            top = run.var('edited', 'TOPLINE')
+            bad = pattern.mismatched_rows(
+                got[:0x2000], f, lines, top,
+                cursor=(pattern.TXRFIRST + run.var('edited', 'CURY'),
+                        run.var('edited', 'CURX')))
+            checks.append(Check(tag + '/patterns', not bad,
+                                'every text row agrees with the document'
+                                if not bad else 'rows differ: %s' % bad[:4]))
+            stale = []
+            for row in range(pattern.TXRFIRST, pattern.TXRLAST + 1):
+                want = bytes(b for b in cmap[row * 32:row * 32 + 32]
+                             for _ in range(8))
+                if pattern.colour_row(got[0x2000:], row) != want:
+                    stale.append(row)
+            checks.append(Check(tag + '/colour-mirror', not stale,
+                                'VRAM colours equal COLMAP on every text row'
+                                if not stale else 'rows differ from COLMAP: %s'
+                                % stale[:6]))
+            same = (run.var('edited', 'TOPLINE') ==
+                    run.var('redrawn', 'TOPLINE'))
+            diff = [row for row in range(pattern.TXRFIRST, pattern.TXRLAST + 1)
+                    if pattern.colour_row(got[0x2000:], row) !=
+                    pattern.colour_row(again[0x2000:], row)]
+            checks.append(Check(tag + '/colours', same and not diff,
+                                'colours equal a full REDRAW of the same page'
+                                if same and not diff else
+                                'TOPLINE %s / %s, rows differ: %s'
+                                % (run.var('edited', 'TOPLINE'),
+                                   run.var('redrawn', 'TOPLINE'), diff[:6])))
+        return checks
+
+
+# --- S2-60  THE EDIT PATHS STAY WITHIN THEIR TIME BUDGET --------------
+
+
+class S260Perf(S2Case):
+    name = 'S2-60-perf'
+    desc = ('Enter, a join, a scroll and a page of 60-column lines cost what '
+            'the optimised renderer measured, in emulated time')
+    origin = ('2026-10-16, a tester on S2ED v0.7: "va lento en S2".  Measured '
+              'on the stock MSX1: Enter 194 ms, BS join 417 ms (a full REDRAW), '
+              'one-row scroll 202 ms.  The colour diff, the composer rewrite, '
+              'the markup quick reject and the shift-up join brought them to '
+              '~110 / ~110 / ~125 ms.  Emulated time is deterministic, so a '
+              'budget a little above the measurement catches any path that '
+              'falls back to the old work')
+    # (key, label the action starts at, budget in ms)
+    PATHS = {
+        'enter': ('RETURN', 'ACTNWLIN', 150),
+        'join': ('BS', 'ACTDELBK', 150),
+        'scroll': ('DOWN', 'ACTMVD', 160),
+        'page': ('PAGE', 'ACTPGDN', 360),
+    }
+    variants = tuple(PATHS)
+    # 60 characters: a page composes every cell.  The join gets 28: the seam
+    # of two longer lines lands past column 61, LEFTCOL moves and the join
+    # rightly redraws.
+    LINES = [('L%02d ' % i + 'abcdefghi ' * 6)[:60] for i in range(80)]
+    SHORT = [('L%02d ' % i + 'abcdefghi ' * 3)[:28] for i in range(80)]
+
+    def config(self, ctx, variant=None):
+        return (self.cfg.replace('WRAP=TXT', 'WRAP=DEV')
+                .replace('MARKUP=OFF', 'MARKUP=MD'))
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.SHORT if variant == 'join' else self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        key, start, _ = self.PATHS[variant]
+        t = Timeline()
+        t.press('DOWN', repeat=21 if variant == 'scroll' else 2)
+        t.wait(1.0)
+        t.snap('a', at=start)
+        t.snap('b', at='DRWSTAT')
+        if key == 'PAGE':
+            t.press('DOWN', mods=['CTRL'])
+        else:
+            t.press(key)
+        t.wait(1.5)
+        return t
+
+    def verify(self, ctx, runs):
+        checks = []
+        for variant, run in sorted(runs.items()):
+            budget = self.PATHS[variant][2]
+            a, b = run.var('a', 'EMUTUS'), run.var('b', 'EMUTUS')
+            if a is None or b is None:
+                checks.append(Check('S2-60/%s' % variant, False,
+                                    'the action or DRWSTAT never ran'))
+                continue
+            ms = (b - a) / 1000.0
+            checks.append(Check('S2-60/%s' % variant, ms <= budget,
+                                '%.1f ms (budget %d)' % (ms, budget)))
+        return checks
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
          S210Theme(), S211About(), S212DialogUndo(),
@@ -4861,7 +5055,8 @@ CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S251SelScroll(), S252SelAllPage(),
          S253UndoLongJoin(), S254RewrapSettings(), S255QuitSave(),
          S256ClipLimit(), S257ReflowJoin(),
-         S258LongAttrs()]
+         S258LongAttrs(), S259EditPaint(),
+         S260Perf()]
 
 
 def run(ctx, cases=None):

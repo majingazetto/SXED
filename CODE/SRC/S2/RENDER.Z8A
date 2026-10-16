@@ -206,198 +206,212 @@ CLRROW          PUSH    BC
 ; - COMPOSES ONE ROW (GUTTER + 31 CELLS / 61 COLS + MARGIN) INTO PATSHAD
 ; - AND COLMAP
 ; - IN:  B = SCREEN ROW (0..23), WORKBUF HOLDS LINE RECORD
-; - OUT: NONE
+; - OUT: NONE. COLDIRT NON-ZERO IF A COLMAP BYTE CHANGED.
 ; - CLOBBERS: AF, BC, DE, HL, IX, IY
 ; - NOTE: CALLER MUST HAVE VIDSEG BANKED AT PAGE 2
 ; -
+; - TWO PASSES. PATTERNS: THE VISIBLE CHARACTERS ARE WALKED WITH ONE
+; - POINTER, TWO PER CELL, AND CPAIR WRITES THE CELL'S 8 SCANLINES UNROLLED
+; - THROUGH DE. COLOURS: THE ATTRIBUTES (WORKATTR = 256 BYTES ON) ARE WALKED
+; - THE SAME WAY. THE ONE-CELL-AT-A-TIME COMPOSER RECOMPUTED BOTH COLUMN
+; - INDICES PER CELL AND WROTE THROUGH IX: ~1,460 T A CELL, 12 MS A FULL ROW.
+; -
 
 COMROW          LD      A, B
-                LD      D, A
+                CALL    COLROW
+                PUSH    HL
+                POP     IY              ; IY = COLMAP + ROW * 32
+                LD      D, B
                 LD      E, 0
                 LD      HL, PATSHAD
                 ADD     HL, DE
-                PUSH    HL
-                POP     IX              ; IX = PATSHAD + ROW * 256
+                EX      DE, HL          ; DE = PATSHAD + ROW * 256
 
-                LD      L, B
-                LD      H, 0
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL          ; HL = ROW * CELLROW
-                LD      DE, COLMAP
-                ADD     HL, DE
-                PUSH    HL
-                POP     IY              ; IY = COLMAP + ROW * 32
-
-                ; THE GUTTER: BLANK, IN THE DOCUMENT'S COLOR
-                LD      B, TXCELL0
-.GUTLP          PUSH    BC
-                LD      A, ' '
+                ; N = THE VISIBLE CHARACTERS: LENGTH - LEFTCOL, 0..TEXTCOLS
+                LD      A, (LEFTCOL)
                 LD      C, A
-                LD      DE, 0
-                CALL    COMCELL
-                POP     BC
-                DJNZ    .GUTLP
-
-                LD      B, 0            ; B = TEXT CELL INDEX (0..30)
-
-.CELLP          ; GET LEFT CHARACTER AND ATTRIBUTE (COL = LEFTCOL + 2*B)
-                LD      A, B
-                ADD     A, A            ; A = 2*B
-                LD      HL, LEFTCOL
-                ADD     A, (HL)         ; A = LEFTCOL + 2*B
-                LD      E, A
-                LD      A, (WORKBUF)    ; LINE LENGTH
-                CP      E
-                JR      Z, .TAIL        ; PAST THE END: THE REST IS BLANK
-                JR      C, .TAIL
-                ; WITHIN LINE LENGTH
-                LD      D, 0
-                LD      HL, WORKBUF + 1
-                ADD     HL, DE
-                LD      A, (HL)         ; A = LEFT CHAR
-                LD      HL, WORKBUF + 1 + WORKATTR
-                ADD     HL, DE
-                LD      D, (HL)         ; D = LEFT ATTR
-
-.RGET           ; PUSH LEFT (A, D)
-                PUSH    AF
-                PUSH    DE
-
-                ; GET RIGHT CHARACTER AND ATTRIBUTE (COL = LEFTCOL + 2*B + 1).
-                ; THE LAST CELL'S RIGHT HALF IS THE MARGIN: BLANK BY POSITION,
-                ; SINCE A LINE LONGER THAN THE VIEWPORT HAS A CHARACTER THERE
-                LD      A, B
-                CP      TXCELLS - 1
-                JR      Z, .RBLNK
-                ADD     A, A
-                INC     A               ; A = 2*B + 1
-                LD      HL, LEFTCOL
-                ADD     A, (HL)         ; A = LEFTCOL + 2*B + 1
-                LD      E, A
                 LD      A, (WORKBUF)
-                CP      E
-                JR      Z, .RBLNK
-                JR      C, .RBLNK
+                SUB     C
+                JR      NC, .NPOS
+                XOR     A
+.NPOS           CP      TEXTCOLS + 1
+                JR      C, .NOK
+                LD      A, TEXTCOLS
+.NOK            LD      (CRN), A
+
+                ; THE GUTTER: BLANK
+                XOR     A
+                LD      B, TXCELL0 * 8
+.GUTP           LD      (DE), A
+                INC     E
+                DJNZ    .GUTP
+
+                ; PATTERNS: N / 2 PAIRS, THEN A LONE LEFT CHARACTER IF N IS ODD
+                ; (THE LAST CELL'S RIGHT HALF IS THE MARGIN, BLANK BY POSITION)
+                LD      B, 0            ; BC = LEFTCOL
+                LD      IX, WORKBUF + 1
+                ADD     IX, BC          ; IX = THE FIRST VISIBLE CHARACTER
+                LD      A, (CRN)
+                SRL     A
+                JR      Z, .HALF
+                LD      (CRCNT), A
+.PAIRP          LD      C, (IX + 1)
+                LD      A, (IX + 0)
+                CALL    CPAIR
+                INC     IX
+                INC     IX
+                LD      HL, CRCNT
+                DEC     (HL)
+                JR      NZ, .PAIRP
+.HALF           LD      A, (CRN)
+                RRCA
+                JR      NC, .PTAIL
+                LD      A, (IX + 0)
+                LD      C, ' '
+                CALL    CPAIR
+
+.PTAIL          ; THE CELLS PAST THE END: BLANK TO THE END OF THE 256-BYTE ROW
+                ; (E WRAPS TO 0 THERE; IT IS ALREADY 0 IF ALL 32 WERE COMPOSED)
+                LD      A, E
+                OR      A
+                JR      Z, .COLS
+                XOR     A
+.PTLP           DUP     8               ; A CELL A PASS: E STAYS A MULTIPLE OF 8
+                LD      (DE), A
+                INC     E
+                EDUP
+                JR      NZ, .PTLP
+
+.COLS           ; COLOURS: THE GUTTER AND THE CELLS PAST THE END IN THE TEXT
+                ; COLOUR, A CELL OF TEXT IN THE ROLE OF LATTR | RATTR
+                LD      A, (VCOLTXT)
+                LD      C, A            ; C = THE TEXT COLOUR
+                LD      B, TXCELL0
+                CALL    .FILLC
+                LD      A, (LEFTCOL)
+                LD      E, A
                 LD      D, 0
-                LD      HL, WORKBUF + 1
-                ADD     HL, DE
-                LD      C, (HL)         ; C = RIGHT CHAR
                 LD      HL, WORKBUF + 1 + WORKATTR
-                ADD     HL, DE
-                LD      E, (HL)         ; E = RIGHT ATTR
-                JR      .COMCL
-
-.RBLNK          LD      C, ' '
-                LD      E, 0
-
-.COMCL          POP     HL              ; H = LEFT ATTR (IN D ORIGINALLY)
-                LD      D, H
-                POP     AF              ; A = LEFT CHAR
-                PUSH    BC              ; SAVE B (CELL COUNTER)
-                CALL    COMCELL
-                POP     BC
-                INC     B
-                LD      A, B
-                CP      TXCELLS
-                JR      NZ, .CELLP
-                RET
-
-.TAIL           ; CELLS B..30 ARE ALL PAST THE END OF THE LINE: BLANK PATTERNS
-                ; AND THE TEXT COLOUR, WITHOUT COMPOSING A PAIR OF SPACES PER
-                ; CELL (~1,300 T EACH, MOST OF A REDRAW ON SHORT LINES).
+                ADD     HL, DE          ; HL = THE FIRST VISIBLE ATTRIBUTE
+                LD      A, (CRN)
+                SRL     A
+                JR      Z, .CHALF
+                LD      B, A
+.CPAIRL         LD      A, (HL)
+                INC     HL
+                OR      (HL)
+                INC     HL
+                CALL    .MAPC
+                CALL    .SETC
+                DJNZ    .CPAIRL
+.CHALF          LD      A, (CRN)
+                RRCA
+                JR      NC, .CTAIL
+                LD      A, (HL)         ; THE LONE LEFT CHARACTER'S ONLY
+                CALL    .MAPC
+                CALL    .SETC
+.CTAIL          LD      A, (CRN)
+                INC     A
+                SRL     A               ; CELLS OF TEXT = CEIL(N / 2)
+                LD      B, A
                 LD      A, TXCELLS
                 SUB     B
-                LD      B, A            ; B = CELLS LEFT (1..31)
-                PUSH    IX
-                POP     HL
-                LD      C, A
-                XOR     A
-.TPAT           LD      (HL), A         ; 8 BLANK SCANLINES PER CELL
-                INC     HL
-                LD      (HL), A
-                INC     HL
-                LD      (HL), A
-                INC     HL
-                LD      (HL), A
-                INC     HL
-                LD      (HL), A
-                INC     HL
-                LD      (HL), A
-                INC     HL
-                LD      (HL), A
-                INC     HL
-                LD      (HL), A
-                INC     HL
-                DEC     C
-                JR      NZ, .TPAT
-                LD      A, (VCOLTXT)
-.TCOL           CP      (IY+0)
-                JR      Z, .TSAME
-                LD      (IY+0), A
+                RET     Z
+                LD      B, A
+
+                ; B CELLS IN THE TEXT COLOUR C, NOTING A CHANGE
+.FILLC          LD      A, C
+.FCLP           CP      (IY + 0)
+                JR      Z, .FCSAME
+                LD      (IY + 0), A
                 LD      HL, COLDIRT
                 LD      (HL), H         ; NON-ZERO (H = HIGH(COLDIRT))
-.TSAME          INC     IY
-                DJNZ    .TCOL
+.FCSAME         INC     IY
+                DJNZ    .FCLP
                 RET
 
-
-
-
-; --- COMCELL                   ----------------------------------------
-
-
-; - COMCELL ----------------------------
-; - COMPOSES ONE CELL (8 PATTERN BYTES + 1 COLOR MAP BYTE)
-; - IN:  A = LCHAR, D = LATTR, C = RCHAR, E = RATTR, IX = PATSHAD, IY = COLMAP
-; - OUT: IX += 8, IY += 1
-; - CLOBBERS: AF, BC, DE, HL, IX, IY
-; -
-
-COMCELL         PUSH    DE              ; SAVE ATTRIBUTES (D=LATTR, E=RATTR)
-
-                CALL    CELLPAT         ; 1-3. THE TWO GLYPHS INTO PATSHAD
-
-                ; 4. MAP ATTRIBUTES TO THEME COLOR
-                POP     DE              ; RESTORE D=LATTR, E=RATTR
-                LD      A, D
-                OR      E               ; A = LATTR | RATTR
-                LD      C, A            ; C = ATTRS
-                LD      A, (VCOLTXT)    ; DEFAULT COLOR
-                BIT     0, C            ; ATRBOLD ?
-                JR      Z, .NOTBD
-                LD      A, (VCOLBOLD)
-                JR      .SETCOL
-.NOTBD          BIT     1, C            ; ATRITAL ?
-                JR      Z, .NOTIT
-                LD      A, (VCOLITAL)
-                JR      .SETCOL
-.NOTIT          BIT     2, C            ; ATRUNDR ?
-                JR      Z, .NOTUN
-                LD      A, (VCOLUNDR)
-                JR      .SETCOL
-
+                ; A = LATTR | RATTR -> A = ITS COLOUR (C = THE TEXT COLOUR).
                 ; ATRMARK IS TESTED LAST ON PURPOSE.  A CELL IS TWO
                 ; CHARACTERS, SO A DELIMITER THAT STARTS ON AN ODD COLUMN
                 ; SHARES ITS CELL WITH CONTENT: LOWEST PRIORITY MEANS THE
                 ; CONTENT KEEPS ITS OWN ROLE AND THE DELIMITER GIVES WAY,
                 ; RATHER THAN A BOLD LETTER BEING PAINTED AS A DELIMITER.
-                ; ALIGNED -- THE COMMON CASE -- THE PAIR OWNS ITS CELL AND
-                ; VCOLMARK SHOWS.
-.NOTUN          BIT     4, C            ; ATRMARK ?
-                JR      Z, .SETCOL
-                LD      A, (VCOLMARK)
-
-.SETCOL         ; 5. WRITE ONE COLOR BYTE TO COLMAP, NOTING A CHANGE
-                CP      (IY+0)
-                JR      Z, .SAME
-                LD      (IY+0), A
-                LD      HL, COLDIRT
-                LD      (HL), H         ; NON-ZERO (H = HIGH(COLDIRT))
-.SAME           INC     IY
+.MAPC           OR      A
+                JR      Z, .MDEF
+                BIT     0, A            ; ATRBOLD ?
+                JR      Z, .NOTBD
+                LD      A, (VCOLBOLD)
                 RET
+.NOTBD          BIT     1, A            ; ATRITAL ?
+                JR      Z, .NOTIT
+                LD      A, (VCOLITAL)
+                RET
+.NOTIT          BIT     2, A            ; ATRUNDR ?
+                JR      Z, .NOTUN
+                LD      A, (VCOLUNDR)
+                RET
+.NOTUN          BIT     4, A            ; ATRMARK ?
+                JR      Z, .MDEF
+                LD      A, (VCOLMARK)
+                RET
+.MDEF           LD      A, C
+                RET
+
+                ; ONE COLOUR BYTE INTO COLMAP, NOTING A CHANGE
+.SETC           CP      (IY + 0)
+                JR      Z, .SAMEC
+                LD      (IY + 0), A
+                LD      A, #FF
+                LD      (COLDIRT), A
+.SAMEC          INC     IY
+                RET
+
+
+; - CPAIR ------------------------------
+; - COMPOSE ONE CELL: TWO 4X8 GLYPHS, THE RIGHT ONE INTO THE LOW NIBBLE
+; - IN:  A = LEFT CHAR, C = RIGHT CHAR, DE = DESTINATION (8 BYTES, INSIDE
+; -      A 256-BYTE ROW: E ADVANCES)
+; - OUT: DE += 8
+; - CLOBBERS: AF, BC, HL
+; -
+
+CPAIR           LD      L, A
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                LD      A, H
+                ADD     A, HIGH(FONT4H)
+                LD      H, A            ; HL = LEFT GLYPH
+                LD      A, C            ; BC = RIGHT GLYPH: C ROTATED LEFT 3
+                RLCA                    ; HOLDS C * 8 IN BITS 3-7 AND C / 32
+                RLCA                    ; IN BITS 0-2
+                RLCA
+                LD      C, A
+                AND     %00000111
+                ADD     A, HIGH(FONT4H)
+                LD      B, A
+                LD      A, C
+                AND     %11111000
+                LD      C, A
+                ; A GLYPH IS 8-BYTE ALIGNED, SO INC L / INC C NEVER CARRY
+                DUP     8
+                LD      A, (BC)
+                RRCA
+                RRCA
+                RRCA
+                RRCA                    ; RIGHT GLYPH TO THE LOW NIBBLE
+                OR      (HL)
+                LD      (DE), A
+                INC     L
+                INC     C
+                INC     E
+                EDUP
+                RET
+
+                ASSERT  LOW(FONT4H) == 0
+                ASSERT  LOW(PATSHAD) == 0
+                ASSERT  WORKATTR == 256
 
 
 ; --- CELLPAT                   ----------------------------------------
