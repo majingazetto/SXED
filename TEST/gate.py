@@ -168,14 +168,14 @@ class G3Oom(Case):
               'silent data loss on save; editor rolls back to 1 empty line and '
               'clears FILENAME')
     machine = MACH_128K
-    FIXTURE_LINES = 150
+    FIXTURE_LINES = 300
     PREFIX = 'G3'
     # 128 kB DOS 2: 2 free segments, both reserved (DIRSEG + FTRSEG), so the
     # text pool is DEFSEG2 alone.  CHKFLEN's byte ceiling is
-    # (SEGAVL + 1) * 101 * (TEXTCOLS + 2): 8,282 with the pool claimed and
-    # 16,564 without the FTRSEG claim (mut/f1a-noftr).  150 lines of 79 chars
-    # = 12,150 bytes sits exactly between the two ceilings, and their real
-    # storage (150 x 164 = 24,600) fits the doubled pool -- so the mutation
+    # (SEGAVL + 1) * 202 * (TEXTCOLS + 2): 16,564 with the pool claimed and
+    # 33,128 without the FTRSEG claim (mut/f1a-noftr).  300 lines of 79 chars
+    # = 24,300 bytes sits exactly between the two ceilings, and their real
+    # storage (300 x 81 = 24,300) fits the doubled pool -- so the mutation
     # is precisely the difference between refused and loaded.
 
     def fixture(self, ctx, variant=None):
@@ -5135,7 +5135,7 @@ class H31EditOpen(Case):
     variants = ('ok', 'noexist', 'toolarge', 'force')
     LINES = 5
     OTHER = crlf(['OTHER %d' % i for i in range(1, 4)])
-    BIG = crlf([('LINE %05d ' % i) + ('X' * 68) for i in range(1, 151)])
+    BIG = crlf([('LINE %05d ' % i) + ('X' * 68) for i in range(1, 301)])
 
     def fixture(self, ctx, variant=None):
         return crlf(numbered(self.LINES))
@@ -6581,9 +6581,9 @@ class U7UndoRing(Case):
     cfg = UNDO_CFG
     variants = ('evict', 'selfloop', 'toobig', 'depth')
     LINES = ['R%02d %s' % (i, 'LINE OF THE RING TEST') for i in range(60)]
-    # 171-byte records: 23 fit under the top of the 4 KB ring, so 26 edits
+    # 91-byte records: 45 fit under the top of the 4 KB ring, so 48 edits
     # wrap it three times and evict exactly the three oldest
-    EDITS, KEPT = 26, 23
+    EDITS, KEPT = 48, 45
 
     def fixture(self, ctx, variant=None):
         return crlf(self.LINES)
@@ -6592,8 +6592,8 @@ class U7UndoRing(Case):
         t = Timeline()
         t.wait(1.0)
         if variant == 'evict':
-            # 22 records (UNDOGMAX): lines 0..21, from BAS to BAS + 3762
-            t.press('DOWN', mods=['SHIFT'], repeat=21)
+            # 44 records (UNDOGMAX): lines 0..43, from BAS to BAS + 4004
+            t.press('DOWN', mods=['SHIFT'], repeat=43)
             t.press('DEL')
             t.wait(1.0)
             t.snap('deleted')
@@ -6610,11 +6610,11 @@ class U7UndoRing(Case):
                 t.wait(1.0)
             t.snap('undone')
         elif variant == 'selfloop':
-            # R0 at BAS, then a 22-record group behind it: 23 records, full
+            # R0 at BAS, then a 44-record group behind it: 45 records, full
             t.text('X')
             t.press('LEFT')
             t.press('DOWN')
-            t.press('DOWN', mods=['SHIFT'], repeat=21)
+            t.press('DOWN', mods=['SHIFT'], repeat=43)
             t.press('DEL')
             t.press('Z', mods=['CTRL'])     # the group goes to redo
             t.wait(1.0)
@@ -6654,7 +6654,7 @@ class U7UndoRing(Case):
     def verify(self, ctx, runs):
         checks = []
         got = disk_lines(runs['evict'])
-        want = self.LINES[21:]
+        want = self.LINES[43:]
         checks.append(Check('U7/evict/content', got == want,
                             'the evicted group is not replayed: Ctrl+Z x3 '
                             'undoes Z and Y and stops'
@@ -6781,10 +6781,10 @@ class U8UndoDropped(Case):
 
 class U9UndoLineEdits(Case):
     name = 'U9-undo-line-edits'
-    desc = 'paste, word delete, markup wrap and a style toggle undo in one step'
-    origin = ('EDINSRUN, ACTDWLFT, WRAPSEL and APPLSEL wrote lines with no '
+    desc = 'paste, word delete and markup wrap undo in one step'
+    origin = ('EDINSRUN, ACTDWLFT and WRAPSEL wrote lines with no '
               'record: Ctrl+Z skipped them and undid something older')
-    variants = ('paste', 'wordel', 'wrapsel', 'style')
+    variants = ('paste', 'wordel', 'wrapsel')
     LINES = ['HELLO WORLD', 'ALPHA BETA GAMMA', 'THIRD LINE HERE']
 
     def config(self, ctx, variant=None):
@@ -6807,38 +6807,30 @@ class U9UndoLineEdits(Case):
             t.press('DOWN')
             t.press('RIGHT', repeat=10)     # just after BETA
             t.press('BS', mods=['GRAPH'])
-        elif variant == 'wrapsel':
+        else:
             t.press('RIGHT', mods=['SHIFT'], repeat=5)
             t.press('B', mods=['CTRL'])     # **HELLO**
-        else:
-            t.snap('before', vram=True)
-            t.press('DOWN', mods=['SHIFT'], repeat=2)
-            t.press('RIGHT', mods=['SHIFT'], repeat=3)
-            t.press('B', mods=['CTRL'])     # bold across three lines
-            t.wait(1.0)
-            t.snap('styled', vram=True)
         t.wait(1.0)
         t.snap('edited')
         t.press('Z', mods=['CTRL'])
         t.wait(1.0)
-        t.snap('undone', vram=(variant == 'style'))
+        t.snap('undone')
         t.press('Z', mods=['SHIFT', 'CTRL'])
         t.wait(1.0)
-        t.snap('redone', vram=(variant == 'style'))
+        t.snap('redone')
         t.press('Z', mods=['CTRL'])
         t.wait(1.0)
-        t.snap('undone2', vram=(variant == 'style'))
+        t.snap('undone2')
         t.press('S', mods=['CTRL'])
         t.wait(3.0)
         t.snap('saved')
         return t
 
-    WHERE = {'paste': (1, 5), 'wordel': (1, 10), 'wrapsel': None,
-             'style': (0, 0)}
+    WHERE = {'paste': (1, 5), 'wordel': (1, 10), 'wrapsel': None}
 
     def verify(self, ctx, runs):
         checks = []
-        for v in ('paste', 'wordel', 'wrapsel'):
+        for v in self.variants:
             run = runs[v]
             got = disk_lines(run)
             edited = run.var('edited', 'UNDOPTR') != 0
@@ -6855,24 +6847,6 @@ class U9UndoLineEdits(Case):
                                     'Ctrl+Z puts the cursor back at %s'
                                     % (where,) if pos == where else
                                     'cursor %s, expected %s' % (pos, where)))
-        run = runs['style']
-        before = run.blob('before', 'vram')
-        styled = run.blob('styled', 'vram')
-        undone = run.blob('undone', 'vram')
-        undone2 = run.blob('undone2', 'vram')
-        redone = run.blob('redone', 'vram')
-        cur = [(0, 0)]
-        changed = bool(vram.diff(before, styled, ignore_cells=cur))
-        d1 = vram.diff(before, undone, ignore_cells=cur)
-        d2 = vram.diff(before, undone2, ignore_cells=cur)
-        again = bool(vram.diff(before, redone, ignore_cells=cur))
-        checks.append(Check('U9/style/undo',
-                            changed and not d1 and not d2 and again,
-                            'bold across three lines: Ctrl+Z restores the '
-                            'screen, redo brings it back'
-                            if changed and not d1 and not d2 and again else
-                            'styled %s, undo diff %d px, redo %s, undo2 diff '
-                            '%d px' % (changed, len(d1), again, len(d2))))
         return checks
 
 # --- U10  UNDO BACK TO THE FILE CLEARS MODIFIED ------------------------
@@ -6889,8 +6863,8 @@ class U10UndoClean(Case):
               'ring reports a clean document that is not the file')
     cfg = UNDO_CFG
     variants = ('back', 'saved', 'evict')
-    LINES = ['C%02d %s' % (i, 'LINE OF THE CLEAN TEST') for i in range(40)]
-    EDITS = 26          # wraps the 23-record ring: the three oldest evicted
+    LINES = ['C%02d %s' % (i, 'LINE OF THE CLEAN TEST') for i in range(55)]
+    EDITS = 48          # wraps the 45-record ring: the three oldest evicted
 
     def fixture(self, ctx, variant=None):
         return crlf(self.LINES)
@@ -7111,8 +7085,8 @@ class H42IoBlocks(Case):
 # the defect was.
 
 def short_lines(count, first=0):
-    """Lines of exactly 16 characters: one default 36-byte record each."""
-    return ['R%04d ABCDEFGHIJ' % i for i in range(first, first + count)]
+    """Lines of exactly 32 characters: one default 36-byte record each."""
+    return [('R%04d ' % i) + 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' for i in range(first, first + count)]
 
 
 SEG_FULL = 455          # 455 * 36 = 16380 of 16384 bytes
@@ -7120,7 +7094,7 @@ SEG_FULL = 455          # 455 * 36 = 16380 of 16384 bytes
 
 class R1FreeListCompact(Case):
     name = 'R1-freelist-compact'
-    desc = ('two short lines deleted, then a line grown past 16 characters '
+    desc = ('two short lines deleted, then a line grown past 32 characters '
             'with the segment full: the compaction walks the freed records')
     origin = ('2026-10-06 review: FREEPSH wrote its link over RECCAP and the '
               'low byte of RECLEN, so SEGCOMP sized a freed record by the link '
@@ -7142,14 +7116,14 @@ class R1FreeListCompact(Case):
         t.snap('deleted')
         t.snap('c0', at='SEGCOMP')
         t.snap('c1', at='SEGCOMP.SCANDON')
-        t.text('X')                     # 17 characters: a 68-byte record
+        t.text('X')                     # 33 characters: a 68-byte record
         t.wait(15.0)                    # SEGCOMP over a full segment
         t.snap('grown')
         # Two new lines at the end of it. The first takes the one record
         # on the free list; the second finds the list empty and the segment
         # full, and is refused. A list that survived the compaction still
         # names offset 36 -- now a live, slid record -- and hands it out.
-        t.press('RIGHT', repeat=16)
+        t.press('RIGHT', repeat=32)
         t.press('RETURN')
         t.wait(2.0)
         t.press('RETURN')
@@ -7242,7 +7216,7 @@ class R3UndoCompactIX(Case):
               'zeroes IX; UNDORST / UNDOSWP then wrote their record over '
               'page 0')
 
-    LONG = 'LONG LINE 0123456'          # 17 characters: a 68-byte record
+    LONG = 'LONG LINE ' + 'L' * 23          # 33 characters: a 68-byte record
     LINES = [LONG] + short_lines(453)   # 68 + 453 * 36 = 16376
 
     def fixture(self, ctx, variant=None):
@@ -7365,7 +7339,7 @@ class R5JoinOom(Case):
         t = Timeline()
         t.snap('boot')
         t.press('DOWN')
-        t.press('BS')                           # join lines 0 and 1: 32 chars
+        t.press('BS')                           # join lines 0 and 1: 64 chars
         t.wait(15.0)
         t.snap('refused')
         t.press('S', mods=['CTRL'])
@@ -7622,7 +7596,7 @@ class P3ReplaceAllUndo(Case):
     variants = ('few', 'many')
 
     def _lines(self, variant):
-        n = 15 if variant == 'few' else 30     # UNDOGMAX is 22 on S6ED
+        n = 20 if variant == 'few' else 50     # UNDOGMAX is 44 on S6ED
         return ['L%02d FOO AND FOO' % i for i in range(n)]
 
     def fixture(self, ctx, variant=None):
@@ -8750,13 +8724,13 @@ class U12UndoLongEdits(Case):
     LONG = ''.join(chr(65 + i % 26) for i in range(100))
     LINES = ['L%02d SHORT LINE' % i for i in range(10)]
     LINES[5] = LONG
-    # A selection whose group overflows the ring on a big record (521 bytes)
-    # while a later normal one (171) would still fit: 5 big + 3 normal = 3118,
-    # the next big gives 3118 + 521 + 521 > UNDOSIZ + 1, the normal after it
-    # 3118 + 171 + 521 <= UNDOSIZ + 1.  Only UNDODRP keeps that tail out.
-    MIX = ([chr(65 + i) * 100 for i in range(5)] +
-           ['S%02d SHORT' % i for i in range(3)] + ['Z' * 100] +
-           ['S03 SHORT'] + ['T%02d TAIL' % i for i in range(3)])
+    # A selection whose group overflows the ring on a big record (266 bytes)
+    # while a later normal one (91) would still fit: 13 big + 2 normal = 3640,
+    # the next big gives 3640 + 266 + 266 > UNDOSIZ + 1, the normal after it
+    # 3640 + 91 + 266 <= UNDOSIZ + 1.  Only UNDODRP keeps that tail out.
+    MIX = ([chr(65 + i) * 100 for i in range(13)] +
+           ['S%02d SHORT' % i for i in range(2)] + ['Z' * 100] +
+           ['S02 SHORT'] + ['T%02d TAIL' % i for i in range(3)])
 
     def fixture(self, ctx, variant=None):
         return crlf(self.MIX if variant == 'mixgrp' else self.LINES)
@@ -8774,7 +8748,7 @@ class U12UndoLongEdits(Case):
             t.press('Z', mods=['CTRL'])
             t.press('Z', mods=['CTRL'])
         elif variant == 'mixgrp':
-            t.press('DOWN', mods=['SHIFT'], repeat=9)   # lines 0..8, 9 col 0
+            t.press('DOWN', mods=['SHIFT'], repeat=16)  # lines 0..15, 16 col 0
             t.press('DEL')
             t.wait(1.0)
             t.snap('edited')
@@ -8807,7 +8781,7 @@ class U12UndoLongEdits(Case):
             pre = 'U12/%s' % variant
             got = run.session.extract(run.dsk, 'DOC.TXT')
             if variant == 'mixgrp':
-                want = crlf(self.MIX[9:])
+                want = crlf(self.MIX[16:])
                 checks.append(Check(
                     '%s/dropped' % pre,
                     run.var('edited', 'UNDOPTR') == 0 and
@@ -8911,11 +8885,11 @@ class U14UndoRingMixed(Case):
               'a 171-byte one sits in: it wrapped to the bottom over live '
               'records without evicting them, and the chain ran through them')
     cfg = UNDO_CFG
-    # 23 normal records fill the first lap to 3933; 21 more reach 3591 in the
-    # second, leaving the first lap's records at 3591 and 3762 above.  The big
-    # record does not fit there (3591 + 521 > 4096): the gap is evicted, then
-    # the four records under its 521 bytes at the bottom.  18 edits are left.
-    SHORT, KEPT = 44, 18
+    # 45 normal records fill the first lap to 4095; 43 more reach 3913 in the
+    # second, leaving the first lap's records at 3913 and 4004 above.  The big
+    # record does not fit there (3913 + 266 > 4096): the gap is evicted, then
+    # the three records under its 266 bytes at the bottom.  41 edits are left.
+    SHORT, KEPT = 88, 41
     LONG = 'W' * 100
     LINES = (['M%02d %s' % (i, 'LINE OF THE MIXED RING') for i in range(SHORT)]
              + [LONG, 'LAST LINE'])

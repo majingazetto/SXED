@@ -13,11 +13,11 @@
 ;   PUTP2 TO SWITCH SEGMENT IN; COPY DATA; PUTP2 TO SWITCH NEXT AS NEEDED.
 ;   MULTIPLE SEGMENTS ALLOCATED AS FILE GROWS (ALLSEG).
 ;
-; LINE RECORD (IN TEXT SEGMENT):
-;   [1 BYTE : TEXT_LEN]   (0-80)
-;   [N BYTES: TEXT]       RAW CHARS
-;   [N BYTES: ATTR]       ONE ATTR BYTE PER CHAR
-;   MAX: 1 + 80 + 80 = 161 BYTES (LINEREC)
+; VARIABLE LINE RECORD (IN TEXT SEGMENT):
+;   [2 BYTES: RECCAP]     ALLOCATED CAPACITY FOR TEXT
+;   [2 BYTES: RECLEN]     ACTIVE TEXT LENGTH
+;   [N BYTES: TEXT]       RAW ASCII TEXT ONLY (NO ATTRIBUTES IN MAPPED RAM)
+;   DEFAULT SIZE: 4 + 32 = 36 BYTES (RECDEF_SZ)
 
 
 ; --- BUFINIT                   ----------------------------------------
@@ -31,7 +31,7 @@
 ; -
 
 BUFINIT         LD      A, (DEFSEG2)
-                LD      (TXSEG0), A     ; USE TPA PAGE 2 SEGMENT FOR FIRST 101 LINES
+                LD      (TXSEG0), A     ; USE TPA PAGE 2 SEGMENT FOR FIRST LINEPSEG LINES
                 ; FALL THROUGH INTO BUFRESET
 
 
@@ -238,12 +238,7 @@ LINEREAD        CALL    DIRREAD         ; A=SEG, DE=OFFSET (PAGE 2 = DIRSEG)
                 ADD     HL, DE          ; HL = RECORD BASE IN TXPAGE
 
                 ; RECORD HEADER: [RECCAP: 2B][RECLEN: 2B]
-                LD      E, (HL)
                 INC     HL
-                LD      D, (HL)         ; DE = RECCAP (16-BIT PAYLOAD)
-                SRL     D
-                RR      E               ; DE = C (CHARACTER CAPACITY)
-                PUSH    DE              ; [SP] = C (16-BIT CAPACITY)
                 INC     HL              ; HL = TXPAGE + DE + RECLEN
                 LD      E, (HL)
                 INC     HL
@@ -257,8 +252,6 @@ LINEREAD        CALL    DIRREAD         ; A=SEG, DE=OFFSET (PAGE 2 = DIRSEG)
                 JR      Z, .EMPTY
 
                 ; L > 0:
-                PUSH    HL              ; [SP] = TEXT SOURCE
-
                 ; COPY L BYTES OF TEXT: HL -> WORKBUF + 1
                 LD      DE, WORKBUF + 1
                 LD      A, (WORKBUF)
@@ -277,43 +270,19 @@ LINEREAD        CALL    DIRREAD         ; A=SEG, DE=OFFSET (PAGE 2 = DIRSEG)
                 LD      A, ' '
                 CALL    FILLB
 
-.NOTXPAD        ; NOW COPY ATTRIBUTES!
-                POP     HL              ; HL = TEXT SOURCE
-                POP     DE              ; DE = CAPACITY C (16-BIT)
-                ADD     HL, DE          ; HL = ATTR SOURCE (TEXT SOURCE + C)
-
-                ; COPY L BYTES OF ATTRS: HL -> WORKBUF + 1 + WORKATTR
-                LD      DE, WORKBUF + 1 + WORKATTR
-                LD      A, (WORKBUF)    ; A = L
-                LD      C, A
-                LD      B, 0            ; BC = L
-                LDIR                    ; COPIES ATTRS
-
-                ; ZERO REMAINING ATTRIBUTES UP TO TEXTCOLS
-                LD      A, TEXTCOLS
-                LD      HL, WORKBUF
-                SUB     (HL)            ; A = TEXTCOLS - L
-                RET     Z               ; L == TEXTCOLS: ALL DONE!
-                RET     C               ; L > TEXTCOLS: ALL DONE!
-
-                LD      B, A            ; B = COUNT OF REMAINING ATTRS
-                EX      DE, HL          ; HL = DE (WORKBUF + 1 + WORKATTR + L)
+.NOTXPAD        ; ZERO TEXTCOLS ATTRS AT WORKBUF + 1 + WORKATTR
+                LD      HL, WORKBUF + 1 + WORKATTR
+                LD      B, TEXTCOLS
                 XOR     A
                 JP      FILLB
 
 .EMPTY          ; L == 0:
-                POP     DE              ; BALANCE PUSH DE (C)
                 ; PAD TEXTCOLS SPACES AT WORKBUF + 1
                 LD      HL, WORKBUF + 1
                 LD      B, TEXTCOLS
                 LD      A, ' '
                 CALL    FILLB
-
-                ; ZERO TEXTCOLS ATTRS AT WORKBUF + 1 + WORKATTR
-                LD      HL, WORKBUF + 1 + WORKATTR
-                LD      B, TEXTCOLS
-                XOR     A
-                JP      FILLB
+                JR      .NOTXPAD
 
 
 ; - FILLB ------------------------------
@@ -381,18 +350,11 @@ PUTREC          PUSH    IX
                 LD      HL, TXPAGE
                 ADD     HL, DE          ; HL = TXPAGE + DE
 
-                ; GET C = RECCAP / 2
-                LD      E, (HL)
-                INC     HL
-                LD      D, (HL)         ; DE = RECCAP (16-BIT PAYLOAD)
-                SRL     D
-                RR      E               ; DE = C (CHARACTER CAPACITY)
-                PUSH    DE              ; [SP] = C
-
                 ; GET L = SOURCE LENGTH
                 LD      A, (IX + 0)     ; A = L
 
-                ; WRITE RECLEN AT HL + RECLEN (HL + 1 CURRENTLY, RECORD BASE + 2)
+                ; WRITE RECLEN AT HL + RECLEN (RECORD BASE + 2)
+                INC     HL
                 INC     HL              ; HL = RECORD BASE + 2 (RECLEN)
                 LD      (HL), A         ; RECLEN LOW = L
                 INC     HL
@@ -401,15 +363,9 @@ PUTREC          PUSH    IX
 
                 ; IF L == 0, NO PAYLOAD TO COPY
                 OR      A
-                JR      NZ, .HASPAY
-                POP     DE              ; BALANCE PUSH DE
-                POP     IX
-                RET
+                JR      Z, .DONE
 
-.HASPAY         ; L > 0:
-                PUSH    HL              ; [SP] = DEST TEXT
-                PUSH    AF              ; [SP] = L
-
+                ; L > 0:
                 ; COPY TEXT: SOURCE (IX + 1) -> DEST (HL)
                 EX      DE, HL          ; DE = DEST TEXT
                 PUSH    IX
@@ -419,23 +375,7 @@ PUTREC          PUSH    IX
                 LD      B, 0            ; BC = L
                 LDIR                    ; COPIES L BYTES TEXT
 
-                ; COPY ATTRIBUTES: SOURCE (IX + 1 + WORKATTR) -> DEST (DEST TEXT + C)
-                POP     AF              ; A = L
-                POP     DE              ; DE = DEST TEXT
-                POP     BC              ; BC = CAPACITY C (16-BIT)
-                EX      DE, HL
-                ADD     HL, BC          ; HL = DEST TEXT + C (DEST ATTR)
-                EX      DE, HL          ; DE = DEST ATTR
-
-                PUSH    IX
-                POP     HL
-                LD      BC, 1 + WORKATTR
-                ADD     HL, BC          ; HL = SOURCE BUFFER + 1 + WORKATTR (SOURCE ATTR)
-
-                LD      C, A
-                LD      B, 0            ; BC = L
-                LDIR                    ; COPIES L BYTES ATTRS
-                POP     IX
+.DONE           POP     IX
                 RET
 
 
@@ -455,9 +395,7 @@ LINEWRT         PUSH    HL              ; SAVE LINE NUMBER
                 ADD     HL, DE          ; HL = RECORD BASE IN TXPAGE
                 LD      E, (HL)
                 INC     HL
-                LD      D, (HL)         ; DE = RECCAP (16-BIT PAYLOAD)
-                SRL     D
-                RR      E               ; DE = C (CHARACTER CAPACITY)
+                LD      D, (HL)         ; DE = RECCAP (16-BIT CAPACITY)
                 DEC     HL              ; HL = RECORD BASE
                 PUSH    HL              ; [SP] = RECORD BASE
                 PUSH    DE              ; [SP] = C (16-BIT CAPACITY)
@@ -488,7 +426,7 @@ LINEWRT         PUSH    HL              ; SAVE LINE NUMBER
                 PUSH    AF
                 PUSH    DE              ; [SP] = NEW OFFSET, NEW SEG, LINE
                 LD      HL, WORKBUF
-                CALL    PUTREC          ; COPIES WORKBUF TEXT + ATTRS TO (A, DE)
+                CALL    PUTREC          ; COPIES WORKBUF TEXT TO (A, DE)
 
                 ; 3. RETIRE THE OLD RECORD, LOOKED UP AGAIN: A COMPACTION IN
                 ;    NEWREC MAY HAVE SLID IT DOWN (DIRUPDOF KEPT ITS ENTRY)
@@ -515,7 +453,6 @@ LINEWRT         PUSH    HL              ; SAVE LINE NUMBER
 
 .INPLAC         ; FITS IN PLACE!
                 ; DE = RECORD BASE (TXPAGE + OFFSET)
-                ; BC = CAPACITY C (16-BIT)
                 EX      DE, HL          ; HL = RECORD BASE
                 INC     HL
                 INC     HL              ; HL = RECORD BASE + RECLEN
@@ -529,32 +466,12 @@ LINEWRT         PUSH    HL              ; SAVE LINE NUMBER
                 JR      Z, .DONE        ; L == 0: NO PAYLOAD TO COPY
 
                 ; L > 0:
-                ; HL = DEST TEXT
-                ; BC = CAPACITY C
-                ; A  = L
-                PUSH    BC              ; [SP] = C
-                PUSH    HL              ; [SP] = DEST TEXT
-                PUSH    AF              ; [SP] = L
-
                 ; COPY TEXT: WORKBUF + 1 -> DEST TEXT
                 EX      DE, HL          ; DE = DEST TEXT
                 LD      HL, WORKBUF + 1
                 LD      C, A
                 LD      B, 0            ; BC = L
                 LDIR                    ; COPIES TEXT
-
-                ; COPY ATTRIBUTES: WORKBUF + 1 + WORKATTR -> DEST ATTR (DEST TEXT + C)
-                POP     AF              ; A = L
-                POP     DE              ; DE = DEST TEXT
-                POP     BC              ; BC = CAPACITY C (16-BIT)
-                EX      DE, HL          ; HL = DEST TEXT
-                ADD     HL, BC          ; HL = DEST TEXT + C (DEST ATTR)
-                EX      DE, HL          ; DE = DEST ATTR
-
-                LD      HL, WORKBUF + 1 + WORKATTR
-                LD      C, A
-                LD      B, 0            ; BC = L
-                LDIR                    ; COPIES ATTRS
 
 .DONE           POP     HL              ; BALANCE PUSH HL (RESTORE LINE NUMBER)
                 OR      A               ; CY = 0: SUCCESS
@@ -564,7 +481,7 @@ LINEWRT         PUSH    HL              ; SAVE LINE NUMBER
 ; --- APPEND CURSOR             ----------------------------------------
 ;
 ; NEW RECORDS ARE APPENDED AT (APPSEG, LINEOFF), WHICH ONLY EVER MOVES FORWARD.
-; A 16KB SEGMENT HOLDS LINEPSEG (101) RECORDS.
+; A 16KB SEGMENT HOLDS LINEPSEG RECORDS.
 ;
 ; DELETED RECORDS GO ON A FREE LIST INSTEAD OF BEING ABANDONED. THEY ARE ALL
 ; THE SAME SIZE, SO NO COMPACTOR IS NEEDED -- LINEDEL PUSHES THE RECORD AND
@@ -704,9 +621,9 @@ NEWREC          LD      A, C
                 OR      A               ; CY = 0: SUCCESS
                 RET
 
-.GROW           ; COMPUTE CAPACITY: ROUND UP TO QUANTUM (16), MIN DEF_CAP (16)
+.GROW           ; COMPUTE CAPACITY: ROUND UP TO QUANTUM (32), MIN DEF_CAP (32)
                 LD      A, C
-                CP      241
+                CP      225
                 JR      C, .NOT256
                 LD      HL, 256
                 JR      .GOTCAP
@@ -717,9 +634,7 @@ NEWREC          LD      A, C
                 LD      A, DEF_CAP
 .CAPOK          LD      L, A
                 LD      H, 0
-.GOTCAP         ; HL = CHARACTER CAPACITY (16..256)
-                ; PAYLOAD P = 2 * CAPACITY (32, 64, ..., 512)
-                ADD     HL, HL          ; HL = P (PAYLOAD BYTES, 16-BIT)
+.GOTCAP         ; HL = CAPACITY = PAYLOAD (32..256)
                 PUSH    HL              ; [SP] = P
                 LD      DE, RECHDR_SZ
                 ADD     HL, DE          ; HL = TOTAL RECORD SIZE

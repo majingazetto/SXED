@@ -1236,11 +1236,11 @@ UNDOCAP         LD      A, (IX + 4)
 
 
 ; - UNDOPAK ----------------------------
-; - PACK LINE BUFFER INTO UNDO RECORD PAYLOAD (1 + 2 * CAPACITY BYTES)
+; - PACK LINE BUFFER INTO UNDO RECORD PAYLOAD (1 + CAPACITY BYTES)
 ; - IN:  HL = SOURCE BUFFER (WORKBUF OR WORKBUF2)
 ; -      DE = DESTINATION IN UNDO RING BUFFER
 ; -      A  = CAPACITY (TEXTCOLS OR MAXCOLS)
-; - OUT: DE ADVANCED BY 1 + 2 * CAPACITY BYTES
+; - OUT: DE ADVANCED BY 1 + CAPACITY BYTES
 ; - CLOBBERS: AF, BC, DE, HL
 ; -
 
@@ -1250,17 +1250,6 @@ UNDOPAK         ; 1. COPY LENGTH (1 BYTE)
                 ; 2. COPY TEXT (CAPACITY BYTES)
                 LD      C, A
                 LD      B, 0
-                PUSH    BC              ; SAVE BC = CAPACITY
-                PUSH    HL              ; SAVE HL = SOURCE BUFFER + 1
-                LDIR
-
-                ; 3. ADVANCE HL TO ATTRIBUTES (SOURCE BUFFER + 1 + WORKATTR)
-                POP     HL              ; HL = SOURCE BUFFER + 1
-                LD      BC, WORKATTR
-                ADD     HL, BC          ; HL = SOURCE BUFFER + 1 + WORKATTR
-
-                ; 4. COPY ATTRIBUTES (CAPACITY BYTES)
-                POP     BC
                 LDIR
                 RET
 
@@ -1269,7 +1258,7 @@ UNDOPAK         ; 1. COPY LENGTH (1 BYTE)
 
 
 ; - UNDOUPK ----------------------------
-; - UNPACK UNDO RECORD PAYLOAD (1 + 2 * CAPACITY BYTES) INTO LINE BUFFER
+; - UNPACK UNDO RECORD PAYLOAD (1 + CAPACITY BYTES) INTO LINE BUFFER
 ; - IN:  HL = SOURCE PAYLOAD IN UNDO RING BUFFER
 ; -      DE = DESTINATION BUFFER (WORKBUF OR WORKBUF2)
 ; -      A  = CAPACITY (TEXTCOLS OR MAXCOLS)
@@ -1285,16 +1274,13 @@ UNDOUPK         ; 1. COPY LENGTH (1 BYTE)
                 LD      B, 0
                 PUSH    BC              ; SAVE BC = CAPACITY
                 PUSH    DE              ; SAVE DE = DEST BUFFER + 1
-                LDIR                    ; HL = SRC ATTR
-
-                ; 3. ADVANCE DEST TO ATTRIBUTES (DEST BUFFER + 1 + WORKATTR)
-                POP     DE              ; DE = DEST BUFFER + 1
-                LD      BC, WORKATTR
-                EX      DE, HL          ; HL = DEST BUFFER + 1, DE = SRC ATTR
-                ADD     HL, BC          ; HL = DEST BUFFER + 1 + WORKATTR
-                EX      DE, HL          ; DE = DEST BUFFER + 1 + WORKATTR, HL = SRC ATTR
-
-                ; 4. COPY ATTRIBUTES (CAPACITY BYTES)
-                POP     BC
                 LDIR
-                RET
+
+                ; 3. ZERO ATTRIBUTES IN DEST BUFFER (DEST BUFFER + 1 + WORKATTR)
+                POP     HL              ; HL = DEST BUFFER + 1
+                LD      BC, WORKATTR
+                ADD     HL, BC          ; HL = DEST BUFFER + 1 + WORKATTR
+                POP     BC              ; BC = CAPACITY
+                LD      B, C            ; B = CAPACITY (COUNT 1..255 FOR FILLB)
+                XOR     A
+                JP      FILLB

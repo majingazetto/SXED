@@ -328,17 +328,14 @@ MUTATIONS = [
     {
         'name': 's2-reflow-attr-off',
         'target': 'S2ED',
-        'why': 'the reflow copies the remainder attributes from the start of the line, not from where the remainder starts',
+        'why': 'the reflow copies the remainder text from the start of the line, not from where the remainder starts',
         'file': 'EDIT.Z8A',
-        'old': """                POP     HL
-                LD      BC, WORKATTR
-                ADD     HL, BC
-                LD      DE, WORKBUF + 1 + WORKATTR""",
-        'new': """                POP     HL
-                LD      HL, WORKBUF2 + 1 ; MUTATION: ATTRIBUTES FROM COLUMN 0
-                LD      BC, WORKATTR
-                ADD     HL, BC
-                LD      DE, WORKBUF + 1 + WORKATTR""",
+        'old': """                LD      HL, WORKBUF2 + 1
+                ADD     HL, DE
+                LD      DE, WORKBUF + 1""",
+        'new': """                LD      HL, WORKBUF2 + 1 ; MUTATION: TEXT FROM COLUMN 0
+                NOP
+                LD      DE, WORKBUF + 1""",
         'filter': 'S2-38',
         'expect': ['S2-38/bold'],
     },
@@ -1720,11 +1717,9 @@ MUTATIONS = [
                'invisible on every theme whose document background is black',
         'target': 'S2ED',
         'file': 'WINDOW.Z8A',
-        'old': """.RSNC           LD      DE, COLMAP
-                ADD     HL, DE
+        'old': """                CALL    COLADDR
                 CALL    SHDCOL          ; THE THEME'S, OR SHADOW=<HEX>""",
-        'new': """.RSNC           LD      DE, COLMAP
-                ADD     HL, DE
+        'new': """                CALL    COLADDR
                 LD      A, #11          ; MUTATION: HARDCODED BLACK SHADOW""",
         'filter': 'S2-11',
         'expect': ['S2-11/shadow'],
@@ -2104,9 +2099,9 @@ MUTATIONS = [
         'target': 'S2ED',
         'file': 'MENU.Z8A',
         'old': """                CP      CR
-                JP      Z, .ACCEPT""",
+                JR      Z, .ACCEPT""",
         'new': """                CP      CR
-                JP      Z, .CANCEL      ; MUTATION: RETURN CANCELS""",
+                JR      Z, .CANCEL      ; MUTATION: RETURN CANCELS""",
         'filter': 'S2-17',
         'expect_any': ['S2-17/action-settings', 'S2-17-menu-nav'],
     },
@@ -4156,16 +4151,6 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'new': """                ; MUTATION: NOT RECORDED""",
         'filter': 'U9',
         'expect': ['U9/wrapsel/content'],
-    },
-    {
-        'name': 'undo-applsel-rec',
-        'why': 'toggling bold across a selection is not recorded',
-        'file': 'ACTION.Z8A',
-        'old': """                LD      A, UNDOT_MOD    ; EVERY SELECTED LINE, ONE UNDO GROUP
-                CALL    UNDOSEL""",
-        'new': """                ; MUTATION: NOT RECORDED""",
-        'filter': 'U9',
-        'expect': ['U9/style/undo'],
     },
     {
         'name': 'undo-dls-showln',

@@ -3750,22 +3750,18 @@ class S238ReflowAttrs(S2Case):
     origin = ('2026-10-06 review: REFLOW copied the remainder\'s attributes from '
               'the byte count instead of the source offset (LD C, B)')
 
+    def config(self, ctx, variant=None):
+        return self.cfg.replace('MARKUP=OFF', 'MARKUP=MD')
+
     # Line 0 leaves exactly room for ' xx yy' below REFLOW's margin
-    # (TEXTCOLS - 1), so the whole of 'xx yy' comes up and 'BBBB' stays.
-    # Derived, not typed: as 'A' * 55 it was tied to 62 columns, and at 61
-    # only 'xx' came up and the case measured the wrong characters.
+    # (TEXTCOLS - 1), so the whole of 'xx yy' comes up and '**BBBB**' stays.
     def fixture(self, ctx, variant=None):
-        return crlf(['A' * (pattern.TEXTCOLS - 7), 'xx yy '])
+        return crlf(['A' * (pattern.TEXTCOLS - 7), 'xx yy **BBBB**'])
 
     def timeline(self, ctx, variant=None):
         t = Timeline()
         t.snap('boot')
         t.press('DOWN')
-        t.press('RIGHT', repeat=6)              # end of 'xx yy '
-        t.press('B', mods=['CTRL'])             # typing in bold
-        t.text('BBBB')
-        t.press('B', mods=['CTRL'])
-        t.press('LEFT', repeat=10)              # column 0 of line 1
         t.press('BS')                           # pulls 'xx yy' up
         t.wait(1.0)
         t.snap('reflowed', vram='patcol')
@@ -3779,7 +3775,7 @@ class S238ReflowAttrs(S2Case):
             return [Check('S2-38/bold', False, 'no dump')]
         bold = roles[2]                         # VCOLBOLD
         row = pattern.colour_row(dump[0x2000:], 2)      # line 1 on row 2
-        cells = [row[c * 8] for c in (1, 2)]    # text columns 0..3: 'BBBB'
+        cells = [row[c * 8] for c in (2, 3)]    # text columns 2..5: 'BBBB'
         return [Check('S2-38/bold', cells == [bold, bold] and
                       run.var('reflowed', 'TOTLINES') == 2,
                       'cells %s (want VCOLBOLD #%02X twice), TOTLINES %s'
