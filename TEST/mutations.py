@@ -468,6 +468,93 @@ MUTATIONS = [
         'expect': ['S2-60/page'],
     },
     {
+        'name': 'u15-reflow-drop',
+        'why': 'the key join in WRAP_TXT drops the undo history again',
+        'file': 'EDIT.Z8A',
+        'old': """                LD      A, 1
+                LD      (RWKEEP), A     ; REWRAP DROPS NOTHING: THE RECORDS BELOW""",
+        'new': """                XOR     A               ; MUTATION: REWRAP DROPS THE HISTORY
+                LD      (RWKEEP), A     ; REWRAP DROPS NOTHING: THE RECORDS BELOW""",
+        # the join itself is still recorded: only what came before is lost
+        'filter': 'U15',
+        'expect': ['U15/u2', 'U15/u3'],
+    },
+    {
+        'name': 'u15-reflow-delop',
+        'why': 'a join that took all of L + 1 records it as changed, not deleted',
+        'file': 'EDIT.Z8A',
+        'old': """                LD      A, UNDOT_DEL | UNDOF_CHN
+.REC2           CALL    UNDOLNR         ; L + 1 AS IT WAS""",
+        'new': """                LD      A, UNDOT_MOD | UNDOF_CHN ; MUTATION: NEVER DELETED
+.REC2           CALL    UNDOLNR         ; L + 1 AS IT WAS""",
+        # a MOD replayed on a line the join deleted is undefined behaviour:
+        # some sessions hang, so the case name counts as well
+        'filter': 'U15',
+        'expect_any': ['U15/full-u1', 'U15/u2', 'U15-txt-join-undo'],
+    },
+    {
+        'name': 'u15-reflow-empty',
+        'why': 'deleting the empty line the key joins is not recorded',
+        'file': 'EDIT.Z8A',
+        'old': """                LD      A, UNDOT_DEL
+                CALL    UNDOLNR         ; ITS DELETION, A GROUP OF ONE""",
+        'new': """                LD      A, UNDOT_DEL
+                NOP                     ; MUTATION: NOT RECORDED
+                NOP
+                NOP""",
+        'filter': 'U15',
+        'expect': ['U15/empty-u1'],
+    },
+    {
+        'name': 'u15-dup-chain',
+        'why': 'Ctrl+D records only the split, so its undo joins the copy back on',
+        'file': 'ACTION.Z8A',
+        'old': """                LD      A, UNDOT_MOD | UNDOF_CHN
+                CALL    UNDOLNR
+
+                ; READ ORIGINAL LINE FROM (DOCLINE - 1) INTO WORKBUF""",
+        'new': """                LD      A, UNDOT_MOD | UNDOF_CHN
+                NOP                     ; MUTATION: THE COPY NOT RECORDED
+                NOP
+                NOP
+
+                ; READ ORIGINAL LINE FROM (DOCLINE - 1) INTO WORKBUF""",
+        'filter': 'U15',
+        'expect': ['U15/dev-dup-u1', 'U15/u2'],
+    },
+    {
+        'name': 's2-u15-dup-chain',
+        'target': 'S2ED',
+        'why': 'Ctrl+D records only the split, so its undo joins the copy back on',
+        'file': 'ACTION.Z8A',
+        'old': """                LD      A, UNDOT_MOD | UNDOF_CHN
+                CALL    UNDOLNR
+
+                ; READ ORIGINAL LINE FROM (DOCLINE - 1) INTO WORKBUF""",
+        'new': """                LD      A, UNDOT_MOD | UNDOF_CHN
+                NOP                     ; MUTATION: THE COPY NOT RECORDED
+                NOP
+                NOP
+
+                ; READ ORIGINAL LINE FROM (DOCLINE - 1) INTO WORKBUF""",
+        'filter': 'S2-61',
+        'expect': ['S2-61/dev-dup-u1'],
+    },
+    {
+        'name': 'u8-reflow-split',
+        'why': 'a key join that split a line records its two lines anyway, naming lines the split moved',
+        'file': 'EDIT.Z8A',
+        'old': """                LD      A, (RWSPL)
+                OR      A
+                JR      NZ, .DROP       ; A LINE WAS SPLIT: MORE THAN TWO MOVED""",
+        'new': """                LD      A, (RWSPL)
+                OR      A
+                NOP                     ; MUTATION: RECORDED ANYWAY
+                NOP""",
+        'filter': 'U8',
+        'expect': ['U8/reflow/dropped'],
+    },
+    {
         'name': 'x5-rollover-clamp',
         'why': 'LEFT rollover on the top row does not clamp CURX where the queued UPs land',
         'file': 'EDIT.Z8A',
@@ -2943,12 +3030,10 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'why': 'the key join rewraps to the end of the document and merges '
                'the lines below the two it joins',
         'file': 'EDIT.Z8A',
-        'old': """.PARA           POP     HL              ; HL = L
-                LD      D, H
+        'old': """                LD      D, H
                 LD      E, L
                 INC     DE              ; DE = L + 1: THE TWO LINES JOINED""",
-        'new': """.PARA           POP     HL              ; HL = L
-                LD      DE, (TOTLINES)  ; MUTATION: THE OLD CASCADE
+        'new': """                LD      DE, (TOTLINES)  ; MUTATION: THE OLD CASCADE
                 DEC     DE""",
         'filter': 'W5',
         'expect': ['W5/empty/content', 'W5/text/content', 'W5/del/content'],
@@ -2958,12 +3043,10 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'target': 'S2ED',
         'why': 'the key join merges the lines below (the tester\'s AUTOEXEC.BAT)',
         'file': 'EDIT.Z8A',
-        'old': """.PARA           POP     HL              ; HL = L
-                LD      D, H
+        'old': """                LD      D, H
                 LD      E, L
                 INC     DE              ; DE = L + 1: THE TWO LINES JOINED""",
-        'new': """.PARA           POP     HL              ; HL = L
-                LD      DE, (TOTLINES)  ; MUTATION: THE OLD CASCADE
+        'new': """                LD      DE, (TOTLINES)  ; MUTATION: THE OLD CASCADE
                 DEC     DE""",
         'filter': 'S2-57',
         'expect': ['S2-57/empty/content', 'S2-57/text/content'],
@@ -4347,15 +4430,15 @@ SELTMPXB        EQU     SELTMPXB2""")],
     },
     {
         'name': 'undo-reflow-drop',
-        'why': 'a reflow that pulls a whole line up keeps the history, whose '
-               'records then name lines the reflow shifted',
+        'why': 'Rewrap moves text across lines and keeps the history, whose '
+               'records then name lines the rewrap shifted',
         'file': 'EDIT.Z8A',
-        'old': """                LD      (RWCHG), A
+        'old': """                RET     NZ              ; THE KEY JOIN RECORDS ITS OWN TWO LINES
                 JP      UNDOINIT""",
-        'new': """                LD      (RWCHG), A
+        'new': """                RET     NZ              ; THE KEY JOIN RECORDS ITS OWN TWO LINES
                 RET                     ; MUTATION: HISTORY KEPT""",
-        'filter': 'U8',
-        'expect': ['U8/reflow/content'],
+        'filter': 'W4',
+        'expect': ['W4/hist/content'],
     },
     {
         'name': 'undo-pushwrap-drop',

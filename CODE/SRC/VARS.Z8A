@@ -363,6 +363,9 @@ RWS0            DEFB    0               ; REWRAP: FIRST NON-SPACE COLUMN OF THE 
 RWCNT           DEFB    0               ; REWRAP: CHARACTERS PULLED UP
 RWALL           DEFB    0               ; REWRAP: 1 = THE WHOLE NEXT LINE WAS PULLED
 RWSTOP          DEFB    0               ; REWRAP: 0 REWRAP, 1 REFLOW, 2 REFLOW'S FIRST LINE
+RWKEEP          DEFB    0               ; REWRAP: 1 = THE CALLER RECORDS UNDO, DROP NOTHING
+RWSPL           DEFB    0               ; REWRAP: 1 = A LINE WAS SPLIT
+RFTOT           DEFW    0               ; REFLOW: TOTLINES BEFORE THE JOIN
 RPLREC          DEFB    0               ; REPLACE ALL: NON-ZERO ONCE ITS GROUP HAS A RECORD
 RPLLIN          DEFB    0               ; REPLACE ALL: 1 = THIS LINE IS RECORDED
 CMPSEG          DEFB    0               ; COMPACTION: SEGMENT NUMBER

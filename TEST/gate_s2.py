@@ -23,7 +23,7 @@ from gate import (BRW_BYTES, H30NewDocument, H36BrowseSaveAs,
                   asciiz, brw_drives, full_ent_bytes,
                   REWRAP_LINES, rewrap_model, settings_to_txt,
                   QuitSaveCase, ClipLimitCase,
-                  ReflowJoinCase)
+                  ReflowJoinCase, TxtJoinUndoCase)
 from cases import (Case, DEFAULT_CFG, HomePathCase, LongPathCase,
                    ShippedDiskCase, crlf, io_fixture, numbered)
 from harness import MACH_MSX1, Session
@@ -5035,6 +5035,17 @@ class S260Perf(S2Case):
         return checks
 
 
+# --- S2-61  THE TXT JOIN AND CTRL+D ARE UNDONE STEP BY STEP -------------
+
+
+class S261TxtJoinUndo(TxtJoinUndoCase, S2Case):
+    name = 'S2-61-txt-join-undo'
+    TAG = 'S2-61'
+    desc = ('WRAP=TXT: Ctrl+Z undoes the BS / DEL join step by step, and '
+            'Ctrl+D is undone to the original line')
+    origin = 'as U15 on S6ED, 2026-10-16: the tester met it on S2ED'
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
          S210Theme(), S211About(), S212DialogUndo(),
@@ -5056,7 +5067,7 @@ CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S253UndoLongJoin(), S254RewrapSettings(), S255QuitSave(),
          S256ClipLimit(), S257ReflowJoin(),
          S258LongAttrs(), S259EditPaint(),
-         S260Perf()]
+         S260Perf(), S261TxtJoinUndo()]
 
 
 def run(ctx, cases=None):

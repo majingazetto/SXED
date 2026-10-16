@@ -854,6 +854,14 @@ ACTDUPLN        CALL    UNDOCLS
                 CALL    CMPHLDE
                 JR      Z, .DUPOOM
 
+                ; RECORD THE NEW LINE, STILL EMPTY, CHAINED TO EDNWLIN'S SPLIT:
+                ; UNDOING THE SPLIT ALONE JOINED THE COPY BACK ON ("ABCABC")
+                LD      HL, (DOCLINE)
+                CALL    LINEREAD
+                LD      HL, (DOCLINE)
+                LD      A, UNDOT_MOD | UNDOF_CHN
+                CALL    UNDOLNR
+
                 ; READ ORIGINAL LINE FROM (DOCLINE - 1) INTO WORKBUF
                 LD      HL, (DOCLINE)
                 DEC     HL

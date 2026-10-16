@@ -568,9 +568,9 @@ Undo covers typing (a continuous run of edits on one line is ONE undo step), lin
 
 Undoing back to the text last loaded or saved clears the modified mark (*), and redoing away from it sets it again. Once the ring has forgotten that point, the mark stays.
 
-The undo history lives in a 4 KB ring (about 23 operations on S6ED, 30 on S61ED and S2ED); the oldest operations are forgotten as it fills. Lines longer than the screen are recorded too, but each such operation takes the room of about three; a line split or join takes almost none. A single operation touching more lines than the ring can hold (a huge selection delete, for example) cannot be recorded half-way: then the whole history is dropped instead of restoring a partial, wrong state.
+The undo history lives in a 4 KB ring (about 45 operations on S6ED, 56 on S61ED and S2ED); the oldest operations are forgotten as it fills. Lines longer than the screen are recorded too, but each such operation takes the room of about three; a line split or join takes almost none. A single operation touching more lines than the ring can hold (a huge selection delete, for example) cannot be recorded half-way: then the whole history is dropped instead of restoring a partial, wrong state.
 
-In TXT mode, moving text across lines also clears the history: Rewrap, the join done by BS / DEL, and the word wrap that pushes a word down while typing.
+In TXT mode, moving text across lines also clears the history: Rewrap, the word wrap that pushes a word down while typing, and a BS / DEL join that has to split a line longer than the margin. Any other BS / DEL join is undone normally.
 
 ## 10.- MENUS & DIALOGS
 

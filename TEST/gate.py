@@ -6758,15 +6758,22 @@ class U8UndoDropped(Case):
     desc = 'an edit that moves text across lines unrecorded drops the history'
     origin = ('push-wrap and reflow shift line numbers and are not recorded; '
               'the record of an earlier edit then names the wrong line and '
-              'Ctrl+Z overwrote it')
+              'Ctrl+Z overwrote it.  Since 2026-10-16 the BS / DEL join is '
+              'recorded (U15) unless it splits a line past the margin -- the '
+              'reflow variant is that join')
     variants = ('reflow', 'pushwrap')
     FULL = ' '.join(['WORD'] * 16) + 'S'        # 80 characters, no room
     LINES = {
-        'reflow': ['AAA', 'BBB', 'C' * 80, 'L3', 'L4', 'L5 TARGET'],
+        # line 1 is 51 characters against TEXTWIDTH=40: the join on line 2
+        # splits it first, so more than two lines move
+        'reflow': ['AAA', 'B' * 30 + ' ' + 'C' * 20, 'L2', 'L3', 'L4',
+                   'L5 TARGET'],
         'pushwrap': ['FIRST', FULL, 'L2', 'L3', 'L4', 'L5'],
     }
 
     def config(self, ctx, variant=None):
+        if variant == 'reflow':
+            return UNDO_CFG.replace('WRAP=DEV', 'WRAP=TXT\nTEXTWIDTH=40')
         return UNDO_CFG.replace('WRAP=DEV', 'WRAP=TXT')
 
     def fixture(self, ctx, variant=None):
@@ -6777,11 +6784,13 @@ class U8UndoDropped(Case):
         t.wait(1.0)
         t.press('DOWN', repeat=4)
         t.text('X')                         # recorded, on line 4
-        t.press('UP', repeat=3)             # line 1, column 1
         if variant == 'reflow':
+            t.press('UP', repeat=2)         # line 2, column 1
             t.press('LEFT')
             t.press('BS')                   # col 0 in WRAP_TXT: REFLOW
         else:
+            t.press('UP', repeat=3)         # line 1, column 1
+        if variant != 'reflow':
             t.text('Q')                     # full line: EDPSHWR
         t.wait(1.0)
         t.snap('moved')
@@ -6797,7 +6806,7 @@ class U8UndoDropped(Case):
         checks = []
         run = runs['reflow']
         got = disk_lines(run)
-        want = ['AAA BBB', 'C' * 80, 'L3', 'XL4', 'L5 TARGET']
+        want = ['AAA', 'B' * 30, 'C' * 20 + ' L2', 'L3', 'XL4', 'L5 TARGET']
         checks.append(Check('U8/reflow/dropped',
                             run.var('moved', 'UNDOPTR') == 0,
                             'UNDOPTR = %s after the reflow'
@@ -9137,7 +9146,10 @@ class W4RewrapMenu(Case):
               'already drops a selection), so the item count and indices stay '
               'the same on every target -- the S2ED Edit menu is at the limit '
               'of its save buffer')
-    variants = ('para', 'sel', 'dev')
+    # hist: an edit is recorded first; Rewrap moves text across lines
+    # unrecorded, so it must drop that history -- the Ctrl+Z after it then
+    # does nothing (kept, the record would replay onto a shifted line)
+    variants = ('para', 'sel', 'dev', 'hist')
     WIDTH = 30
     LINES = ['one two three four five six seven', 'eight nine', 'ten', '',
              'keep this line as it is', 'x']
@@ -9153,7 +9165,11 @@ class W4RewrapMenu(Case):
     def timeline(self, ctx, variant=None):
         t = Timeline()
         t.wait(1.0)
-        if variant == 'sel':
+        if variant == 'hist':
+            t.press('DOWN', repeat=5)
+            t.text('Q')                             # recorded: 'Qx'
+            t.press('UP', repeat=4)
+        elif variant == 'sel':
             t.press('DOWN', mods=['SHIFT'], repeat=2)   # lines 0..1, 2 col 0
         else:
             t.press('DOWN')
@@ -9161,6 +9177,9 @@ class W4RewrapMenu(Case):
         t.press('R')                                # Rewrap
         t.wait(2.0)
         t.snap('done')
+        if variant == 'hist':
+            t.press('Z', mods=['CTRL'])             # the history is gone
+            t.wait(0.5)
         t.press('S', mods=['CTRL'])
         t.wait(3.0)
         t.snap('saved')
@@ -9173,6 +9192,9 @@ class W4RewrapMenu(Case):
             got = run.session.extract(run.dsk, 'DOC.TXT')
             if variant == 'para':
                 lines = rewrap_model(self.LINES[:3], self.WIDTH) + self.LINES[3:]
+            elif variant == 'hist':
+                lines = (rewrap_model(self.LINES[:3], self.WIDTH) +
+                         self.LINES[3:5] + ['Q' + self.LINES[5]])
             elif variant == 'sel':
                 lines = rewrap_model(self.LINES[:2], self.WIDTH) + self.LINES[2:]
             else:
@@ -9273,6 +9295,99 @@ class W5ReflowEmpty(ReflowJoinCase, Case):
               'REFLOW ran REWRAP to the end of the document, and a file has '
               'no soft line breaks: the "paragraph" was lines broken on '
               'purpose')
+    cfg = UNDO_CFG
+
+
+class TxtJoinUndoCase(object):
+    """The key join in WRAP=TXT and Ctrl+D are undone and redone, step by step.
+
+    Shared by S6ED and S2ED.  The tester's sequence: type a line, Ctrl+D, BS
+    at column 0 of the copy -- then every Ctrl+Z must take one step back.
+    """
+    # empty: BS on the empty line itself (REFLOW deletes it); under: BS on
+    # the line under an empty one (the empty line takes its words)
+    variants = ('u0', 'u1', 'u2', 'u3', 'redo', 'full-u1', 'partial-u1',
+                'empty-u1', 'under-u1', 'dev-dup-u1')
+    PARTIAL = ['alpha beta gamma delta epsilon',
+               'zeta eta theta iota kappa lambda', 'mu']
+    FULL = ['alpha beta', 'gamma delta', 'tail']
+    EMPTY = ['alpha', '', 'tail']
+    WANT = {
+        'u0': ['abc abc'],
+        'u1': ['abc', 'abc'],
+        'u2': ['abc'],
+        'u3': [''],
+        'redo': ['abc abc'],
+        'full-u1': FULL,
+        'partial-u1': PARTIAL,
+        'empty-u1': EMPTY,
+        'under-u1': EMPTY,
+        'dev-dup-u1': ['abc'],
+    }
+
+    def config(self, ctx, variant=None):
+        cfg = self.cfg if 'WRAP=DEV' in self.cfg else \
+            self.cfg.replace('WRAP=TXT', 'WRAP=DEV')
+        if variant.startswith('dev'):
+            return cfg
+        return cfg.replace('WRAP=DEV', 'WRAP=TXT\nTEXTWIDTH=40')
+
+    def fixture(self, ctx, variant=None):
+        if variant.startswith('full'):
+            return crlf(self.FULL)
+        if variant.startswith('partial'):
+            return crlf(self.PARTIAL)
+        if variant.startswith(('empty', 'under')):
+            return crlf(self.EMPTY)
+        return crlf([''])
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.wait(1.0)
+        if variant in ('u0', 'u1', 'u2', 'u3', 'redo', 'dev-dup-u1'):
+            t.text('abc')
+            t.press('D', mods=['CTRL'])         # the copy, cursor on it
+            if variant != 'dev-dup-u1':
+                t.press('LEFT', repeat=3)       # column 0 of the copy
+                t.press('BS')                   # the join
+            undos = {'u0': 0, 'u1': 1, 'u2': 2, 'u3': 3, 'redo': 3,
+                     'dev-dup-u1': 1}[variant]
+        else:
+            t.press('DOWN', repeat=2 if variant.startswith('under') else 1)
+            t.press('BS')
+            undos = 1
+        for _ in range(undos):
+            t.press('Z', mods=['CTRL'])
+        if variant == 'redo':
+            for _ in range(3):
+                t.press('Z', mods=['CTRL', 'SHIFT'])
+        t.wait(0.5)
+        t.snap('done')
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        tag = getattr(self, 'TAG', self.name.split('-')[0])
+        checks = []
+        for variant, run in sorted(runs.items()):
+            got = run.session.extract(run.dsk, 'DOC.TXT')
+            want = crlf(self.WANT[variant])
+            checks.append(Check('%s/%s' % (tag, variant), got == want,
+                                disk_diff(got, want)))
+        return checks
+
+
+class U15TxtJoinUndo(TxtJoinUndoCase, Case):
+    name = 'U15-txt-join-undo'
+    desc = ('WRAP=TXT: Ctrl+Z undoes the BS / DEL join step by step, and '
+            'Ctrl+D is undone to the original line, not the two joined')
+    origin = ('2026-10-16, a tester: type a line, Ctrl+D, BS -- Ctrl+Z did '
+              'nothing.  REFLOW dropped the history on every join (from when '
+              'the join cascaded through the paragraph); since the key join '
+              'touches two lines it records them.  Ctrl+D recorded only '
+              'EDNWLIN\'s split, so its undo joined the copy back: "abcabc"')
     cfg = UNDO_CFG
 
 
@@ -9581,7 +9696,7 @@ CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G
          U1UndoMod(), U2UndoDel(), U3UndoSplit(), U4UndoJoin(), U5UndoSel(),
          U6UndoSelDel(), U7UndoRing(), U8UndoDropped(), U9UndoLineEdits(),
          U10UndoClean(), U11UndoLongJoin(), U12UndoLongEdits(),
-         U13UndoJoinMargin(), U14UndoRingMixed()]
+         U13UndoJoinMargin(), U14UndoRingMixed(), U15TxtJoinUndo()]
 
 
 def run(ctx, cases):

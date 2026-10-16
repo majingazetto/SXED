@@ -725,29 +725,61 @@ EDOVRCHR        PUSH    AF
 ; - CASCADING THROUGH THE "PARAGRAPH" MERGED LINES THE USER HAD BROKEN ON
 ; - PURPOSE (BS UNDER AN EMPTY LINE ALSO TOOK THE LINE AFTER THE ONE ON).
 ; - REWRAPPING A PARAGRAPH IS EDIT > REWRAP'S JOB.
+; - THE JOIN IS RECORDED, AS ONE UNDO GROUP: L AS IT WAS, THEN L + 1 AS IT
+; - WAS -- DELETED IF THE JOIN TOOK ALL OF IT, CHANGED IF IT TOOK PART.
+; - ONLY A JOIN THAT HAD TO SPLIT A LINE (L PAST THE MARGIN) STILL DROPS
+; - THE HISTORY: THEN MORE THAN TWO LINES MOVED. IT USED TO DROP IT EVERY
+; - TIME, FROM WHEN THE JOIN CASCADED THROUGH THE PARAGRAPH.
 ; - IN:  HL = LINE L (L + 1 EXISTS: BOTH CALLERS CHECKED)
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; -
 
 REFLOW          PUSH    HL
+                CALL    UNDOCLS         ; THE TYPING BURST BEFORE THE KEY ENDS
+                POP     HL
+                PUSH    HL
                 INC     HL
                 PUSH    HL
                 CALL    LINELEN
-                POP     HL
+                POP     HL              ; HL = L + 1
                 OR      A
                 JR      NZ, .PARA
                 POP     DE
                 PUSH    HL
-                CALL    UNDOINIT        ; TEXT MOVES ACROSS LINES: NOT RECORDED
+                CALL    LINEREAD        ; WORKBUF = THE EMPTY LINE THE KEY JOINS
                 POP     HL
-                CALL    LINEDEL         ; THE EMPTY LINE THE KEY JOINS
+                PUSH    HL
+                LD      A, UNDOT_DEL
+                CALL    UNDOLNR         ; ITS DELETION, A GROUP OF ONE
+                POP     HL
+                CALL    LINEDEL
                 LD      HL, (TOTLINES)
                 DEC     HL
                 LD      (TOTLINES), HL
                 JR      .MODSET
 
-.PARA           POP     HL              ; HL = L
+.PARA           ; L AND L + 1 AS THEY ARE, FOR THE RECORDS WRITTEN AFTER THE
+                ; JOIN, WHEN ITS OUTCOME IS KNOWN. PREVBUF IS RENDIFF'S CACHE:
+                ; TWO LNIMG-BYTE IMAGES (LENGTH + MAXCOLS CHARACTERS), NO CACHE
+                POP     HL              ; HL = L
+                PUSH    HL
+                LD      DE, PREVBUF
+                CALL    .SNAP
+                POP     HL
+                PUSH    HL
+                INC     HL
+                LD      DE, PREVBUF + LNIMG
+                CALL    .SNAP
+                XOR     A
+                LD      (PREVROW), A
+                LD      (RWSPL), A
+                LD      HL, (TOTLINES)
+                LD      (RFTOT), HL
+                LD      A, 1
+                LD      (RWKEEP), A     ; REWRAP DROPS NOTHING: THE RECORDS BELOW
+                POP     HL
+                PUSH    HL
                 LD      D, H
                 LD      E, L
                 INC     DE              ; DE = L + 1: THE TWO LINES JOINED
@@ -756,11 +788,53 @@ REFLOW          PUSH    HL
                 CALL    REWRAP
                 XOR     A
                 LD      (RWSTOP), A
+                LD      (RWKEEP), A
+                POP     HL              ; HL = L
                 LD      A, (RWCHG)
                 OR      A
-                RET     Z
+                RET     Z               ; NOTHING MOVED: NOTHING TO RECORD
+                LD      A, (RWSPL)
+                OR      A
+                JR      NZ, .DROP       ; A LINE WAS SPLIT: MORE THAN TWO MOVED
+                PUSH    HL
+                LD      HL, PREVBUF
+                CALL    .LOAD
+                POP     HL
+                PUSH    HL
+                LD      A, UNDOT_MOD
+                CALL    UNDOLNR         ; L AS IT WAS: THE GROUP'S FIRST RECORD
+                LD      HL, PREVBUF + LNIMG
+                CALL    .LOAD
+                LD      HL, (RFTOT)
+                LD      DE, (TOTLINES)
+                OR      A
+                SBC     HL, DE          ; L = LINES THE JOIN REMOVED (0 OR 1)
+                LD      A, L
+                POP     HL
+                INC     HL              ; HL = L + 1
+                OR      A
+                LD      A, UNDOT_MOD | UNDOF_CHN
+                JR      Z, .REC2        ; PART OF IT WENT UP: IT CHANGED
+                LD      A, UNDOT_DEL | UNDOF_CHN
+.REC2           CALL    UNDOLNR         ; L + 1 AS IT WAS
+                JR      .MODSET
+
+.DROP           CALL    UNDOINIT
 .MODSET         LD      A, #FF
                 LD      (MODIFIED), A
+                RET
+
+.SNAP           PUSH    DE              ; LINE HL -> LNIMG BYTES AT DE
+                CALL    LINEREAD
+                POP     DE
+                LD      HL, WORKBUF
+                LD      BC, LNIMG
+                LDIR
+                RET
+
+.LOAD           LD      DE, WORKBUF     ; LNIMG BYTES AT HL -> WORKBUF
+                LD      BC, LNIMG
+                LDIR
                 RET
 
 
@@ -889,6 +963,8 @@ REWRAP          LD      (RWLINE), HL
                 LD      DE, (NROFF)
                 LD      HL, WORKBUF2
                 CALL    PUTREC
+                LD      A, 1
+                LD      (RWSPL), A      ; A LINE WAS SPLIT (REFLOW DROPS THE HISTORY)
                 LD      HL, (RWLINE)
                 INC     HL
                 PUSH    HL
@@ -1114,6 +1190,9 @@ REWRAP          LD      (RWLINE), HL
                 RET     NZ
                 INC     A
                 LD      (RWCHG), A
+                LD      A, (RWKEEP)
+                OR      A
+                RET     NZ              ; THE KEY JOIN RECORDS ITS OWN TWO LINES
                 JP      UNDOINIT
 
 
