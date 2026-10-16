@@ -413,8 +413,11 @@ in the CFG:
                Thought for source code: lines are never
                broken for you.
     WRAP=TXT   Text mode: typing past the right margin pushes
-               the last word to the next line (word wrap),
-               and deleting pulls words back up (reflow).
+               the last word to the next line (word wrap).
+               BS at column 0 or DEL at the end of a line
+               joins two lines: the words of the second
+               that fit go up, the rest stays where it is,
+               and the lines below are left alone.
 
 The margin is the text width: the screen width by default
 (80 / 61 / 61) or the TEXTWIDTH= value (0 = no margin, i.e.
@@ -481,7 +484,8 @@ or re-weights styled spans without modifying the file:
 [S6ED/S61ED] render bold/italic with the font weights;
 [S2ED] renders them in theme colors. Help > Settings chooses
 the mode. Ctrl+B / Ctrl+I (STD profile) insert a delimiter
-pair or wrap the current selection.
+pair or wrap the current selection, in the delimiters of the
+mode; with MARKUP=OFF they do nothing.
 
 
 
@@ -698,6 +702,9 @@ their line breaks. In Vi visual mode a selection that
 reaches the end of a line with $ takes its line break too,
 and V always takes whole lines with their breaks, so pasting
 either opens a new line.
+The clipboard holds 2 KB (1 KB on S2ED). A larger selection
+copies its first part and shows [CLIPBOARD FULL], and Ctrl+X
+leaves it in the document instead of cutting it.
 
 Undo/redo:
 
@@ -726,7 +733,7 @@ then the whole history is dropped instead of restoring a
 partial, wrong state.
 
 In TXT mode, moving text across lines also clears the
-history: Rewrap, the reflow done by BS / DEL, and the word
+history: Rewrap, the join done by BS / DEL, and the word
 wrap that pushes a word down while typing.
 
 

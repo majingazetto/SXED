@@ -14,13 +14,13 @@
 ; - SCANMKUP ---------------------------
 ; - SCAN WORKBUF FOR MARKUP DELIMITERS
 ; - IN:  NONE (SCANS WORKBUF)
-; - OUT: ATTRIBUTES IN WORKBUF+81..160 SET
+; - OUT: ATTRIBUTES AT WORKBUF + 1 + WORKATTR SET (0..LEN-1)
 ; - CLOBBERS: AF, BC, DE, HL
 ; -
 
 SCANMKUP        LD      A, (MKUPMD)
                 OR      A
-                RET     Z               ; MKUP_OFF: PRESERVE MANUAL ATTRS
+                RET     Z               ; MKUP_OFF: LINEREAD LEFT THEM ALL ZERO
 
                 ; 1. CLEAR THE ATTRIBUTES OF THE LINE'S OWN COLUMNS (0..LEN-1).
                 ;    EVERY CALLER HAS JUST RUN LINEREAD, WHICH ZEROED THE REST UP

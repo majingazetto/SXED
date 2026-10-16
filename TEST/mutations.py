@@ -252,26 +252,63 @@ MUTATIONS = [
         'expect': ['S2-41/cell24'],
     },
     {
-        'name': 'q1-applsel-selpre',
-        'why': 'APPLSEL repaints the selected rows without taking the overlay off first',
+        'name': 'q1-style-off',
+        'why': 'with MARKUP=OFF the style keys still write delimiters',
         'file': 'ACTION.Z8A',
-        'old': """.APLINIT        CALL    SELPRE          ; THE ROWS ARE REPAINTED CLEAN BELOW: TAKE""",
-        'new': """.APLINIT        NOP                     ; MUTATION: NO SELPRE
-                NOP
-                NOP""",
+        'old': """                RET     Z               ; MKUP_OFF: NO DELIMITERS TO WRITE""",
+        'new': """                NOP                     ; MUTATION: STYLE KEYS WITH MARKUP OFF""",
         'filter': 'Q1',
-        'expect': ['Q1/render-pure'],
+        'expect': ['Q1/undo-is-the-edit'],
     },
     {
         'name': 'q2-slmr-guard',
-        'why': 'Shift+Right that wraps and scrolls does not take the overlay off first',
+        'why': 'Shift+Right that wraps and scrolls does not keep the overlay through the scroll',
         'file': 'ACTION.Z8A',
-        'old': """.PRE            CALL    SELPRE          ; A WRAP (WRAP_TXT) SCROLLS: UN-XOR FIRST""",
-        'new': """.PRE            NOP                     ; MUTATION: NO SELPRE
+        'old': """                POP     DE              ; GUESSING IT BEFORE THE MOVE LEFT THE
+                CALL    SELSCRL         ; OVERLAY SCROLLED UN-XORED: MEASURE IT""",
+        'new': """                POP     DE              ; GUESSING IT BEFORE THE MOVE LEFT THE
+                NOP                     ; MUTATION: NO SELSCRL
                 NOP
                 NOP""",
         'filter': 'Q2',
-        'expect': ['Q2/render-pure'],
+        'expect': ['Q2/short/render-pure', 'Q2/full/render-pure'],
+    },
+    {
+        'name': 'q2-slml-guard',
+        'why': 'Shift+Left that rolls up and scrolls does not keep the overlay through the scroll',
+        'file': 'ACTION.Z8A',
+        'old': """                POP     DE              ; DE = TOPLINE BEFORE THE MOVE
+                CALL    SELSCRL
+                JP      SELPOST""",
+        'new': """                POP     DE              ; DE = TOPLINE BEFORE THE MOVE
+                NOP                     ; MUTATION: NO SELSCRL
+                NOP
+                NOP
+                JP      SELPOST""",
+        'filter': 'Q2',
+        'expect': ['Q2/left/render-pure'],
+    },
+    {
+        'name': 's2-lineread-attrs',
+        'target': 'S2ED',
+        'why': 'LINEREAD zeroes only TEXTCOLS attributes, so a long line keeps '
+               'the last MD scan past them once markup is off',
+        'file': 'BUFFER.Z8A',
+        'old': """                JR      NC, .ATRLEN     ; L > TEXTCOLS: ALL L""",
+        'new': """                NOP                     ; MUTATION: TEXTCOLS ONLY
+                NOP""",
+        'filter': 'S2-58',
+        'expect': ['S2-58/plain'],
+    },
+    {
+        'name': 'x5-rollover-clamp',
+        'why': 'LEFT rollover on the top row does not clamp CURX where the queued UPs land',
+        'file': 'EDIT.Z8A',
+        'old': """                CALL    EDMOVROW        ; ON THE TOP ROW IT TAKES QUEUED UPS TOO,
+                JP      EDCLMPX         ; SO THE COLUMN IS CLAMPED WHERE IT LANDS""",
+        'new': """                JP      EDMOVROW        ; MUTATION: NO CLAMP""",
+        'filter': 'X5',
+        'expect': ['X5/landed', 'X5/content'],
     },
     {
         'name': 'q3-find-cursor',
@@ -361,15 +398,11 @@ MUTATIONS = [
         'filter': 'S62-6',
         'expect': ['S62-6/name-label'],
     },
-    {
-        'name': 'p1-reflow-pass',
-        'why': 'reflow runs past the blank line between paragraphs and fills it',
-        'file': 'EDIT.Z8A',
-        'old': """                RET     Z               ; REFLOW: THE PARAGRAPH ENDS HERE""",
-        'new': """                NOP                     ; MUTATION: THE PARAGRAPH DOES NOT END""",
-        'filter': 'P1',
-        'expect': ['P1/bs/content', 'P1/del/content'],
-    },
+    # p1-reflow-pass (REWRAP's 'RET Z ; REFLOW: THE PARAGRAPH ENDS HERE'
+    # NOPed) was retired 2026-10-16: the key join now rewraps only L..L + 1
+    # and REFLOW deletes an empty L + 1 itself, so that branch cannot be
+    # reached from a key any more and no case can catch it.  P1 still pins
+    # the behaviour; W5 / S2-57 and their cascade mutations guard the range.
     {
         'name': 'p2-dlok-setcury',
         'why': 'ACTDELLN derives CURY without bringing DOCLINE back into the viewport',
@@ -2729,6 +2762,36 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'expect': ['D6/content'],
     },
     {
+        'name': 'w5-reflow-cascade',
+        'why': 'the key join rewraps to the end of the document and merges '
+               'the lines below the two it joins',
+        'file': 'EDIT.Z8A',
+        'old': """.PARA           POP     HL              ; HL = L
+                LD      D, H
+                LD      E, L
+                INC     DE              ; DE = L + 1: THE TWO LINES JOINED""",
+        'new': """.PARA           POP     HL              ; HL = L
+                LD      DE, (TOTLINES)  ; MUTATION: THE OLD CASCADE
+                DEC     DE""",
+        'filter': 'W5',
+        'expect': ['W5/empty/content', 'W5/text/content', 'W5/del/content'],
+    },
+    {
+        'name': 's2-reflow-cascade',
+        'target': 'S2ED',
+        'why': 'the key join merges the lines below (the tester\'s AUTOEXEC.BAT)',
+        'file': 'EDIT.Z8A',
+        'old': """.PARA           POP     HL              ; HL = L
+                LD      D, H
+                LD      E, L
+                INC     DE              ; DE = L + 1: THE TWO LINES JOINED""",
+        'new': """.PARA           POP     HL              ; HL = L
+                LD      DE, (TOTLINES)  ; MUTATION: THE OLD CASCADE
+                DEC     DE""",
+        'filter': 'S2-57',
+        'expect': ['S2-57/empty/content', 'S2-57/text/content'],
+    },
+    {
         'name': 'd7-tabs',
         'why': 'ACTTAB fails to insert spaces up to next tab stop',
         'file': 'ACTION.Z8A',
@@ -2792,17 +2855,9 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'name': 'e1-cut',
         'why': 'ACTCUT copies to clipboard but skips deleting selection from document',
         'file': 'ACTION.Z8A',
-        'old': """ACTCUT          CALL    ACTCOPY
-                LD      HL, (CLIPLEN)
-                LD      A, H
-                OR      L
-                RET     Z               ; NOTHING COPIED
+        'old': """                RET     Z               ; NOTHING COPIED
                 JP      ACTDLS          ; DELETE SELECTION FROM DOCUMENT""",
-        'new': """ACTCUT          CALL    ACTCOPY
-                LD      HL, (CLIPLEN)
-                LD      A, H
-                OR      L
-                RET                     ; MUTATION: SKIP ACTDLS DELETION
+        'new': """                RET                     ; MUTATION: SKIP ACTDLS DELETION
                 JP      ACTDLS          ; DELETE SELECTION FROM DOCUMENT""",
         'filter': 'E1',
         'expect': ['E1/totlines', 'E1/content'],
@@ -2880,31 +2935,51 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'name': 'e7-clip-limit',
         'why': 'ACTCOPY does not clamp copy bytes to CLIPMAX',
         'file': 'ACTION.Z8A',
-        'old': """.CPYLINE        ; CHECK IF TOTAL BYTES EXCEEDS CLIPMAX
-                LD      HL, (CPYCNT)
+        'old': """                ; CLAMP K TO REMAINING CLIPBOARD SPACE (CLIPMAX - CPYCNT)
+                LD      HL, CLIPMAX
+                LD      DE, (CPYCNT)""",
+        'new': """                ; CLAMP K TO REMAINING CLIPBOARD SPACE (CLIPMAX - CPYCNT)
+                LD      HL, 4096        ; MUTATION: EXPAND CAPACITY PAST BUFFER
+                LD      DE, (CPYCNT)""",
+        'filter': 'E7',
+        'expect': ['E7/copy/cliplen'],
+    },
+    {
+        'name': 'e7-cut-full',
+        'why': 'ACTCUT deletes a selection the clipboard could not hold',
+        'file': 'ACTION.Z8A',
+        'old': """                RET     NZ              ; CLIPBOARD FULL: THE TEXT STAYS""",
+        'new': """                NOP                     ; MUTATION: CUT ANYWAY""",
+        'filter': 'E7',
+        'expect': ['E7/cut/content', 'E7/cut/totlines'],
+    },
+    {
+        'name': 'e7-exact-precheck',
+        'why': 'ACTCOPY tests for a full clipboard before each line, so a '
+               'selection of exactly CLIPMAX bytes is called short',
+        'file': 'ACTION.Z8A',
+        'old': """                ; ADDS NOTHING)
+                LD      HL, (SELTMPL)
+                CALL    LINEREAD""",
+        'new': """                ; ADDS NOTHING)
+                LD      HL, (CPYCNT)    ; MUTATION: THE OLD PRE-LINE TEST
                 LD      DE, CLIPMAX
                 CALL    CMPHLDE
-                JP      NC, .CPYEXIT    ; CLIPBOARD FULL""",
-        'new': """.CPYLINE        ; CHECK IF TOTAL BYTES EXCEEDS CLIPMAX
-                LD      HL, (CPYCNT)
-                LD      DE, 4096        ; MUTATION: DO NOT CLAMP TO CLIPMAX
-                CALL    CMPHLDE
-                NOP
-                NOP
-                NOP""",
-        'also': [('ACTION.Z8A',
-                  """                ; CLAMP K TO REMAINING CLIPBOARD SPACE (CLIPMAX - CPYCNT)
-                LD      HL, CLIPMAX
-                LD      DE, (CPYCNT)
-                OR      A
-                SBC     HL, DE          ; HL = REMAINING""",
-                  """                ; CLAMP K TO REMAINING CLIPBOARD SPACE (CLIPMAX - CPYCNT)
-                LD      HL, 4096        ; MUTATION: EXPAND CAPACITY PAST BUFFER
-                LD      DE, (CPYCNT)
-                OR      A
-                SBC     HL, DE          ; HL = REMAINING""")],
+                JP      NC, .CPYFULL
+                LD      HL, (SELTMPL)
+                CALL    LINEREAD""",
         'filter': 'E7',
-        'expect': ['E7/cliplen'],
+        'expect': ['E7/exact/full-flag', 'E7/exact/content'],
+    },
+    {
+        'name': 's2-cut-full',
+        'target': 'S2ED',
+        'why': 'ACTCUT deletes a selection the 1 KB S2ED clipboard could not hold',
+        'file': 'ACTION.Z8A',
+        'old': """                RET     NZ              ; CLIPBOARD FULL: THE TEXT STAYS""",
+        'new': """                NOP                     ; MUTATION: CUT ANYWAY""",
+        'filter': 'S2-56',
+        'expect': ['S2-56/cut/content', 'S2-56/cut/totlines'],
     },
     {
         'name': 'g12-screen-restore',

@@ -501,7 +501,7 @@ WBINS           LD      (WBBASE), HL
                 LD      (HL), C
                 LD      DE, WORKATTR
                 ADD     HL, DE          ; HL = BASE + 1 + WORKATTR + COLUMN
-                LD      A, (TYPATTR)
+                XOR     A               ; NO STYLE: SCANMKUP DERIVES IT
                 LD      (HL), A
 
                 ; UPDATE LENGTH
@@ -617,7 +617,7 @@ WBINSN          LD      (WBBASE), HL
                 INC     DE
                 DJNZ    .WNCOPY
 
-                ; ATTRIBUTES: N CELLS OF THE CURRENT TYPING ATTRIBUTE
+                ; ATTRIBUTES: N PLAIN CELLS
                 LD      HL, (WBBASE)
                 LD      DE, 1 + WORKATTR
                 ADD     HL, DE          ; HL = BASE + 1 + WORKATTR
@@ -627,7 +627,7 @@ WBINSN          LD      (WBBASE), HL
                 ADD     HL, DE          ; HL = BASE + 1 + WORKATTR + COLUMN
                 LD      A, (WBRUN)
                 LD      B, A
-                LD      A, (TYPATTR)
+                XOR     A
 .WNATTR         LD      (HL), A
                 INC     HL
                 DJNZ    .WNATTR
@@ -715,7 +715,7 @@ EDOVRCHR        PUSH    AF
                 LD      (HL), C
                 LD      DE, WORKATTR
                 ADD     HL, DE          ; HL = ITS ATTRIBUTE
-                LD      A, (TYPATTR)
+                XOR     A               ; NO STYLE: SCANMKUP DERIVES IT
                 LD      (HL), A
                 LD      HL, (DOCLINE)
                 CALL    LINEWRT
@@ -728,10 +728,13 @@ EDOVRCHR        PUSH    AF
 ; - REFLOW -----------------------------
 ; - THE KEY'S JOIN IN WRAP_TXT: BACKSPACE AT COLUMN 0 OF LINE L + 1, OR
 ; - DELETE AT THE END OF L. AN EMPTY L + 1 IS THE LINE THE KEY JOINS AND
-; - GOES. OTHERWISE REWRAP RUNS IN ITS REFLOW MODE FROM L: WORDS ARE
-; - PULLED UP, AN EMPTY L TAKES THEM TOO, AND THE CASCADE STOPS AT THE
-; - END OF THE PARAGRAPH OR WHERE A WORD DOES NOT FIT. IT WAS A 500-BYTE
-; - ENGINE OF ITS OWN UNTIL REWRAP, WHICH DOES THE SAME AND MORE.
+; - GOES. OTHERWISE REWRAP RUNS IN ITS REFLOW MODE OVER L..L + 1 ONLY:
+; - L (AN EMPTY ONE TOO) TAKES THE WORDS OF L + 1 THAT FIT, WHAT DOES NOT
+; - FIT STAYS ON L + 1, AND A LINE PAST THE MARGIN SPLITS DOWNWARDS. THE
+; - LINES BELOW ARE NEVER PULLED UP: A FILE HAS NO SOFT LINE BREAKS, SO
+; - CASCADING THROUGH THE "PARAGRAPH" MERGED LINES THE USER HAD BROKEN ON
+; - PURPOSE (BS UNDER AN EMPTY LINE ALSO TOOK THE LINE AFTER THE ONE ON).
+; - REWRAPPING A PARAGRAPH IS EDIT > REWRAP'S JOB.
 ; - IN:  HL = LINE L (L + 1 EXISTS: BOTH CALLERS CHECKED)
 ; - OUT: NONE
 ; - CLOBBERS: ALL
@@ -754,9 +757,10 @@ REFLOW          PUSH    HL
                 LD      (TOTLINES), HL
                 JR      .MODSET
 
-.PARA           LD      DE, (TOTLINES)
-                DEC     DE
-                POP     HL
+.PARA           POP     HL              ; HL = L
+                LD      D, H
+                LD      E, L
+                INC     DE              ; DE = L + 1: THE TWO LINES JOINED
                 LD      A, 2
                 LD      (RWSTOP), A
                 CALL    REWRAP
@@ -1942,7 +1946,8 @@ EDMOVCHR        CP      CRIGHT
                 CALL    GETMAXC
                 LD      (CURX), A
                 LD      A, CUP
-                JP      EDMOVROW
+                CALL    EDMOVROW        ; ON THE TOP ROW IT TAKES QUEUED UPS TOO,
+                JP      EDCLMPX         ; SO THE COLUMN IS CLAMPED WHERE IT LANDS
                 
 .RIGHT          LD      HL, (DOCLINE)
                 CALL    LINELEN         ; A = LINE LENGTH (0..MAXCOLS)

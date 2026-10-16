@@ -22,7 +22,8 @@ from gate import (BRW_BYTES, H30NewDocument, H36BrowseSaveAs,
                   H43CursorShape, H44SelScroll, H45SelAllPage,
                   asciiz, brw_drives, full_ent_bytes,
                   REWRAP_LINES, rewrap_model, settings_to_txt,
-                  QuitSaveCase)
+                  QuitSaveCase, ClipLimitCase,
+                  ReflowJoinCase)
 from cases import (Case, DEFAULT_CFG, HomePathCase, LongPathCase,
                    ShippedDiskCase, crlf, io_fixture, numbered)
 from harness import MACH_MSX1, Session
@@ -2211,8 +2212,8 @@ class S220UndoSelDel(S2Case):
     origin = ('ACTDLS recorded nothing: select the TEST lines, DEL, Ctrl+Z did '
               'nothing -- or, with an older edit in the history, replayed it '
               'on the line that now had its number.  UNDOGMAX derives from '
-              'LINEREC and UNDOSIZ, so S2ED groups up to 28 lines with 4 KB undo '
-              '(where S6ED groups 46 with 8 KB): the big variant is what a '
+              'LINEREC and UNDOSIZ, so S2ED groups up to 55 lines with 4 KB undo '
+              '(where S6ED groups 44): the big variant is what a '
               'constant written for one target would get wrong.')
     variants = ('fresh', 'stale', 'big')
     LINES = ['Hello MSX World!', 'This is a test of S2ED.',
@@ -4757,6 +4758,89 @@ class S255QuitSave(QuitSaveCase, S2Case):
     origin = ('as Q7 on S6ED, 2026-10-15: the Save button is this target\'s '
               'own DOASK code')
 
+# --- S2-56  A SELECTION LARGER THAN THE CLIPBOARD ---------------------
+
+
+class S256ClipLimit(ClipLimitCase, S2Case):
+    name = 'S2-56-clip-limit'
+    TAG = 'S2-56'
+    desc = ('a selection past CLIPMAX: copy clamps, cut refuses and keeps '
+            'the text, a selection of exactly CLIPMAX cuts')
+    origin = ('2026-10-16 review: ACTCUT deleted the whole selection while '
+              'the clipboard kept its first CLIPMAX bytes, and S2ED\'s '
+              'CLIPMAX had just dropped to 1024 -- ~17 full lines')
+
+
+# --- S2-57  THE KEY JOIN IN WRAP_TXT TAKES TWO LINES -------------------
+
+
+class S257ReflowJoin(ReflowJoinCase, S2Case):
+    name = 'S2-57-reflow-join'
+    TAG = 'S2-57'
+    desc = ('WRAP=TXT: BS at column 0 / DEL at the end joins two lines and '
+            'never pulls the lines below')
+    origin = ('2026-10-16, a tester on S2ED v0.7: in AUTOEXEC.BAT, BS on a '
+              'line under an empty one also merged the line after it')
+
+
+# --- S2-58  A LONG LINE KEEPS NO STALE STYLE WHEN MARKUP GOES OFF -------
+
+
+class S258LongAttrs(S2Case):
+    name = 'S2-58-long-attrs'
+    desc = ('markup switched MD -> OFF: a line longer than TEXTCOLS shows no '
+            'style left over from the last MD scan past column TEXTCOLS')
+    origin = ('2026-10-16 review: once records stopped storing attributes, '
+              'LINEREAD zeroed only TEXTCOLS of them.  Past that, WORKBUF '
+              'kept what the last long line\'s SCANMKUP stamped, and with '
+              'markup off the renderer painted it')
+    cfg = S2_CFG.replace('WRAP=TXT', 'WRAP=DEV').replace('MARKUP=OFF',
+                                                          'MARKUP=MD')
+    LONG = 'L' * 70 + ' **BOLD WORD** ' + 'T' * 15     # 100 characters
+
+    def fixture(self, ctx, variant=None):
+        return crlf(['SHORT', self.LONG, 'END'])
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.wait(1.0)
+        t.press('DOWN')
+        t.press('RIGHT', mods=['CTRL'])     # end of the long line: LEFTCOL
+        t.wait(0.5)
+        t.snap('md', vram='patcol')
+        t.menu('help')
+        t.press('RETURN')                   # Settings
+        t.press('DOWN', repeat=6)           # Markup
+        t.press('LEFT')                     # MD -> OFF
+        t.press('DOWN', repeat=3)           # [ OK ]
+        t.press('RETURN')
+        t.wait(12.0)                        # OK writes the CFG first
+        t.snap('off', vram='patcol')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        row = pattern.TXRFIRST + 1
+        md = run.blob('md', 'patcol')
+        off = run.blob('off', 'patcol')
+        if md is None or off is None:
+            return [Check('S2-58/dump', False, 'missing VRAM dump')]
+        _, before = pattern.uniform_colour_cells(md[0x2000:], row)
+        _, after = pattern.uniform_colour_cells(off[0x2000:], row)
+        return [
+            Check('S2-58/setup', run.var('md', 'LEFTCOL') > 0 and
+                  pattern.COLBOLD in before,
+                  'LEFTCOL %s, MD row colours %s' % (
+                      run.var('md', 'LEFTCOL'),
+                      sorted('#%02X' % c for c in before))),
+            Check('S2-58/markup-off', run.var('off', 'MKUPMD') == 0,
+                  'MKUPMD = %s after Settings' % run.var('off', 'MKUPMD')),
+            Check('S2-58/plain', after == {pattern.COLTXT},
+                  'the long line is plain text' if after == {pattern.COLTXT}
+                  else 'row colours %s' % sorted('#%02X' % c for c in after)),
+        ]
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
          S210Theme(), S211About(), S212DialogUndo(),
@@ -4775,7 +4859,9 @@ CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S245SettingsValues(), S246ViVisualWalk(), S247RightMargin(),
          S248ShadowRoundTrip(), S249Overwrite(), S250CursorShape(),
          S251SelScroll(), S252SelAllPage(),
-         S253UndoLongJoin(), S254RewrapSettings(), S255QuitSave()]
+         S253UndoLongJoin(), S254RewrapSettings(), S255QuitSave(),
+         S256ClipLimit(), S257ReflowJoin(),
+         S258LongAttrs()]
 
 
 def run(ctx, cases=None):

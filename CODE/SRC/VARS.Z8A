@@ -122,7 +122,6 @@ TXTWIDTH       DEFB    0               ; 0 = WRAP OFF / FREE SCROLL, >0 = WRAP T
 SAVETW          DEFB    TEXTCOLS        ; SAVED TXTWIDTH ACROSS WRAP MODE TOGGLE
 AUTOALGN        DEFB    ALGN_OFF        ; ALGN_OFF / ALGN_ON / ALGN_DEV (CFG)
 ALGNTMP         DEFB    0               ; ACTNWLIN: TARGET COLUMN ACROSS EDNWLIN
-TYPATTR         DEFB    0               ; ACTIVE TYPING ATTRIBUTE (ATRBOLD, ATRITAL)
 MKUPMD          DEFB    0               ; 0=OFF, 1=MD, 2=LITE
 SHOWCLK         DEFB    1               ; 0=OFF, 1=SHOW CLOCK IN MENU ROW
 TABWIDTH        DEFB    4               ; TAB WIDTH (2, 4, 8)
@@ -198,6 +197,7 @@ CLIPLEN         DEFW    0               ; BYTES CURRENTLY IN CLIPBOARD
 CLIPRD          DEFW    0               ; CLIPBOARD READ POINTER
 CPYCNT          DEFW    0               ; CLIPBOARD TEMP COUNTER
 CPYPTR          DEFW    0               ; CLIPBOARD WRITE POINTER
+CPYTRN          DEFB    0               ; #FF = ACTCOPY STOPPED SHORT OF THE SELECTION
 
                 ; PASTE STATE. THE SNAPSHOT IS TAKEN ONCE THE OLD SELECTION IS
                 ; GONE AND IS WHAT THE SINGLE REPAINT AT THE END IS DECIDED
@@ -355,10 +355,6 @@ RWALL           DEFB    0               ; REWRAP: 1 = THE WHOLE NEXT LINE WAS PU
 RWSTOP          DEFB    0               ; REWRAP: 0 REWRAP, 1 REFLOW, 2 REFLOW'S FIRST LINE
 RPLREC          DEFB    0               ; REPLACE ALL: NON-ZERO ONCE ITS GROUP HAS A RECORD
 RPLLIN          DEFB    0               ; REPLACE ALL: 1 = THIS LINE IS RECORDED
-STYLMASK        DEFB    0               ; APPLSEL: ATTRIBUTE MASK TO TOGGLE
-STYLLN          DEFW    0               ; APPLSEL: CURRENT LINE ITERATOR
-STYLXA          DEFB    0               ; APPLSEL: START COLUMN
-STYLXB          DEFB    0               ; APPLSEL: END COLUMN
 CMPSEG          DEFB    0               ; COMPACTION: SEGMENT NUMBER
 CMPEND          DEFW    0               ; COMPACTION: SCAN BOUND
 CMPSRC          DEFW    0               ; COMPACTION: SOURCE OFFSET

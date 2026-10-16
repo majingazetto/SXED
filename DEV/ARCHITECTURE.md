@@ -111,11 +111,11 @@ In contrast, **S2ED runs on MSX1 machines where VDP hardware commands do not exi
 Text is stored in dynamically allocated 16 KB mapper segments (`TXPAGE = #8000`).
 
 ### 4.1 Variable-Length Line Storage
-Lines are stored as variable-length records:
-- `LEN` (1 byte): Number of text characters ($0 \dots 255$).
-- `TEXT` ($N$ bytes): Raw character codes.
-- `ATTR` ($N$ bytes): Corresponding character markup / attribute bits (Bold, Italic, Markup markers).
-- Maximum record size: `LINEREC = 1 + TEXTCOLS + TEXTCOLS` (161 bytes on S6ED, 123 bytes on S61ED and S2ED).
+Lines are stored as variable-length records holding **text only**:
+- Header (4 bytes): `RECCAP` (2, payload capacity in characters, a multiple of `QUANTUM` = 32) and `RECLEN` (2, characters in use, `#FFFF` = tombstone).
+- `TEXT` (`RECCAP` bytes): raw character codes. A line of up to 32 characters takes 36 bytes.
+- No attributes are stored: bold / italic / markers are derived on every paint by `SCANMKUP` from the Markdown / Lite delimiters, into `WORKBUF + 1 + WORKATTR` (page 3), which `LINEREAD` zeroes for `max(L, TEXTCOLS)` columns. With `MARKUP=OFF` a line has no style, and Ctrl+B / Ctrl+I do nothing.
+- `LINEREC = 1 + TEXTCOLS` (81 bytes on S6ED, 62 on S61ED and S2ED) sizes the work buffer image and the undo records; `LINEPSEG = 16384 / LINEREC` (202 / 264) is the capacity estimate used for the ceiling and `/V`.
 
 ### 4.2 Segment Compactor
 When insertions or edits exhaust contiguous space in a segment:

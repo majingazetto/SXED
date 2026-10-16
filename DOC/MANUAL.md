@@ -308,8 +308,11 @@ WRAP=DEV   Developer mode (default): no wrapping, lines
            Thought for source code: lines are never
            broken for you.
 WRAP=TXT   Text mode: typing past the right margin pushes
-           the last word to the next line (word wrap),
-           and deleting pulls words back up (reflow).
+           the last word to the next line (word wrap).
+           BS at column 0 or DEL at the end of a line
+           joins two lines: the words of the second that
+           fit go up, the rest stays where it is, and the
+           lines below are left alone.
 ```
 
 The margin is the text width: the screen width by default (80 / 61 / 61) or the TEXTWIDTH= value (0 = no margin, i.e. DEV mode). In Vi mode: ":set wrap", ":set nowrap", ":set tw=N".
@@ -350,7 +353,7 @@ LIT  Chat style:  *bold*  _italic_
 OFF  Raw text (best for source code).
 ```
 
-[S6ED/S61ED] render bold/italic with the font weights; [S2ED] renders them in theme colors. Help > Settings chooses the mode. Ctrl+B / Ctrl+I (STD profile) insert a delimiter pair or wrap the current selection.
+[S6ED/S61ED] render bold/italic with the font weights; [S2ED] renders them in theme colors. Help > Settings chooses the mode. Ctrl+B / Ctrl+I (STD profile) insert a delimiter pair or wrap the current selection, in the delimiters of the mode; with MARKUP=OFF they do nothing.
 
 ## 7.- KEYMAP PROFILES
 
@@ -551,7 +554,7 @@ ESC                      Cancel, back to Normal
 
 Selection: Shift+cursor keys (STD), Shift+Ctrl / Shift+GRAPH combos (STD and TED), or Visual mode (VI). Ctrl+A selects the whole document; ESC (STD) drops the selection. Typing, pasting or RETURN over a selection replaces it.
 
-Clipboard: Ctrl+X cut, Ctrl+C copy, Ctrl+V paste (Vi: d/x, y, p). Multi-line selections copy and paste whole lines with their line breaks. In Vi visual mode a selection that reaches the end of a line with $ takes its line break too, and V always takes whole lines with their breaks, so pasting either opens a new line.
+Clipboard: Ctrl+X cut, Ctrl+C copy, Ctrl+V paste (Vi: d/x, y, p). Multi-line selections copy and paste whole lines with their line breaks. In Vi visual mode a selection that reaches the end of a line with $ takes its line break too, and V always takes whole lines with their breaks, so pasting either opens a new line. The clipboard holds 2 KB (1 KB on S2ED): a larger selection copies its first part and shows `[CLIPBOARD FULL]`, and Ctrl+X leaves it in the document instead of cutting it.
 
 Undo/redo:
 
@@ -567,7 +570,7 @@ Undoing back to the text last loaded or saved clears the modified mark (*), and 
 
 The undo history lives in a 4 KB ring (about 23 operations on S6ED, 30 on S61ED and S2ED); the oldest operations are forgotten as it fills. Lines longer than the screen are recorded too, but each such operation takes the room of about three; a line split or join takes almost none. A single operation touching more lines than the ring can hold (a huge selection delete, for example) cannot be recorded half-way: then the whole history is dropped instead of restoring a partial, wrong state.
 
-In TXT mode, moving text across lines also clears the history: Rewrap, the reflow done by BS / DEL, and the word wrap that pushes a word down while typing.
+In TXT mode, moving text across lines also clears the history: Rewrap, the join done by BS / DEL, and the word wrap that pushes a word down while typing.
 
 ## 10.- MENUS & DIALOGS
 

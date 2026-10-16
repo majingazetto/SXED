@@ -2642,7 +2642,7 @@ WBDELN          LD      A, C
 ; - OUT: D = XA, E = XB (CLAMPED TO THE LENGTH), CY = 1 IF XA >= XB
 ; - CLOBBERS: AF, BC, DE
 ; -
-; - ACTCOPY AND APPLSEL CARRIED TWO COPIES OF THIS.
+; - ACTCOPY AND THE OLD APPLSEL CARRIED TWO COPIES OF THIS.
 ; -
 
 LNEXT           LD      C, 0            ; XA: 0 ON EVERY LINE BUT THE FIRST
@@ -3214,11 +3214,11 @@ ACTSELAL        LD      HL, 0
 ; -
 
 ACTSLML         CALL    SELBEG
-                LD      A, (CURY)
-                LD      HL, CURX
-                OR      (HL)
-                CALL    Z, SELPRE       ; ROW 0, COLUMN 0: A WRAP (WRAP_TXT) SCROLLS
-                CALL    ACTMVL          ; OTHERWISE NO SCROLL: SELPOST DIFFS
+                LD      HL, (TOPLINE)   ; A ROLLOVER AT ROW 0 SCROLLS: SELSCRL
+                PUSH    HL              ; KEEPS THE OVERLAY, AS FOR SHIFT+UP
+                CALL    ACTMVL
+                POP     DE              ; DE = TOPLINE BEFORE THE MOVE
+                CALL    SELSCRL
                 JP      SELPOST
 
 
@@ -3233,17 +3233,11 @@ ACTSLML         CALL    SELBEG
 ; -
 
 ACTSLMR         CALL    SELBEG
-                LD      A, (CURY)
-                CP      ROWSVIS - 1
-                JR      NZ, .MOVE       ; NOT THE BOTTOM ROW: NO SCROLL
-                LD      HL, (DOCLINE)
-                CALL    LINELEN         ; A = LENGTH
-                LD      HL, CURX
-                CP      (HL)            ; LENGTH - CURX
-                JR      Z, .PRE
-                JR      NC, .MOVE       ; NOT AT THE END: NO WRAP
-.PRE            CALL    SELPRE          ; A WRAP (WRAP_TXT) SCROLLS: UN-XOR FIRST
-.MOVE           CALL    ACTMVR          ; SELPOST DIFFS WHAT IS LEFT
+                LD      HL, (TOPLINE)   ; A ROLLOVER ON THE BOTTOM ROW SCROLLS.
+                PUSH    HL              ; IT FIRES AT GETMAXC, NOT AT THE LENGTH
+                CALL    ACTMVR          ; (A FULL LINE, A 255-COLUMN ONE), SO
+                POP     DE              ; GUESSING IT BEFORE THE MOVE LEFT THE
+                CALL    SELSCRL         ; OVERLAY SCROLLED UN-XORED: MEASURE IT
                 JP      SELPOST
 
 
@@ -3647,7 +3641,8 @@ ACTDLS          LD      A, (SELACT)
 ; - ACTCOPY ----------------------------
 ; - COPY ACTIVE SELECTION TO CLIPBUF
 ; - IN:  NONE
-; - OUT: (CLIPLEN) = BYTES WRITTEN
+; - OUT: (CLIPLEN) = BYTES WRITTEN, (CPYTRN) = #FF WHEN CLIPMAX STOPPED
+; -      THE COPY SHORT OF THE SELECTION ("[CLIPBOARD FULL]" IS SHOWN)
 ; - CLOBBERS: ALL
 ; -
 
@@ -3667,6 +3662,8 @@ ACTCOPY         LD      A, (SELACT)
                 RET     Z               ; EMPTY: NOTHING TO COPY
 
 .CPYINIT        CALL    SELEOL          ; A COVERED LINE BREAK IS COPIED TOO
+                XOR     A
+                LD      (CPYTRN), A
                 LD      HL, CLIPBUF
                 LD      (CPYPTR), HL
                 LD      HL, 0
@@ -3674,13 +3671,11 @@ ACTCOPY         LD      A, (SELACT)
                 LD      HL, (SELSTRL)
                 LD      (SELTMPL), HL
 
-.CPYLINE        ; CHECK IF TOTAL BYTES EXCEEDS CLIPMAX
-                LD      HL, (CPYCNT)
-                LD      DE, CLIPMAX
-                CALL    CMPHLDE
-                JP      NC, .CPYEXIT    ; CLIPBOARD FULL
-
-                ; READ CURRENT LINE INTO WORKBUF
+.CPYLINE        ; READ CURRENT LINE INTO WORKBUF. A FULL CLIPBOARD IS FOUND
+                ; BELOW, BY THE CLAMP (NO ROOM FOR A CHARACTER) OR THE CRLF
+                ; TEST: CHECKING IT HERE, AHEAD OF THE LINE, CALLED A
+                ; SELECTION OF EXACTLY CLIPMAX BYTES SHORT (ITS END LINE
+                ; ADDS NOTHING)
                 LD      HL, (SELTMPL)
                 CALL    LINEREAD
 
@@ -3711,10 +3706,13 @@ ACTCOPY         LD      A, (SELACT)
                 LD      A, C
                 CP      L
                 JR      C, .CPYKOK      ; K < REMAINING
+                JR      Z, .CPYKOK      ; K == REMAINING: FITS EXACTLY
                 LD      C, L            ; CLAMP K = REMAINING
+                LD      A, #FF
+                LD      (CPYTRN), A
 .CPYKOK         LD      A, C
                 OR      A
-                JR      Z, .CPYEXIT
+                JR      Z, .CPYFULL
 
                 ; COPY K BYTES FROM WORKBUF + 1 + XA TO (CPYPTR)
                 PUSH    BC              ; SAVE K IN C
@@ -3751,7 +3749,7 @@ ACTCOPY         LD      A, (SELACT)
                 JR      NZ, .CPYCRLF
                 LD      A, L
                 CP      2
-                JR      C, .CPYEXIT     ; NO ROOM FOR CRLF
+                JR      C, .CPYFULL     ; NO ROOM FOR CRLF
 
 .CPYCRLF        LD      HL, (CPYPTR)
                 LD      (HL), #0D
@@ -3770,9 +3768,17 @@ ACTCOPY         LD      A, (SELACT)
                 LD      (SELTMPL), HL
                 JP      .CPYLINE
 
+.CPYFULL        LD      A, #FF
+                LD      (CPYTRN), A
 .CPYEXIT        LD      HL, (CPYCNT)
                 LD      (CLIPLEN), HL
-                RET
+                LD      A, (CPYTRN)
+                OR      A
+                RET     Z
+                LD      HL, .STRCLPF
+                JP      SETMSG          ; SAY THE CLIPBOARD HOLDS A PART ONLY
+
+.STRCLPF        DEFM    "[CLIPBOARD FULL]", 0
 
 
 ; --- ACTCUT                     ----------------------------------------
@@ -3783,9 +3789,15 @@ ACTCOPY         LD      A, (SELACT)
 ; - IN:  NONE
 ; - OUT: NONE
 ; - CLOBBERS: ALL
+; - A SELECTION LARGER THAN THE CLIPBOARD IS NOT CUT: DELETING IT WOULD
+; - KEEP ONLY ITS FIRST CLIPMAX BYTES, AND THE REST WOULD BE GONE FOR GOOD
+; - WHEN THE DELETE DOES NOT FIT THE UNDO RING EITHER.
 ; -
 
 ACTCUT          CALL    ACTCOPY
+                LD      A, (CPYTRN)
+                OR      A
+                RET     NZ              ; CLIPBOARD FULL: THE TEXT STAYS
                 LD      HL, (CLIPLEN)
                 LD      A, H
                 OR      L
@@ -4096,172 +4108,49 @@ PSTNL           LD      HL, (TOTLINES)
 
 
 ; - ACTTGLBD ---------------------------
-; - TOGGLE BOLD ATTRIBUTE ON SELECTION OR TYPING STATE
+; - BOLD: INSERT A DELIMITER PAIR AT THE CURSOR, OR WRAP THE SELECTION,
+; - IN THE MARKUP MODE'S OWN DELIMITERS (MD '**', LIT '*'). WITH MARKUP
+; - OFF IT DOES NOTHING: A LINE HOLDS ONLY TEXT, SO THERE IS NO STYLE TO
+; - TOGGLE (THE RAW ATTRIBUTE PATH WAS LOST ON THE FIRST LINEWRT, YET
+; - MARKED THE DOCUMENT MODIFIED AND COULD DROP THE UNDO HISTORY).
 ; - IN:  NONE
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; -
 
-ACTTGLBD        LD      A, (MKUPMD)
-                OR      A
-                JR      Z, .RAWBD       ; MKUP_OFF: RAW ATTRIBUTE TOGGLE
-                ; MARKUP MODE (MD OR LITE)
-                LD      A, (SELACT)
-                OR      A
-                JR      NZ, .WRPBD
-                LD      A, 1            ; 1 = BOLD
-                JP      INSDELIM
-.WRPBD          LD      A, 1            ; 1 = BOLD
-                JP      WRAPSEL
-
-.RAWBD          LD      A, (SELACT)
-                OR      A
-                JR      NZ, .SELBD
-                ; NO SELECTION: TOGGLE TYPING ATTRIBUTE
-                LD      A, (TYPATTR)
-                XOR     ATRBOLD
-                LD      (TYPATTR), A
-                JP      DRWSTAT
-.SELBD          LD      A, ATRBOLD
-                JP      APPLSEL
+ACTTGLBD        LD      A, 1            ; 1 = BOLD
+                JR      ACTSTYL
 
 
 ; --- ACTTGLIT                  ----------------------------------------
 
 
 ; - ACTTGLIT ---------------------------
-; - TOGGLE ITALIC ATTRIBUTE ON SELECTION OR TYPING STATE
+; - ITALIC: AS ACTTGLBD (MD '*', LIT '_')
 ; - IN:  NONE
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; -
 
-ACTTGLIT        LD      A, (MKUPMD)
-                OR      A
-                JR      Z, .RAWIT       ; MKUP_OFF: RAW ATTRIBUTE TOGGLE
-                ; MARKUP MODE (MD OR LITE)
-                LD      A, (SELACT)
-                OR      A
-                JR      NZ, .WRPIT
-                LD      A, 2            ; 2 = ITALIC
-                JP      INSDELIM
-.WRPIT          LD      A, 2            ; 2 = ITALIC
-                JP      WRAPSEL
-
-.RAWIT          LD      A, (SELACT)
-                OR      A
-                JR      NZ, .SELIT
-                ; NO SELECTION: TOGGLE TYPING ATTRIBUTE
-                LD      A, (TYPATTR)
-                XOR     ATRITAL
-                LD      (TYPATTR), A
-                JP      DRWSTAT
-.SELIT          LD      A, ATRITAL
-                JP      APPLSEL
+ACTTGLIT        LD      A, 2            ; 2 = ITALIC
 
 
-; --- APPLSEL                   ----------------------------------------
-
-
-; - APPLSEL ----------------------------
-; - TOGGLE ATTRIBUTE BITS ACROSS ACTIVE SELECTION
-; - IN:  A = ATTRIBUTE MASK TO TOGGLE (ATRBOLD OR ATRITAL)
+; - ACTSTYL ----------------------------
+; - THE STYLE KEYS' BODY: DELIMITERS AT THE CURSOR OR AROUND THE SELECTION
+; - IN:  A = 1 FOR BOLD, 2 FOR ITALIC
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; -
 
-APPLSEL         LD      (STYLMASK), A
-                CALL    SELNORM
-
-                ; VERIFY SELECTION IS NOT EMPTY
-                LD      HL, (SELSTRL)
-                LD      DE, (SELENDL)
-                CALL    CMPHLDE
-                JR      NZ, .APLINIT
-                LD      A, (SELSTRX)
-                LD      HL, SELENDX
-                CP      (HL)
-                RET     Z               ; EMPTY: NOTHING TO STYLE
-
-.APLINIT        CALL    SELPRE          ; THE ROWS ARE REPAINTED CLEAN BELOW: TAKE
-                                        ; THE OVERLAY OFF FIRST, OR SELPOST FINDS IT
-                                        ; "PAINTED" AND THE NEXT DESELECT XORS RESIDUE
-                LD      A, UNDOT_MOD    ; EVERY SELECTED LINE, ONE UNDO GROUP
-                CALL    UNDOSEL
-                LD      HL, (SELSTRL)
-                LD      (STYLLN), HL
-
-.APLLINE        ; READ CURRENT LINE RECORD INTO WORKBUF
-                LD      HL, (STYLLN)
-                CALL    LINEREAD
-
-                ; THE COLUMNS [XA, XB) OF THIS LINE
-                LD      HL, (STYLLN)
-                CALL    LNEXT
-                LD      A, D
-                LD      (STYLXA), A
-                LD      A, E
-                LD      (STYLXB), A
-                JR      C, .APLCHKN     ; NO CHARS ON THIS LINE
-                LD      A, D
-                LD      HL, STYLXB
-
-                ; COUNT = XB - XA
-                SUB     (HL)
-                NEG                     ; A = COUNT
-                LD      B, A            ; B = COUNT (1..TEXTCOLS)
-
-                LD      A, (STYLXA)
-                LD      E, A
-                LD      D, 0
-                LD      HL, WORKBUF + 1 + WORKATTR
-                ADD     HL, DE          ; HL = WORKBUF + 1 + WORKATTR + XA
-                LD      A, (STYLMASK)
-                LD      C, A            ; C = MASK TO TOGGLE
-
-.APLCELL        LD      A, (HL)
-                XOR     C
-                LD      (HL), A
-                INC     HL
-                DJNZ    .APLCELL
-
-                ; WRITE LINE BACK TO MAPPER
-                LD      HL, (STYLLN)
-                CALL    LINEWRT
-
-                ; IF ON SCREEN, RE-RENDER ROW
-                LD      HL, (STYLLN)
-                LD      DE, (TOPLINE)
+ACTSTYL         LD      C, A
+                LD      A, (MKUPMD)
                 OR      A
-                SBC     HL, DE
-                JR      C, .APLCHKN     ; L < TOPLINE: OFF SCREEN ABOVE
-                LD      A, H
+                RET     Z               ; MKUP_OFF: NO DELIMITERS TO WRITE
+                LD      A, (SELACT)
                 OR      A
-                JR      NZ, .APLCHKN    ; L - TOPLINE >= 256
-                LD      A, L
-                CP      ROWSVIS
-                JR      NC, .APLCHKN    ; OFF SCREEN BELOW
-                INC     A               ; SCREEN ROW = A + 1 (1..24)
-                LD      B, A
-                CALL    RENDEROW
-
-.APLCHKN        ; CHECK IF LAST LINE
-                LD      HL, (STYLLN)
-                LD      DE, (SELENDL)
-                CALL    CMPHLDE
-                JR      Z, .APLDONE
-
-                ; NEXT LINE
-                LD      HL, (STYLLN)
-                INC     HL
-                LD      (STYLLN), HL
-                JP      .APLLINE
-
-.APLDONE        ; REDRAW SELECTION XOR HIGHLIGHT OVER UPDATED ROWS
-                CALL    SELPOST
-                LD      A, #FF
-                LD      (MODIFIED), A
-                JP      DRWSTAT
+                LD      A, C
+                JP      Z, INSDELIM
+                JP      WRAPSEL
 
 
 ; --- ACTTAB                    ----------------------------------------

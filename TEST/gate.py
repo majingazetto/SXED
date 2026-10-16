@@ -16,12 +16,10 @@ import subprocess
 import vram
 from cases import (Case, DEFAULT_CFG, HomePathCase, LongPathCase,
                    ShippedDiskCase, crlf, io_fixture, numbered)
-from harness import MACH_128K, MACH_2MB, MACH_F1XV, MACH_JP, Session
-from keys import Timeline
+from harness import (DEFAULT_VARS, MACH_128K, MACH_2MB, MACH_F1XV,
+                     MACH_JP, Session)
+from keys import KEY, Timeline
 from result import Check
-
-LINEREC = 161
-SEGLAST = 100 * LINEREC
 
 
 def image_of(ctx):
@@ -2733,9 +2731,9 @@ class D5WordLineDel(Case):
 
 class D6Reflow(Case):
     name = 'D6-reflow'
-    desc = 'cascade paragraph reflow across lines in WRAP_TXT mode'
-    origin = ('REFLOW pulls complete words upwards to fill up to 80 columns, '
-              'deleting consumed intermediate lines, stopping at empty line boundary')
+    desc = 'DEL at the end of a line joins the next one in WRAP_TXT mode'
+    origin = ('REFLOW pulled complete words upwards through the whole '
+              'paragraph; since 2026-10-16 the key joins only the two lines')
     cfg = ("; WRAP_TXT configuration\r\n"
            "WRAP = TXT\r\n"
            "PROFILE = STD\r\n")
@@ -2766,17 +2764,18 @@ class D6Reflow(Case):
     def verify(self, ctx, runs):
         run = one(runs)
         got = run.session.extract(run.dsk, 'DOC.TXT')
-        want_p1 = ('First short line of text Second short line of text '
-                   'Third short line of text')
-        want = crlf([want_p1, 'Fourth short line of text',
+        # The key joins two lines: the third stays where it is (2026-10-16)
+        want_p1 = 'First short line of text Second short line of text'
+        want = crlf([want_p1, 'Third short line of text',
+                     'Fourth short line of text',
                      'Fifth short line of text', 'Sixth short line of text',
                      '', 'Guard line after paragraph'])
         checks = [
             Check('D6/content', got == want,
                   'document matches byte for byte' if got == want else
                   'got %r' % (got[:80] if got else None)),
-            Check('D6/totlines', run.var('saved', 'TOTLINES') == 6,
-                  'TOTLINES = %s (expected 6)' % run.var('saved', 'TOTLINES')),
+            Check('D6/totlines', run.var('saved', 'TOTLINES') == 7,
+                  'TOTLINES = %s (expected 7)' % run.var('saved', 'TOTLINES')),
         ]
         return checks
 
@@ -3634,42 +3633,84 @@ class E6SelWordPage(Case):
 # --- E7  CLIPBOARD CAPACITY LIMIT (CLIPMAX = 2048) -------------------
 
 
-class E7ClipLimit(Case):
-    name = 'E7-clip-limit'
-    desc = 'copying beyond CLIPMAX (2048 bytes) clamps without buffer overrun'
-    origin = ('CLIPBUF capacity is CLIPMAX (2048 bytes) in page 0 RAM: '
-              'ACTCOPY must clamp copied bytes and CRLF breaks to prevent '
-              'overrunning into adjacent variables (FILENAME, FILEHAND)')
-    # 35 lines of 75 characters = 2,625 characters (> 2048)
-    LINES = ['%02d-%s' % (i, 'X' * 70) for i in range(35)]
+class ClipLimitCase(object):
+    """A selection larger than CLIPMAX: copy clamps, cut refuses, exact fits.
+
+    Shared by the S6 gate (CLIPMAX 2048) and the S2 one (1024): the fixture
+    is sized from the build's own CLIPMAX, so neither target is a literal.
+    """
+    variants = ('copy', 'cut', 'exact')
+    WIDTH = 30                      # + CRLF = 32 bytes a line
+    CLIPV = [('CLIPLEN', 2), ('CPYTRN', 1), ('TOTLINES', 2), ('MODIFIED', 1)]
+
+    def lines(self, ctx):
+        n = ctx.sym['CLIPMAX'] // (self.WIDTH + 2) + 8
+        return ['%03d-%s' % (i, 'X' * (self.WIDTH - 4)) for i in range(n)]
 
     def fixture(self, ctx, variant=None):
-        return crlf(self.LINES)
+        return crlf(self.lines(ctx))
 
     def timeline(self, ctx, variant=None):
         t = Timeline()
-        t.press('A', mods=['CTRL'])         # select all 35 lines (~2625 B)
-        t.press('C', mods=['CTRL'])         # ACTCOPY
-        t.snap('copied')
-        t.press('S', mods=['CTRL'])         # save: verifies FILENAME and I/O intact
+        if variant == 'exact':
+            # (0,0)..(k,0): k whole lines and their CRLF, exactly CLIPMAX
+            k = ctx.sym['CLIPMAX'] // (self.WIDTH + 2)
+            t.press('DOWN', mods=['SHIFT'], repeat=k)
+        else:
+            t.press('A', mods=['CTRL'])     # the whole document, > CLIPMAX
+        t.press('X' if variant != 'copy' else 'C', mods=['CTRL'])
+        t.wait(1.0)
+        t.snap('copied', vars_=DEFAULT_VARS + self.CLIPV)
+        t.press('S', mods=['CTRL'])
         t.wait(3.0)
         t.snap('saved')
         return t
 
     def verify(self, ctx, runs):
-        run = one(runs)
-        checks = [
-            Check('E7/cliplen', run.var('copied', 'CLIPLEN') == 2048,
-                  'CLIPLEN = %s (expected 2048)' % run.var('copied', 'CLIPLEN')),
-        ]
-        got = run.session.extract(run.dsk, 'DOC.TXT')
-        want = crlf(self.LINES)
-        checks.append(Check('E7/content-intact', got == want,
-                            'document saved intact after copy' if got == want else
-                            'save corrupted'))
-        checks.append(Check('E7/alive', run.var('saved', 'TOTLINES') == 35,
-                            'TOTLINES = %s (expected 35)' % run.var('saved', 'TOTLINES')))
+        tag = getattr(self, 'TAG', self.name.split('-')[0])
+        clipmax = ctx.sym['CLIPMAX']
+        lines = self.lines(ctx)
+        checks = []
+        for variant, run in sorted(runs.items()):
+            v = '%s/%s' % (tag, variant)
+            cliplen = run.var('copied', 'CLIPLEN')
+            trn = run.var('copied', 'CPYTRN')
+            checks.append(Check(v + '/cliplen', cliplen == clipmax,
+                                'CLIPLEN = %s (expected %d)' % (cliplen, clipmax)))
+            full = variant != 'exact'
+            checks.append(Check(v + '/full-flag', trn == (0xFF if full else 0),
+                                'CPYTRN = %s (expected %s)'
+                                % (trn, '#FF' if full else '0')))
+            msg = asciiz(run, 'copied', 'STATMSG')
+            want_msg = '[CLIPBOARD FULL]' if full else ''
+            checks.append(Check(v + '/message', msg == want_msg,
+                                'status message %r' % msg))
+            if variant == 'exact':
+                want_lines = lines[clipmax // (self.WIDTH + 2):]
+            else:
+                want_lines = lines      # copy, or a cut refused: intact
+            got = run.session.extract(run.dsk, 'DOC.TXT')
+            want = crlf(want_lines)
+            checks.append(Check(v + '/content', got == want,
+                                'saved document as expected' if got == want
+                                else 'saved document differs (%s bytes, want %d)'
+                                % (len(got or b''), len(want))))
+            tot = run.var('copied', 'TOTLINES')
+            want_tot = len(want_lines)
+            checks.append(Check(v + '/totlines', tot == want_tot,
+                                'TOTLINES = %s (expected %d)' % (tot, want_tot)))
         return checks
+
+
+class E7ClipLimit(ClipLimitCase, Case):
+    name = 'E7-clip-limit'
+    desc = ('a selection past CLIPMAX: copy clamps without overrun, cut '
+            'refuses and keeps the text, a selection of exactly CLIPMAX cuts')
+    origin = ('CLIPBUF holds CLIPMAX bytes: ACTCOPY must clamp copied bytes '
+              'and CRLF breaks to prevent overrunning adjacent variables.  '
+              '2026-10-16 review: ACTCUT then deleted the WHOLE selection '
+              'while the clipboard kept only its first CLIPMAX bytes -- the '
+              'rest was lost when the delete did not fit the undo ring either')
 
 
 # --- I1  UNIX EOL AUTO-DETECTION & PRESERVATION -----------------------
@@ -7668,23 +7709,34 @@ def purity(tag, run, a='deselected', b='redrawn'):
 
 class Q1StyleSelection(Case):
     name = 'Q1-style-selection'
-    desc = 'Ctrl+B on a selection (MARKUP=OFF), then deselect: no inverse residue'
+    desc = ('Ctrl+B on a selection with MARKUP=OFF does nothing: no edit, no '
+            'undo record, no inverse residue after the deselect')
     origin = ('2026-10-06 review: APPLSEL repainted the rows clean without '
-              'SELPRE, so the deselect XORed the old range onto clean text')
+              'SELPRE.  2026-10-16: the line records stopped storing '
+              'attributes, so APPLSEL\'s toggle was lost on the first LINEWRT '
+              'while it still marked the document modified and pushed an undo '
+              'group (a no-op that could drop the whole history).  It is gone: '
+              'with markup off the style keys do nothing')
+
+    LINES = ['ALPHA LINE', 'BRAVO LINE', 'CHARLIE'] + \
+        ['FILLER %02d' % i for i in range(60)]
 
     def fixture(self, ctx, variant=None):
         # Long enough for page down + page up to come back to the same
         # state: that pair is the full REDRAW the screen is compared with.
-        return crlf(['ALPHA LINE', 'BRAVO LINE', 'CHARLIE'] +
-                    ['FILLER %02d' % i for i in range(60)])
+        return crlf(self.LINES)
 
     def timeline(self, ctx, variant=None):
         t = Timeline()
         t.snap('boot')
-        t.press('DOWN', mods=['SHIFT'])
+        t.press('DOWN')
+        t.press('Q')                    # one real edit, the undo to come back
+        t.press('LEFT')                 # closes the typing burst
         t.press('RIGHT', mods=['SHIFT'], repeat=3)
         t.press('B', mods=['CTRL'])
+        t.press('I', mods=['CTRL'])
         t.wait(1.0)
+        t.snap('styled')
         t.press('RIGHT')                # deselects
         t.press('LEFT')
         t.wait(0.5)
@@ -7693,10 +7745,18 @@ class Q1StyleSelection(Case):
         t.press('UP', mods=['CTRL'])
         t.wait(0.5)
         t.snap('redrawn', vram=True)
+        t.press('Z', mods=['CTRL'])     # must undo the Q, not a style no-op
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
         return t
 
     def verify(self, ctx, runs):
-        return [purity('Q1/render-pure', one(runs))]
+        run = one(runs)
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        want = crlf(self.LINES)
+        return [purity('Q1/render-pure', run),
+                Check('Q1/undo-is-the-edit', got == want, disk_diff(got, want))]
 
 
 class Q2ShiftWrapScroll(Case):
@@ -7705,21 +7765,43 @@ class Q2ShiftWrapScroll(Case):
             'and scrolls keeps the selection painted right, and deselect clean')
     origin = ('2026-10-06 review: ACTSLMR had no SELPRE guard before a move '
               'that scrolls; the exposed row, inside the selection before and '
-              'after, was never painted and the deselect left residue')
+              'after, was never painted and the deselect left residue.  '
+              '2026-10-16 review: the guard tested CURX == length, but the '
+              'rollover fires at GETMAXC -- length - 1 on a line exactly '
+              'TEXTWIDTH long (variant full) -- so it missed that line')
+    variants = ('short', 'full', 'left')
 
     def config(self, ctx, variant=None):
-        return DEFAULT_CFG.replace('WRAP=DEV', 'WRAP=TXT')
+        cfg = DEFAULT_CFG.replace('WRAP=DEV', 'WRAP=TXT')
+        if variant == 'full':
+            cfg = cfg.replace('WRAP=TXT', 'WRAP=TXT\nTEXTWIDTH=40')
+        return cfg
 
     def fixture(self, ctx, variant=None):
+        if variant == 'full':
+            return crlf(['LINE %03d %s' % (i, 'X' * 31) for i in range(100)])
         return crlf(['LINE %03d' % i for i in range(100)])
 
     def timeline(self, ctx, variant=None):
         t = Timeline()
         t.snap('boot')
-        t.press('DOWN', repeat=45)                  # anchor line 45
-        t.press('UP', mods=['SHIFT'], repeat=29)    # line 16 on row 0
-        t.press('DOWN', mods=['SHIFT'], repeat=23)  # line 39 on row 23
-        t.press('RIGHT', mods=['SHIFT'], repeat=9)  # 8 to the end, 1 wraps
+        if variant == 'left':
+            # anchor line 5, ABOVE the viewport, cursor line 17 column 0 on
+            # row 0: Shift+Left rolls up and scrolls, and the exposed row
+            # (line 16) is inside the painted range, which is what needs the
+            # overlay carried (an anchor below would expose a row outside it)
+            t.press('DOWN', repeat=5)
+            t.press('DOWN', mods=['SHIFT'], repeat=40)  # line 45, row 23
+            t.press('UP', mods=['SHIFT'], repeat=28)    # line 17 on row 0
+            t.press('LEFT', mods=['SHIFT'])
+        else:
+            t.press('DOWN', repeat=45)                  # anchor line 45
+            t.press('UP', mods=['SHIFT'], repeat=29)    # line 16 on row 0
+            t.press('DOWN', mods=['SHIFT'], repeat=23)  # line 39 on row 23
+            # short: 8 to the end, 1 wraps.  full: 39 to GETMAXC (40 - 1),
+            # 1 wraps
+            t.press('RIGHT', mods=['SHIFT'],
+                    repeat=9 if variant == 'short' else 40)
         t.wait(1.0)
         t.snap('wrapped')
         t.press('RIGHT')
@@ -7733,14 +7815,19 @@ class Q2ShiftWrapScroll(Case):
         return t
 
     def verify(self, ctx, runs):
-        run = one(runs)
-        return [
-            Check('Q2/setup', run.var('wrapped', 'DOCLINE') == 40 and
-                  run.var('wrapped', 'TOPLINE') == 17,
-                  'DOCLINE %s, TOPLINE %s after the wrap (want 40, 17)'
-                  % (run.var('wrapped', 'DOCLINE'), run.var('wrapped', 'TOPLINE'))),
-            purity('Q2/render-pure', run),
-        ]
+        want = {'short': (40, 17), 'full': (40, 17), 'left': (16, 16)}
+        checks = []
+        for variant, run in sorted(runs.items()):
+            checks += [
+                Check('Q2/%s/setup' % variant,
+                      (run.var('wrapped', 'DOCLINE'),
+                       run.var('wrapped', 'TOPLINE')) == want[variant],
+                      'DOCLINE %s, TOPLINE %s after the wrap (want %s, %s)'
+                      % ((run.var('wrapped', 'DOCLINE'),
+                          run.var('wrapped', 'TOPLINE')) + want[variant])),
+                purity('Q2/%s/render-pure' % variant, run),
+            ]
+        return checks
 
 
 class Q3FindAdjacent(Case):
@@ -9104,24 +9191,55 @@ class W4RewrapMenu(Case):
 
 
 
-class W5ReflowEmpty(Case):
-    name = 'W5-reflow-empty'
-    desc = ('WRAP=TXT: Backspace at column 0 of a line below an empty one pulls '
-            'its words up into the empty line, and the paragraph after them')
-    origin = ('2026-10-15: REFLOW became REWRAP in reflow mode, where an empty '
-              'line ends a paragraph -- except the first one, which is the line '
-              'the key joins into and must take the words')
-    cfg = UNDO_CFG.replace('WRAP=DEV', 'TEXTWIDTH=40')
-    LINES = ['', 'alpha beta', 'gamma', '', 'next paragraph']
+class ReflowJoinCase(object):
+    """WRAP=TXT: the key join takes what fits of the next line, nothing more.
+
+    Shared by S6ED and S2ED.  Variants:
+      empty    BS at column 0 under an EMPTY line (the tester's AUTOEXEC.BAT)
+      text     BS at column 0 under a line with text
+      del      DEL at the end of a line
+      partial  only part of the next line fits the margin: the rest stays
+    In every one the lines below the two joined are left alone.
+    """
+    variants = ('empty', 'text', 'del', 'partial')
+    BAT = ['PATH A:\\TOOLS', 'CD \\DEV', 'S2ED TEST.TXT']
+    FIX = {
+        'empty':   ['PATH A:\\TOOLS', '', 'CD \\DEV', 'S2ED TEST.TXT', '',
+                    'next paragraph'],
+        'text':    BAT + ['', 'next paragraph'],
+        'del':     BAT + ['', 'next paragraph'],
+        'partial': ['alpha beta gamma delta epsilon',
+                    'zeta eta theta iota kappa lambda', 'mu', '',
+                    'next paragraph'],
+    }
+    WANT = {
+        'empty':   ['PATH A:\\TOOLS', 'CD \\DEV', 'S2ED TEST.TXT', '',
+                    'next paragraph'],
+        'text':    ['PATH A:\\TOOLS CD \\DEV', 'S2ED TEST.TXT', '',
+                    'next paragraph'],
+        'del':     ['PATH A:\\TOOLS CD \\DEV', 'S2ED TEST.TXT', '',
+                    'next paragraph'],
+        'partial': ['alpha beta gamma delta epsilon zeta eta',
+                    'theta iota kappa lambda', 'mu', '', 'next paragraph'],
+    }
+    LINE = {'empty': 2, 'text': 1, 'del': 0, 'partial': 1}
+
+    def config(self, ctx, variant=None):
+        return (self.cfg.replace('WRAP=DEV', 'WRAP=TXT')
+                .replace('WRAP=TXT', 'WRAP=TXT\nTEXTWIDTH=40'))
 
     def fixture(self, ctx, variant=None):
-        return crlf(self.LINES)
+        return crlf(self.FIX[variant])
 
     def timeline(self, ctx, variant=None):
         t = Timeline()
         t.wait(1.0)
-        t.press('DOWN')
-        t.press('BS')
+        t.press('DOWN', repeat=self.LINE[variant])
+        if variant == 'del':
+            t.press('RIGHT', mods=['CTRL'])     # end of the line, as D6
+            t.press('DEL')
+        else:
+            t.press('BS')
         t.wait(1.0)
         t.snap('joined')
         t.press('S', mods=['CTRL'])
@@ -9130,17 +9248,32 @@ class W5ReflowEmpty(Case):
         return t
 
     def verify(self, ctx, runs):
-        run = one(runs)
-        got = run.session.extract(run.dsk, 'DOC.TXT')
-        want = crlf(['alpha beta gamma', '', 'next paragraph'])
-        return [
-            Check('W5/joined', run.var('joined', 'TOTLINES') == 3 and
-                  run.var('joined', 'DOCLINE') == 0,
-                  'TOTLINES %s, DOCLINE %s after BS'
-                  % (run.var('joined', 'TOTLINES'), run.var('joined', 'DOCLINE'))),
-            Check('W5/content', got == want, disk_diff(got, want)),
-        ]
+        tag = getattr(self, 'TAG', self.name.split('-')[0])
+        checks = []
+        for variant, run in sorted(runs.items()):
+            want_lines = self.WANT[variant]
+            got = run.session.extract(run.dsk, 'DOC.TXT')
+            want = crlf(want_lines)
+            tot = run.var('joined', 'TOTLINES')
+            checks.append(Check('%s/%s/totlines' % (tag, variant),
+                                tot == len(want_lines),
+                                'TOTLINES = %s (expected %d)'
+                                % (tot, len(want_lines))))
+            checks.append(Check('%s/%s/content' % (tag, variant), got == want,
+                                disk_diff(got, want)))
+        return checks
 
+
+class W5ReflowEmpty(ReflowJoinCase, Case):
+    name = 'W5-reflow-join'
+    desc = ('WRAP=TXT: BS at column 0 / DEL at the end joins two lines, '
+            'takes what fits of the second and never pulls the lines below')
+    origin = ('2026-10-16, a tester on S2ED v0.7: in AUTOEXEC.BAT, BS on '
+              '"CD \\DEV" under an empty line also took "S2ED TEST.TXT". '
+              'REFLOW ran REWRAP to the end of the document, and a file has '
+              'no soft line breaks: the "paragraph" was lines broken on '
+              'purpose')
+    cfg = UNDO_CFG
 
 
 # --- Q7  ONE QUESTION TO QUIT WITH UNSAVED CHANGES ---------------------
@@ -9293,6 +9426,60 @@ class X3Rollover(Case):
         return checks
 
 
+class X5RolloverQueued(Case):
+    name = 'X5-rollover-queued'
+    desc = ('LEFT at column 0 of the top row with UP queued behind it: the '
+            'cursor lands inside the line it ends on')
+    origin = ('2026-10-16 review: the rollover set CURX to the end of the line '
+              'above and then moved up through EDMOVROW, which on the top row '
+              'also takes the queued UPs (KEYRUN) -- the column was never '
+              'clamped to the line it finally reached, and typing there padded '
+              'it with spaces')
+    LINES = ['LINE %02d' % i for i in range(15)] + ['AB', 'X' * 60] + \
+        ['CURSOR %02d' % i for i in range(30)]
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.press('DOWN', repeat=40)          # line 40 on the bottom row
+        t.press('UP', repeat=23)            # line 17 on row 0
+        t.wait(0.5)
+        t.snap('top')
+        # LEFT and UP in the same keyboard scan: the ISR queues LEFT, then UP
+        row, lbit = KEY['LEFT']
+        _, ubit = KEY['UP']
+        t.at('keymatrixdown %d 0x%02X' % (row, lbit | ubit))
+        t.wait(0.1)
+        t.at('keymatrixup %d 0x%02X' % (row, lbit | ubit))
+        t.wait(1.0)
+        t.snap('moved')
+        t.press('Z')
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        want_lines = list(self.LINES)
+        want_lines[15] = 'ABz'
+        want = crlf(want_lines)
+        return [
+            Check('X5/setup', run.var('top', 'DOCLINE') == 17 and
+                  run.var('top', 'CURY') == 0,
+                  'DOCLINE %s, CURY %s before the keys (want 17, 0)'
+                  % (run.var('top', 'DOCLINE'), run.var('top', 'CURY'))),
+            Check('X5/landed', run.var('moved', 'DOCLINE') == 15 and
+                  run.var('moved', 'CURX') == 2,
+                  'DOCLINE %s, CURX %s after LEFT + UP (want 15, 2)'
+                  % (run.var('moved', 'DOCLINE'), run.var('moved', 'CURX'))),
+            Check('X5/content', got == want, disk_diff(got, want)),
+        ]
+
+
 class X4FunctionKeys(Case):
     name = 'X4-function-keys'
     desc = ('F3 / Shift+F3 find next / previous in every profile (F3 opens '
@@ -9384,6 +9571,7 @@ CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G
          Q4SettingsBorders(), Q5SettingsShadow(), Q6VdpWaitJiffy(), Q7QuitSave(),
          V1ViLeader(), V2WrapSelRoom(), V3InsDelimRoom(), V4ViColonBig(), W1TabRun(), W2SettingsFocus(), W3RewrapSettings(), W4RewrapMenu(), W5ReflowEmpty(),
          X1ViLineBreak(), X2CuaLineBreak(), X3Rollover(), X4FunctionKeys(),
+         X5RolloverQueued(),
          Z1CtrlStop(),
          B2Font(), B3Rom(), B4CfgStream(), B5ShippedDisk(), B6ManualJp(), B6ManualF1xv(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
