@@ -37,6 +37,8 @@ Improved
 - S2ED scroll: empty rows past the end of the file skip
   VRAM colour table dumps when their colours match the
   editor background.
+- S2ED: dialogs and menus open with a single screen
+  update instead of two.
 
 Changed
 - TXT mode: BS at column 0 or DEL at the end of a line
@@ -55,8 +57,9 @@ Fixed
   deletes subsequent lines if the joined start line fails.
 - Mapper line ceiling calculation on 4 MB mappers no longer
   wraps at 16 bits.
-- Insert (EDINSCHR/EDINSRUN), duplicate line (Ctrl+D), and
-  replace actions check mapper write failure on memory full.
+- With the memory full, typing, pasting, Ctrl+D and
+  Replace no longer move the cursor or mark the document
+  modified when the line could not be stored.
 - Backward search (Shift+F3 / Ctrl+R) now wraps correctly
   when a single match exists in the document.
 - Markup styling (Ctrl+B / Ctrl+I) marks document modified
@@ -78,6 +81,10 @@ Fixed
   the margin.
 - A line longer than the screen kept the bold or colour of
   its markup after MARKUP was set to OFF.
+
+Other
+- The unused MSX-DOS 1 file layer is gone (the editors
+  already required MSX-DOS 2 or Nextor).
 
 
  -------- v0.7 (2026-10-15)
