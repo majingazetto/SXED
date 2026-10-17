@@ -22,9 +22,23 @@ Improved
   when a line is painted): twice the lines per mapper
   segment (S6ED 202, S2ED / S61ED 264) and twice the undo
   steps (about 45 on S6ED, 56 on S2ED / S61ED).
-- TPA headroom increased (+163 B free across all targets)
-  by pruning unused DOS 1 FCB layer, and S2ED avoids
-  redundant VRAM dumps on opening dialogs and menus.
+- Memory headroom increased substantially across all targets:
+  S2ED reaches 1,280 B free in TPA (+512 B) and 564 B in
+  FTRSEG (+113 B); S6ED / S61ED reach over 2,400 B free in
+  TPA (+451 B) and over 2,640 B in FTRSEG (+322 B).
+  Vestigial attribute clears and 512-byte buffer copies are
+  pruned from edits, joins and undo, undo pack/unpack is
+  unified, and CFG and menu shortcut dispatches use compact
+  lookup tables.
+- File browser: TAB key switches focus instantly (~4 ms vs
+  ~40 ms) by updating only the active row (S2ED) or the
+  buttons and slider (S6ED / S61ED) instead of blitting the
+  entire grid or dialog.
+- S2ED scroll: empty rows past the end of the file skip
+  VRAM colour table dumps when their colours match the
+  editor background.
+- Document reset and open: Page 2 workspace clears with a
+  fast block transfer, saving ~23 ms.
 
 Changed
 - TXT mode: BS at column 0 or DEL at the end of a line
