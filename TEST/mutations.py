@@ -2895,13 +2895,11 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'file': 'BUFFER.Z8A',
         'old': """DIRBANK         PUSH    HL
                 LD      A, (DIRSEG)
-                LD      (TXSEG), A
-                CALL    PUTP2
+                CALL    RECBANK
                 POP     HL
                 RET""",
         'new': """DIRBANK         LD      A, (DIRSEG)
-                LD      (TXSEG), A
-                CALL    PUTP2
+                CALL    RECBANK
                 RET""",
         'filter': 'G9',
         'expect_any': ['G9/round-trip', 'G9-directory'],

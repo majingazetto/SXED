@@ -335,8 +335,7 @@ LOADDOC         XOR     A
 
 .ROLLBK         LD      A, (FILEHAND)
                 CALL    DSKCLOSE
-                CALL    SEGTRIM         ; FREE ANY ALLOCATED MAPPER SEGMENTS
-                CALL    BUFRESET        ; RESET BUFFER TO 1 CLEAN EMPTY LINE
+                CALL    BUFRESET        ; RESET BUFFER TO 1 CLEAN EMPTY LINE (CALLS SEGTRIM)
                 XOR     A
                 LD      (FILENAME), A   ; PROTECT DISK FILE AGAINST OVERWRITE
                 RET
@@ -355,15 +354,7 @@ LOADDOC         XOR     A
                 JR      C, .OOMNL
 .CLSFIL         LD      A, (FILEHAND)
                 CALL    DSKCLOSE
-                
-                LD      HL, 0
-                LD      (TOPLINE), HL
-                LD      (DOCLINE), HL
-                XOR     A
-                LD      (CURX), A
-                LD      (CURY), A
-                LD      (LEFTCOL), A
-                AND     A               ; CY = 0: SUCCESSFUL LOAD
+                OR      A               ; CY = 0: SUCCESSFUL LOAD (POS/SCROLL ALREADY 0 VIA BUFRESET)
                 RET
 
 ; - FNAMSET ----------------------------

@@ -28,7 +28,7 @@ SEGCOMP         PUSH    IX
 
                 ; DISPLAY "Compacting..." ON STATUS BAR
                 LD      HL, .STRCMP
-                CALL    .SETMSG
+                CALL    SETMSG
                 CALL    DRWSTAT
 
                 ; DETERMINE HIGH-WATER BOUND FOR SCAN
@@ -243,14 +243,5 @@ SEGCOMP         PUSH    IX
                 POP     IX
                 OR      A               ; CY = 0: SUCCESS
                 RET
-
-.SETMSG         LD      DE, STATMSG
-.SETMLP         LD      A, (HL)
-                LD      (DE), A
-                OR      A
-                RET     Z
-                INC     HL
-                INC     DE
-                JR      .SETMLP
 
 .STRCMP         DEFM    "Compacting...", 0

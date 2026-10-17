@@ -207,8 +207,7 @@ DIRWRITE        PUSH    AF
 
 DIRBANK         PUSH    HL
                 LD      A, (DIRSEG)
-                LD      (TXSEG), A
-                CALL    PUTP2
+                CALL    RECBANK
                 POP     HL
                 RET
 
