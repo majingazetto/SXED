@@ -303,7 +303,7 @@ DOBRW           XOR     A
 .SETFOC         LD      (BRWFOC), A
                 LD      A, (BRWSEL)     ; THE SELECTION WEARS THE FOCUS TOO
                 CALL    .SLOT
-                CALL    .DUMPG
+                CALL    .DUMPSL
                 ; UPDATE FIELD CARET / COLOR
                 CALL    .FIELD
                 LD      A, BRWFLDR
@@ -735,6 +735,19 @@ DOBRW           XOR     A
                 INC     A
                 DJNZ    .DGPLP
                 RET
+
+                ; .DUMPSL: DUMP ONLY THE ROW OF (BRWSEL) IF VISIBLE ON SCREEN
+.DUMPSL         LD      A, (BRWSEL)
+                CALL    .ROWOF          ; B = GRID ROW
+                LD      A, (BRWTOP)
+                LD      E, A
+                LD      A, B
+                SUB     E
+                RET     C
+                CP      BRWROWS
+                RET     NC
+                ADD     A, BRWRLST
+                JP      WDUMPR
 
                 ; .PAINT: EVERYTHING BELOW THE TITLE BAR
 .PAINT          ; 1. SEPARATOR LINE ON ROW 15: SCANLINE 0 OF CELLS 2..29 = #FF

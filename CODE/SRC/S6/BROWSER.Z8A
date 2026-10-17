@@ -290,7 +290,10 @@ DOBRW           XOR     A
                 CALL    .BTNS
                 LD      A, (BRWSEL)     ; THE SELECTION WEARS THE FOCUS TOO
                 CALL    .SLOT
-                CALL    WINSHOW
+                CALL    EDBLIT
+                CALL    .BTNUPD
+                LD      A, (BRWSEL)
+                CALL    .SLUPD
                 JP      .KEYLP
 
                 ; --- ACT ON THE SELECTED ENTRY
@@ -914,7 +917,14 @@ DOBRW           XOR     A
                 LD      A, 0
                 JR      NZ, .BTN2S
                 INC     A
-.BTN2S          JP      WINBTS
+.BTN2S          CALL    WINBTS
+                RET
+
+.BTNUPD         LD      HL, 296
+                LD      DE, BRWBTNY - 2
+                LD      BC, 132
+                LD      A, 16
+                JP      WINUPD
 
 .TITOPN         DEFM    "Open  ", 0
 .TITSAV         DEFM    "Save As  ", 0

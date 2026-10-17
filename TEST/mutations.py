@@ -383,9 +383,9 @@ MUTATIONS = [
         'target': 'S2ED',
         'why': "a scroll's exposed row is composed but never flagged, so its colours never reach VRAM",
         'file': 'SCROLL.Z8A',
-        'old': """                CALL    RENDEROW        ; BC PRESERVED
+        'old': """COLRNDR         CALL    RENDEROW        ; BC PRESERVED
                 LD      A, (COLDIRT)""",
-        'new': """                CALL    RENDEROW        ; BC PRESERVED
+        'new': """COLRNDR         CALL    RENDEROW        ; BC PRESERVED
                 XOR     A               ; MUTATION: NEVER FLAGGED""",
         'filter': 'S2-59',
         'expect': ['S2-59/scroll/colour-mirror'],

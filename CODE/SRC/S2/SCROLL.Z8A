@@ -566,9 +566,7 @@ COLDIFF         LD      A, C
 ; - CLOBBERS: AF, DE, HL, IX, IY
 ; -
 
-COLRNDR         LD      A, 1
-                LD      (COLDIRT), A
-                CALL    RENDEROW        ; BC PRESERVED
+COLRNDR         CALL    RENDEROW        ; BC PRESERVED
                 LD      A, (COLDIRT)
 
 

@@ -150,7 +150,8 @@ CLRROW          PUSH    BC
                 INC     HL
                 DJNZ    .CLP
 
-                ; 2. FILL THE COLOR MAP ROW (32 BYTES OF VCOLTXT)
+                ; 2. FILL THE COLOR MAP ROW (32 BYTES OF VCOLTXT), FLAGGING
+                ; COLDIRT ONLY IF A CELL ACTUALLY CHANGED COLOUR
                 POP     BC
                 PUSH    BC
                 LD      L, B
@@ -163,10 +164,19 @@ CLRROW          PUSH    BC
                 LD      DE, COLMAP
                 ADD     HL, DE          ; HL = COLMAP + B * 32
                 LD      B, CELLROW
+                LD      C, 0            ; C = DIRTY COUNT
                 LD      A, (VCOLTXT)
-.COLP           LD      (HL), A
-                INC     HL
+.COLP           CP      (HL)
+                JR      Z, .COLSAM
+                LD      (HL), A
+                INC     C
+.COLSAM         INC     HL
                 DJNZ    .COLP
+                LD      A, C
+                OR      A
+                JR      Z, .NOTDIRT
+                LD      A, 1
+.NOTDIRT        LD      (COLDIRT), A
 
                 LD      A, (RNDNODMP)   ; COMPOSE ONLY: THE SCROLL PUSHES IT
                 OR      A
@@ -187,10 +197,13 @@ CLRROW          PUSH    BC
                 LD      BC, ROWLEN
                 CALL    VDPDUMP
 
-                ; 4. DUMP THE ROW COLORS (COLMAP -> COLEXP -> CTBASE)
+                ; 4. DUMP THE ROW COLORS (COLMAP -> COLEXP -> CTBASE) -- ONLY IF
+                ; COLOURS CHANGED
                 POP     BC
                 PUSH    BC
-                CALL    COLDUMP
+                LD      A, (COLDIRT)
+                OR      A
+                CALL    NZ, COLDUMP
 
 .CLDONE         CALL    TXTBANK
                 POP     BC
