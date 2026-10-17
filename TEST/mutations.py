@@ -957,7 +957,8 @@ MUTATIONS = [
         'new': """.FILL           JP      .NEXT           ; MUTATION: NO PULL
                 LD      HL, (RWLINE)""",
         'filter': 'W5',
-        'expect': ['W5/content'],
+        'expect': ['W5/del/content', 'W5/empty/content',
+                   'W5/partial/content', 'W5/text/content'],
     },
     {
         'name': 'reflow-first-empty',
@@ -969,7 +970,7 @@ MUTATIONS = [
         'new': """                LD      A, 1            ; MUTATION: FIRST LINE NOT SPECIAL
                 LD      (RWSTOP), A""",
         'filter': 'W5',
-        'expect': ['W5/content'],
+        'expect': ['W5/empty/content'],
     },
     {
         'name': 'rewrap-ask',
