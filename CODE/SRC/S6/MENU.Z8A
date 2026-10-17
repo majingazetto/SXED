@@ -63,13 +63,7 @@ DOMNU           LD      A, (MNUID)
                 JP      Z, .F1          ; IT GOES BACK TO FILE
 
                 ; DISPATCH ACCELERATORS FOR ACTIVE (MNUID)
-                LD      C, A            ; C = KEY PRESSED
-                LD      A, (MNUID)
-                OR      A
-                JP      Z, .ACC0
-                DEC     A
-                JP      Z, .ACC1
-                JP      .ACC2
+                JR      .ACCEL
 
 .RIGHT          LD      A, (MNUID)
                 INC     A
@@ -88,118 +82,38 @@ DOMNU           LD      A, (MNUID)
 .F1             XOR     A
                 JP      MNUSWCH
 
-                ; ACCELERATORS MENU 0 (FILE)
-.ACC0           LD      A, C
-                CP      'n'
-                JR      Z, .A0N
-                CP      'N'
-                JR      Z, .A0N
-                CP      'o'
-                JR      Z, .A0O
-                CP      'O'
-                JR      Z, .A0O
-                CP      's'
-                JR      Z, .A0S
-                CP      'S'
-                JR      Z, .A0S
-                CP      'a'
-                JR      Z, .A0A
-                CP      'A'
-                JR      Z, .A0A
-                CP      'q'
-                JR      Z, .A0Q
-                CP      'Q'
-                JR      Z, .A0Q
-                JP      .KEYLP
-
-.A0N            XOR     A               ; ITEM 0 (NEW)
-                JP      .ACCOK
-.A0O            LD      A, 1            ; ITEM 1 (OPEN)
-                JP      .ACCOK
-.A0S            LD      A, 2            ; ITEM 2 (SAVE)
-                JP      .ACCOK
-.A0A            LD      A, 3            ; ITEM 3 (SAVE AS)
-                JP      .ACCOK
-.A0Q            LD      A, 5            ; ITEM 5 (QUIT)
-                JP      .ACCOK
-
-                ; ACCELERATORS MENU 1 (EDIT)
-.ACC1           LD      A, C
-                CP      'x'
-                JR      Z, .A1X
-                CP      'X'
-                JR      Z, .A1X
-                CP      'c'
-                JR      Z, .A1C
-                CP      'C'
-                JR      Z, .A1C
-                CP      'v'
-                JR      Z, .A1V
-                CP      'V'
-                JR      Z, .A1V
-                CP      'y'
-                JR      Z, .A1Y
-                CP      'Y'
-                JR      Z, .A1Y
-                CP      'a'
-                JR      Z, .A1A
-                CP      'A'
-                JR      Z, .A1A
-                CP      'r'
-                JR      Z, .A1D
-                CP      'R'
-                JR      Z, .A1D
-                CP      'g'
-                JR      Z, .A1G
-                CP      'G'
-                JR      Z, .A1G
-                CP      'f'
-                JR      Z, .A1F
-                CP      'F'
-                JR      Z, .A1F
-                JP      .KEYLP
-
-.A1X            XOR     A               ; ITEM 0 (CUT)
-                JP      .ACCOK
-.A1C            LD      A, 1            ; ITEM 1 (COPY)
-                JP      .ACCOK
-.A1V            LD      A, 2            ; ITEM 2 (PASTE)
-                JP      .ACCOK
-.A1Y            LD      A, 3            ; ITEM 3 (DEL LINE)
-                JP      .ACCOK
-.A1A            LD      A, 5            ; ITEM 5 (SELECT ALL)
-                JP      .ACCOK
-.A1D            LD      A, 6            ; ITEM 6 (DESELECT)
-                JP      .ACCOK
-.A1G            LD      A, 8            ; ITEM 8 (GO TO LINE)
-                JP      .ACCOK
-.A1F            LD      A, 9            ; ITEM 9 (FIND)
-                JP      .ACCOK
-
-                ; ACCELERATORS MENU 2 (HELP)
-.ACC2           LD      A, C
-                CP      's'
-                JR      Z, .A2S
-                CP      'S'
-                JR      Z, .A2S
-                CP      'h'
-                JR      Z, .A2H
-                CP      'H'
-                JR      Z, .A2H
-                CP      'a'
-                JR      Z, .A2A
-                CP      'A'
-                JR      Z, .A2A
-                JP      .KEYLP
-
-.A2S            XOR     A               ; ITEM 0 (SETTINGS)
-                JR      .ACCOK
-.A2H            LD      A, 1            ; ITEM 1 (HELP)
-                JR      .ACCOK
-.A2A            LD      A, 3            ; ITEM 3 (ABOUT)
-                JR      .ACCOK
-
-.ACCOK          LD      (MNUSEL), A
+                ; ACCELERATOR: THE ACTIVE MENU'S [KEY, ITEM] TABLE, CASE
+                ; FOLDED, TERMINATED BY #00
+.ACCEL          CP      'a'
+                JR      C, .ACCUP
+                CP      'z' + 1
+                JR      NC, .ACCUP
+                SUB     #20             ; FOLD TO UPPERCASE
+.ACCUP          LD      C, A            ; C = KEY
+                LD      A, (MNUID)
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A            ; A = MNUID * 16
+                ADD     A, 12           ; ACCL POINTER FIELD
+                LD      E, A
+                LD      D, 0
+                LD      HL, DOMNU.MNUTBL
+                ADD     HL, DE
+                LD      A, (HL)
+                INC     HL
+                LD      H, (HL)
+                LD      L, A            ; HL = ACCELERATOR TABLE
+.ACCLP          LD      A, (HL)
+                OR      A
+                JP      Z, .KEYLP       ; END OF TABLE: KEY IGNORED
+                INC     HL
+                CP      C
+                JR      Z, .ACCHIT
+                INC     HL
+                JR      .ACCLP
+.ACCHIT         LD      A, (HL)
+                LD      (MNUSEL), A
                 JP      .ACCEPT
 
 .DOWN           LD      A, (MNUSEL)
@@ -264,23 +178,25 @@ DOMNU           LD      A, (MNUID)
                 DEFW    58, 144, 52
                 DEFB    6, 0
                 DEFW    .YTBL0, .STBL0
-                DEFW    0, 0
+                DEFW    .ACC0, 0
 
                 ; MENU 1: EDIT
                 DEFW    94, 144, 82
                 DEFB    10, 0
                 DEFW    .YTBL1, .STBL1
-                DEFW    0, 0
+                DEFW    .ACC1, 0
 
                 ; MENU 2: HELP
                 DEFW    130, 128, 36
                 DEFB    4, 0
                 DEFW    .YTBL2, .STBL2
-                DEFW    0, 0
+                DEFW    .ACC2, 0
 
 ; --- MENU 0 (FILE) ---
 .YTBL0          DEFB    #03, #0B, #13, #1B, #25, #29
 .STBL0          DEFW    .S00, .S01, .S02, .S03, 0, .S05
+.ACC0           DEFB    'N', #00, 'O', #01, 'S', #02, 'A', #03
+                DEFB    'Q', #05, #00
 
 .S00            DEFM    "New             Ctrl+N", 0
 .S01            DEFM    "Open...         Ctrl+O", 0
@@ -293,6 +209,9 @@ DOMNU           LD      A, (MNUID)
                 DEFB    #3F, #47
 .STBL1          DEFW    .S10, .S11, .S12, .S13, 0, .S15, .S16, 0
                 DEFW    .S18, .S19
+.ACC1           DEFB    'X', #00, 'C', #01, 'V', #02, 'Y', #03
+                DEFB    'A', #05, 'R', #06, 'G', #08, 'F', #09
+                DEFB    #00
 
 .S10            DEFM    "Cut             Ctrl+X", 0
 .S11            DEFM    "Copy            Ctrl+C", 0
@@ -306,6 +225,7 @@ DOMNU           LD      A, (MNUID)
 ; --- MENU 2 (HELP) ---
 .YTBL2          DEFB    #03, #0B, #15, #19
 .STBL2          DEFW    .S20, .S21, 0, .S23
+.ACC2           DEFB    'S', #00, 'H', #01, 'A', #03, #00
 
 .S20            DEFM    "Settings...", 0
 .S21            DEFM    "Help...", 0

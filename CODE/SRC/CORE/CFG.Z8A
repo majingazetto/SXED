@@ -125,200 +125,69 @@ PRSLINE         LD      A, (HL)
 .NEXTCH         INC     HL
                 JR      PRSLINE
 
-.PARSLN         ; CHECK "PROFILE"
+.PARSLN         PUSH    HL              ; SAVE ORIGINAL LINE START
+                LD      IX, .KEYTBL
+.KEYLP          LD      E, (IX+0)
+                LD      D, (IX+1)
+                LD      A, D
+                OR      E
+                JR      Z, .ENDTBL      ; 0 TERMINATOR: UNRECOGNIZED KEY
+                POP     HL              ; RESTORE LINE START FOR STRPREF
                 PUSH    HL
-                LD      DE, KEYPROF
-                CALL    STRPREF
-                JR      NC, .NOTPRF
-                CALL    CFGVAL          ; "PROFILE = ..." ALSO ACCEPTED
-                JR      NC, .NOTPRF
-                CALL    PARSPRF
-                POP     HL
+                CALL    STRPREF         ; MATCH PREFIX (DE = KEY, HL = LINE)
+                JR      NC, .NEXTKEY
+                CALL    CFGVAL          ; ADVANCE PAST '=' (HL = VALUE)
+                JR      NC, .NEXTKEY
+                ; VALID ASSIGNMENT FOUND: INVOKE HANDLER
+                LD      E, (IX+2)
+                LD      D, (IX+3)
+                CALL    .CALLDE         ; EXECUTE HANDLER IN DE (HL = VALUE)
+                POP     HL              ; CLEAN STACK (RESTORE LINE START)
                 RET
 
-.NOTPRF         POP     HL
-                PUSH    HL
-                LD      DE, KEYWRAP
-                CALL    STRPREF
-                JR      NC, .NOTWRP
-                CALL    CFGVAL
-                JR      NC, .NOTWRP
-                CALL    PARSWRP
-                POP     HL
+.NEXTKEY        INC     IX
+                INC     IX
+                INC     IX
+                INC     IX
+                JR      .KEYLP
+
+.ENDTBL         POP     HL
                 RET
 
-.NOTWRP         POP     HL
-                PUSH    HL
-                LD      DE, KEYTW
-                CALL    STRPREF
-                JR      NC, .NOTTW1
-                CALL    CFGVAL
-                JR      NC, .NOTTW1
-                CALL    PARSTW
-                POP     HL
+.CALLDE         PUSH    DE
                 RET
 
-.NOTTW1         POP     HL
-                PUSH    HL
-                LD      DE, KEYTW2
-                CALL    STRPREF
-                JR      NC, .NOTTW2
-                CALL    CFGVAL
-                JR      NC, .NOTTW2
-                CALL    PARSTW
-                POP     HL
-                RET
-
-.NOTTW2         POP     HL
-                PUSH    HL
-                LD      DE, KEYMKUP
-                CALL    STRPREF
-                JR      NC, .NOTMKP
-                CALL    CFGVAL
-                JR      NC, .NOTMKP
-                CALL    PARSMKP
-                POP     HL
-                RET
-
-.NOTMKP         POP     HL
-                PUSH    HL
-                LD      DE, KEYCLK
-                CALL    STRPREF
-                JR      NC, .NOTCLK
-                CALL    CFGVAL
-                JR      NC, .NOTCLK
-                CALL    PARSCLK
-                POP     HL
-                RET
-
-.NOTCLK         POP     HL
-                PUSH    HL
-                LD      DE, KEYTAB
-                CALL    STRPREF
-                JR      NC, .NOTTAB
-                CALL    CFGVAL
-                JR      NC, .NOTTAB
-                CALL    PARSTAB
-                POP     HL
-                RET
-
-.NOTTAB         POP     HL
-                PUSH    HL
-                LD      DE, KEYEOL
-                CALL    STRPREF
-                JR      NC, .NOTEOL
-                CALL    CFGVAL
-                JR      NC, .NOTEOL
-                CALL    PARSEOL
-                POP     HL
-                RET
-
-.NOTEOL         POP     HL
-                PUSH    HL
-                LD      DE, KEYALN
-                CALL    STRPREF
-                JR      NC, .NOTALN
-                CALL    CFGVAL
-                JR      NC, .NOTALN
-                CALL    PARSALN
-                POP     HL
-                RET
-
-.NOTALN         POP     HL
-                PUSH    HL
-                LD      DE, KEYSHDW
-                CALL    STRPREF
-                JR      NC, .NOTSHD
-                CALL    CFGVAL
-                JR      NC, .NOTSHD
-                CALL    PARSSHD
-                POP     HL
-                RET
-
-.NOTSHD         POP     HL
-                PUSH    HL
-                LD      DE, KEYTHM
-                CALL    STRPREF
-                JR      NC, .NOTTHM
-                CALL    CFGVAL
-                JR      NC, .NOTTHM
-                CALL    PARSTHM
-                POP     HL
-                RET
-
-                IFDEF   S2ED
-                ; NO COLOR_* KEYS ON S2ED. THE TMS9918 PALETTE IS FIXED, SO
-                ; A ROLE IS A CHOICE OF WHICH OF THE 16 COLORS FILLS IT AND
-                ; THAT CHOICE IS THE THEME. THE KEYS USED TO BE PARSED HERE
-                ; AND WRITTEN INTO A PALDATA NO S2 CODE EVER READ -- ACCEPTED
-                ; IN SILENCE AND DISCARDED. PARSCOL, GETNUM, SKPCOM AND THE
-                ; SIX KEY STRINGS ARE EXCLUDED WITH THEM.
-.NOTTHM
-                ELSE
-.NOTTHM         POP     HL
-                PUSH    HL
-                LD      DE, KEYCBG
-                CALL    STRPREF
-                JR      NC, .NOTCBG
-                CALL    CFGVAL
-                JR      NC, .NOTCBG
-                LD      C, 0            ; COLOR 0 = BG
-                CALL    PARSCOL
-                POP     HL
-                RET
-
-.NOTCBG         POP     HL
-                PUSH    HL
-                LD      DE, KEYCTX
-                CALL    STRPREF
-                JR      C, .ISCTX
-                ; TRY ALIAS "COLOR_FG"
-                POP     HL
-                PUSH    HL
-                LD      DE, KEYCFG
-                CALL    STRPREF
-                JR      NC, .NOTCTX
-.ISCTX          CALL    CFGVAL
-                JR      NC, .NOTCTX
-                LD      C, 1            ; COLOR 1 = FG / TEXT
-                CALL    PARSCOL
-                POP     HL
-                RET
-
-.NOTCTX         POP     HL
-                PUSH    HL
-                LD      DE, KEYCUI
-                CALL    STRPREF
-                JR      NC, .NOTCUI
-                CALL    CFGVAL
-                JR      NC, .NOTCUI
-                LD      C, 2            ; COLOR 2 = UI
-                CALL    PARSCOL
-                POP     HL
-                RET
-
-.NOTCUI         POP     HL
-                PUSH    HL
-                LD      DE, KEYCHI
-                CALL    STRPREF
-                JR      C, .ISCHI
-                ; TRY ALIAS "COLOR_HI"
-                POP     HL
-                PUSH    HL
-                LD      DE, KEYCHIS
-                CALL    STRPREF
-                JR      NC, .NOTCHI
-.ISCHI          CALL    CFGVAL
-                JR      NC, .NOTCHI
-                LD      C, 3            ; COLOR 3 = HIGHLIGHT
-                CALL    PARSCOL
-                POP     HL
-                RET
-
+.KEYTBL         DEFW    KEYPROF, PARSPRF
+                DEFW    KEYWRAP, PARSWRP
+                DEFW    KEYTW,   PARSTW
+                DEFW    KEYTW2,  PARSTW
+                DEFW    KEYMKUP, PARSMKP
+                DEFW    KEYCLK,  PARSCLK
+                DEFW    KEYTAB,  PARSTAB
+                DEFW    KEYEOL,  PARSEOL
+                DEFW    KEYALN,  PARSALN
+                DEFW    KEYSHDW, PARSSHD
+                DEFW    KEYTHM,  PARSTHM
+                IFNDEF  S2ED
+                DEFW    KEYCBG,  .PRSCBG
+                DEFW    KEYCTX,  .PRSCTX
+                DEFW    KEYCFG,  .PRSCTX
+                DEFW    KEYCUI,  .PRSCUI
+                DEFW    KEYCHI,  .PRSCHI
+                DEFW    KEYCHIS, .PRSCHI
                 ENDIF
+                DEFW    0               ; END OF TABLE
 
-.NOTCHI         POP     HL
-                RET
+                IFNDEF  S2ED
+.PRSCBG         LD      C, 0
+                JP      PARSCOL
+.PRSCTX         LD      C, 1
+                JP      PARSCOL
+.PRSCUI         LD      C, 2
+                JP      PARSCOL
+.PRSCHI         LD      C, 3
+                JP      PARSCOL
+                ENDIF
 
 
 ; --- STRPREF                   ----------------------------------------
@@ -543,13 +412,6 @@ PARSCLK         LD      A, (HL)
                 RET     C
                 CP      #02
                 RET     NC
-                LD      DE, CLKTBL
-                ADD     A, E
-                LD      E, A
-                ADC     A, D
-                SUB     E
-                LD      D, A
-                LD      A, (DE)
                 LD      (SHOWCLK), A
                 RET
 
@@ -1054,8 +916,6 @@ THMNAMV         DEFW    .TND, .TNA, .TNG, .TNL, .TNM, .TNO
 .TNL            DEFM    "LIGHT", 0
 .TNM            DEFM    "MSX", 0
 .TNO            DEFM    "MONO", 0
-
-CLKTBL          DEFB    #00, #01
 
 TABTBL          DEFB    #FF, #FF, #02, #FF, #04, #FF, #FF, #FF
                 DEFB    #08, #FF
