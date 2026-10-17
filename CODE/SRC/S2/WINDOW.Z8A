@@ -113,11 +113,7 @@ PATADDR         ADD     A, A
 ; - CLOBBERS: ALL
 ; -
 
-WINOPEN         CALL    WINOPN0
-                JP      WDUMP
-
-                ; WINOPN0: ALL OF WINOPEN BUT THE DUMP, FOR A CALLER THAT PAINTS
-                ; ITS CONTENTS AND THEN DUMPS THE WINDOW ONCE (THE BROWSER)
+WINOPEN
 WINOPN0         PUSH    HL              ; TITLE
 
                 ; FLUSH KEYBOARD BUFFER

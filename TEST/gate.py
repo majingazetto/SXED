@@ -6883,13 +6883,15 @@ class U9UndoLineEdits(Case):
         for v in self.variants:
             run = runs[v]
             got = disk_lines(run)
-            edited = run.var('edited', 'UNDOPTR') != 0
+            edited = (run.var('edited', 'UNDOPTR') != 0 and
+                      run.var('edited', 'MODIFIED') == 0xFF)
             checks.append(Check('U9/%s/content' % v,
                                 edited and got == self.LINES,
                                 'recorded, and Ctrl+Z / redo / Ctrl+Z ends on '
                                 'the original' if edited and got == self.LINES
-                                else 'UNDOPTR %s, got %r'
-                                % (run.var('edited', 'UNDOPTR'), got)))
+                                else 'UNDOPTR %s, MODIFIED %s, got %r'
+                                % (run.var('edited', 'UNDOPTR'),
+                                   run.var('edited', 'MODIFIED'), got)))
             where = self.WHERE[v]
             if where:
                 pos = (run.var('undone', 'DOCLINE'), run.var('undone', 'CURX'))
@@ -7250,10 +7252,14 @@ class R2LinewrtOom(Case):
         got = run.session.extract(run.dsk, 'DOC.TXT')
         return [
             Check('R2/alive', run.var('saved', 'SCRRDY') == 0xFF and
-                  run.var('refused', 'TOTLINES') == SEG_FULL,
-                  'SCRRDY %s, TOTLINES %s'
+                  run.var('refused', 'TOTLINES') == SEG_FULL and
+                  run.var('refused', 'CURX') == 0 and
+                  run.var('refused', 'MODIFIED') == 0,
+                  'SCRRDY %s, TOTLINES %s, CURX %s, MODIFIED %s'
                   % (run.var('saved', 'SCRRDY'),
-                     run.var('refused', 'TOTLINES'))),
+                     run.var('refused', 'TOTLINES'),
+                     run.var('refused', 'CURX'),
+                     run.var('refused', 'MODIFIED'))),
             Check('R2/content', got == want, disk_diff(got, want)),
         ]
 
@@ -7392,6 +7398,12 @@ class R5JoinOom(Case):
         t.press('BS')                           # join lines 0 and 1: 64 chars
         t.wait(15.0)
         t.snap('refused')
+        t.press('UP')
+        t.press('RIGHT', mods=['CTRL'])
+        t.press('RIGHT', mods=['SHIFT'], repeat=2)
+        t.press('DEL')                          # multi-line delete: 63 chars
+        t.wait(15.0)
+        t.snap('seldel')
         t.press('S', mods=['CTRL'])
         t.wait(6.0)
         t.snap('saved')
@@ -7408,6 +7420,13 @@ class R5JoinOom(Case):
                   'SCRRDY %s, TOTLINES %s (want %d), UNDOPTR %s (want 0)'
                   % (run.var('saved', 'SCRRDY'), run.var('refused', 'TOTLINES'),
                      SEG_FULL, run.var('refused', 'UNDOPTR'))),
+            Check('R5/seldel', run.var('seldel', 'TOTLINES') == SEG_FULL and
+                  run.var('seldel', 'UNDOPTR') == 0 and
+                  run.var('seldel', 'MODIFIED') == 0,
+                  'TOTLINES %s (want %d), UNDOPTR %s (want 0), MODIFIED %s'
+                  % (run.var('seldel', 'TOTLINES'), SEG_FULL,
+                     run.var('seldel', 'UNDOPTR'),
+                     run.var('seldel', 'MODIFIED'))),
             Check('R5/content', got == want, disk_diff(got, want)),
         ]
 
@@ -7646,7 +7665,7 @@ class P3ReplaceAllUndo(Case):
     variants = ('few', 'many')
 
     def _lines(self, variant):
-        n = 20 if variant == 'few' else 50     # UNDOGMAX is 44 on S6ED
+        n = 25 if variant == 'few' else 50     # UNDOGMAX is 44 on S6ED
         return ['L%02d FOO AND FOO' % i for i in range(n)]
 
     def fixture(self, ctx, variant=None):
@@ -7864,16 +7883,21 @@ class Q3FindAdjacent(Case):
         t.press('L', mods=['CTRL'])
         t.wait(1.0)
         t.snap('second')
+        t.press('DEL')                          # delete 2nd AB -> only one AB left at col 1
+        t.press('LEFT', repeat=2)               # CURX = 1, SELACT = 0
+        t.press('R', mods=['CTRL'])             # wraps backward and finds single AB at col 1
+        t.wait(1.0)
+        t.snap('bwd_wrap')
         return t
 
     def verify(self, ctx, runs):
         run = one(runs)
         cols = []
-        for label in ('first', 'second'):
+        for label in ('first', 'second', 'bwd_wrap'):
             sel = run.snaps.get(label, {}).get('SELSTRL')
-            cols.append(sel[2] if sel else None)
-        return [Check('Q3/adjacent', cols == [1, 3],
-                      'match starts %s (want [1, 3])' % cols)]
+            cols.append(sel[2] if sel and run.var(label, 'SELACT') == 1 else None)
+        return [Check('Q3/adjacent', cols == [1, 3, 1],
+                      'match starts %s (want [1, 3, 1])' % cols)]
 
 
 class Q4SettingsBorders(Case):

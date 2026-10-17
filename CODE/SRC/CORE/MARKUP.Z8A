@@ -685,6 +685,9 @@ WRAPSEL         PUSH    AF              ; SAVE STYLE (1=BOLD, 2=ITALIC)
 .WRPFIN         ; COMMIT WORKBUF AND CLEAR SELECTION
                 LD      HL, (SELSTRL)
                 CALL    LINEWRT
+                RET     C               ; OOM: LINE UNCHANGED IN MAPPER
+                LD      A, #FF
+                LD      (MODIFIED), A
                 CALL    ACTDSEL
                 JP      REDRAW
 

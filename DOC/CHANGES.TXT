@@ -22,6 +22,9 @@ Improved
   when a line is painted): twice the lines per mapper
   segment (S6ED 202, S2ED / S61ED 264) and twice the undo
   steps (about 45 on S6ED, 56 on S2ED / S61ED).
+- TPA headroom increased (+163 B free across all targets)
+  by pruning unused DOS 1 FCB layer, and S2ED avoids
+  redundant VRAM dumps on opening dialogs and menus.
 
 Changed
 - TXT mode: BS at column 0 or DEL at the end of a line
@@ -36,6 +39,18 @@ Changed
   [CLIPBOARD FULL], and Ctrl+X leaves it in the document.
 
 Fixed
+- Multi-line delete (DEL) on a full mapper segment no longer
+  deletes subsequent lines if the joined start line fails.
+- Mapper line ceiling calculation on 4 MB mappers no longer
+  wraps at 16 bits.
+- Insert (EDINSCHR/EDINSRUN), duplicate line (Ctrl+D), and
+  replace actions check mapper write failure on memory full.
+- Backward search (Shift+F3 / Ctrl+R) now wraps correctly
+  when a single match exists in the document.
+- Markup styling (Ctrl+B / Ctrl+I) marks document modified
+  when delimiters are applied to a selection.
+- Command line parameter parsing clamps buffer bounds to
+  prevent memory overflows.
 - Ctrl+X on a selection larger than the clipboard deleted
   all of it but kept only the first part: the rest was lost.
 - Ctrl+Z after a BS / DEL join in TXT mode did nothing (the

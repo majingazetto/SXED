@@ -11,6 +11,72 @@ import shutil
 
 MUTATIONS = [
     {
+        'name': 'r5-seldel-oom',
+        'why': 'ACTDLS ignores LINEWRT\'s carry on the combined start line and '
+               'deletes the remaining selected lines anyway, losing their tail',
+        'file': 'ACTION.Z8A',
+        'old': """.WRTSTR         ; WRITE UPDATED START LINE TO MAPPER
+                LD      HL, (SELSTRL)
+                CALL    LINEWRT
+                JR      NC, .DELINIT""",
+        'new': """.WRTSTR         ; WRITE UPDATED START LINE TO MAPPER
+                LD      HL, (SELSTRL)
+                CALL    LINEWRT
+                JR      .DELINIT        ; MUTATION: DELETE TAIL EVEN ON OOM""",
+        'filter': 'R5',
+        'expect': ['R5/seldel', 'R5/content'],
+    },
+    {
+        'name': 'r2-inschr-oom',
+        'why': 'EDINSCHR ignores LINEWRT\'s carry: on OOM it advances CURX and '
+               'marks the document modified even though nothing was written',
+        'file': 'EDIT.Z8A',
+        'old': """                ; WRITE LINE TO MAPPER
+                LD      HL, (DOCLINE)
+                CALL    LINEWRT
+                RET     C               ; OOM: LINE UNCHANGED IN MAPPER""",
+        'new': """                ; WRITE LINE TO MAPPER
+                LD      HL, (DOCLINE)
+                CALL    LINEWRT
+                NOP                     ; MUTATION: OOM IGNORED""",
+        'filter': 'R2',
+        'expect': ['R2/alive'],
+    },
+    {
+        'name': 'q3-bwd-single',
+        'why': 'SRCHBWD.BLSTCHK rejects a wrapped match at the column Step 1 '
+               'stopped before, so a single match never wraps onto itself',
+        'file': 'SEARCH.Z8A',
+        'old': """                CP      C
+                JR      Z, .BMATCUR
+                JR      C, .BMATCUR     ; MATCH IS AT/AFTER IT: WRAP MATCH OK""",
+        'new': """                CP      C
+                NOP                     ; MUTATION: EQUAL COLUMN REJECTED
+                NOP
+                JR      C, .BMATCUR     ; MATCH IS AT/AFTER IT: WRAP MATCH OK""",
+        'filter': 'Q3',
+        'expect': ['Q3/adjacent'],
+    },
+    {
+        'name': 'u9-wrapsel-mod',
+        'why': 'WRAPSEL commits the wrapped line without setting MODIFIED',
+        'file': 'MARKUP.Z8A',
+        'old': """.WRPFIN         ; COMMIT WORKBUF AND CLEAR SELECTION
+                LD      HL, (SELSTRL)
+                CALL    LINEWRT
+                RET     C               ; OOM: LINE UNCHANGED IN MAPPER
+                LD      A, #FF
+                LD      (MODIFIED), A""",
+        'new': """.WRPFIN         ; COMMIT WORKBUF AND CLEAR SELECTION
+                LD      HL, (SELSTRL)
+                CALL    LINEWRT
+                RET     C               ; OOM: LINE UNCHANGED IN MAPPER
+                XOR     A               ; MUTATION: MODIFIED LEFT CLEAR
+                LD      (MODIFIED), A""",
+        'filter': 'U9',
+        'expect': ['U9/wrapsel/content'],
+    },
+    {
         'name': 'r1-dir-pass',
         'why': 'the compaction slides records but its directory pass updates no entry',
         'file': 'COMPACT.Z8A',

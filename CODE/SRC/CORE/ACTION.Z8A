@@ -870,6 +870,7 @@ ACTDUPLN        CALL    UNDOCLS
                 ; WRITE IT TO THE NEW DUPLICATED LINE (DOCLINE)
                 LD      HL, (DOCLINE)
                 CALL    LINEWRT
+                JR      C, .DUPRLBK
 
                 POP     AF              ; RESTORE SAVED CURX
                 LD      (CURX), A
@@ -879,6 +880,18 @@ ACTDUPLN        CALL    UNDOCLS
                 LD      (MODIFIED), A
                 JP      DRWSTAT
 
+.DUPRLBK        LD      HL, (DOCLINE)
+                CALL    LINEDEL
+                LD      HL, (TOTLINES)
+                DEC     HL
+                LD      (TOTLINES), HL
+                LD      HL, (DOCLINE)
+                DEC     HL
+                LD      (DOCLINE), HL
+                CALL    UNDOINIT
+                CALL    SHOWLN
+                CALL    REDRAW
+                CALL    DRWSTAT
 .DUPOOM         POP     AF
                 LD      (CURX), A
                 RET
@@ -3596,8 +3609,16 @@ ACTDLS          LD      A, (SELACT)
 .WRTSTR         ; WRITE UPDATED START LINE TO MAPPER
                 LD      HL, (SELSTRL)
                 CALL    LINEWRT
+                JR      NC, .DELINIT
+                ; OOM: COMBINED LINE DID NOT FIT -- KEEP ALL LINES INTACT
+                CALL    UNDOINIT
+                XOR     A
+                LD      (SELACT), A
+                LD      (SELDRAWN), A
+                CALL    REDRAW
+                JP      DRWSTAT
 
-                ; 4. DELETE INTERMEDIATE LINES AND END LINE
+.DELINIT        ; 4. DELETE INTERMEDIATE LINES AND END LINE
                 LD      HL, (SELENDL)
                 LD      DE, (SELSTRL)
                 OR      A

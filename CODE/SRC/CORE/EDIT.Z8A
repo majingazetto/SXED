@@ -75,6 +75,7 @@ EDINSCHR        PUSH    AF
                 ; WRITE LINE TO MAPPER
                 LD      HL, (DOCLINE)
                 CALL    LINEWRT
+                RET     C               ; OOM: LINE UNCHANGED IN MAPPER
 
                 ; RE-RENDER CURRENT ROW, UNLESS A BATCH EDIT IS RUNNING.
                 ; EDOVRCHR ENTERS HERE TOO: ONE CHARACTER WRITTEN, ONE STEP.
@@ -183,8 +184,12 @@ EDINSRUN        LD      (WBSRC), HL     ; SURVIVES LINEREAD
 
                 LD      HL, (DOCLINE)
                 CALL    LINEWRT
+                JR      NC, .IRWRTOK
+                XOR     A
+                SCF
+                RET
 
-                ; THE CURSOR ADVANCES BY THE WHOLE RUN, CLAMPED THE WAY
+.IRWRTOK        ; THE CURSOR ADVANCES BY THE WHOLE RUN, CLAMPED THE WAY
                 ; EDINSCHR CLAMPS ITS STEP
                 LD      A, (CURX)
                 LD      C, A

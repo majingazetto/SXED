@@ -345,16 +345,23 @@ SEGRESV         CALL    SEGGET          ; 1: DIRECTORY SEGMENT
                 POP     HL
                 INC     HL
                 DJNZ    .RELEASE
-.COUNTED        ; TEXT CEILING = (SEGAVL + 1) * LINEPSEG -- DEFSEG2 JOINS
-                ; THE TEXT POOL WITHOUT BEING CLAIMED
+.COUNTED        ; TEXT CEILING = MIN(MAXLINES, MIN(SEGAVL + 1, MAXSEGS - 1) * LINEPSEG)
+                ; DEFSEG2 JOINS THE TEXT POOL WITHOUT BEING CLAIMED
                 LD      A, (SEGAVL)
                 INC     A
-                LD      B, A
+                CP      MAXSEGS - 1
+                JR      C, .SEGCAP
+                LD      A, MAXSEGS - 1
+.SEGCAP         LD      B, A
                 LD      HL, 0
                 LD      DE, LINEPSEG
 .CEIL           ADD     HL, DE
                 DJNZ    .CEIL
-                LD      (SEGLNS), HL
+                LD      DE, MAXLINES
+                CALL    CMPHLDE
+                JR      C, .LNSOK
+                EX      DE, HL
+.LNSOK          LD      (SEGLNS), HL
 
                 ; IF /V IS NOT SET, NORMAL BOOT IS 100% QUIET AND INSTANT
                 LD      A, (SWTVERB)

@@ -11,11 +11,7 @@
 ; - CY = 1 ERROR
 ; - 
 
-BDOS            PUSH    AF
-                XOR     A
-                LD      (UNAPISET),A
-                POP     AF
-                CALL    DOS
+BDOS            CALL    DOS
                 AND     A
                 RET     Z
                 SCF
@@ -138,193 +134,6 @@ DSKABTH         CP      ERRABT
 ; --- FILE (OPEN / READ / WRITE)        ----------------------------------------
 
 
-                ; -
-                ; - DOS 1
-                ; -
-
-
-; - BUILDFCB ---------
-; - CLEAN FCB
-; - AND COPY FILENAME
-; - HL: FILENAME
-
-BUILDFCB        PUSH    HL 
-                LD      HL,FCB
-                LD      DE,FCB + 1
-                LD      BC,36
-                LD      (HL),0
-                LDIR
-                LD     HL,FCB + FFILNAME
-                LD     DE,FCB + FFILNAME + 1
-                LD     BC,10
-                LD     (HL),' '
-                LDIR
-                POP     HL
-
-                LD      DE,FCB + FFILNAME
-
-.NAME           LD      A,(HL)
-                INC     HL
-                AND     A
-                JR      Z,.END
-                CP      '.'
-                JR      Z,.PEXT
-                LD      (DE),A
-                INC     DE
-                JR      .NAME
-
-.PEXT           LD      DE,FCB + FFILEXT
-.EXT            LD      A,(HL)
-                INC     HL
-                AND     A
-                JR      Z,.END
-                LD      (DE),A
-                INC     DE
-                JR      .EXT
-
-
-.END            RET
-
-
-; - FOPEN ------------
-; - FILE FCB OPEN
-; - OUTPUT: 
-; -     DEHL: FILE SIZE
-; - 
-
-FOPEN           LD      DE,FCB
-                LD      C,_FOPEN
-                CALL    BDOS
-                RET     C
-                LD      IX,FCB
-                LD      A,1
-                LD      (IX + 14),A
-                XOR     A
-                LD      (IX + 15),A
-                LD      (IX + 33),A
-                LD      (IX + 34),A
-                LD      (IX + 35),A
-                LD      (IX + 36),A
-                LD      HL,(FCB + FFILSIZ)
-                LD      DE,(FCB + FFILSIZ + 2)
-                RET        
-
-
-; - FMAKE ------------
-; - FILE MAKE
-; - CREATES FCB FILE
-; - 
-
-
-FMAKE           LD      DE,FCB
-                LD      C,_FMAKE
-                CALL    BDOS
-                RET     C
-                LD      IX,FCB
-                LD      A,1
-                LD      (IX + 14),A
-                XOR     A
-                LD      (IX + 15),A
-                LD      (IX + 33),A
-                LD      (IX + 34),A
-                LD      (IX + 35),A
-                LD      (IX + 36),A
-                RET     
-
-
-; - RDBLK ------------
-; - READ FCB BLOCK BYTES
-; - TO DMA
-; - HL: BYTES TO READ
-; - 
-
-
-RDBLK           LD      DE,FCB
-                LD      C,_RDBLK
-                JP      BDOS
-
-
-; - WRBLK ------------
-; - WRITE FCB BLOCK BYTES
-; - FROM DMA
-; - HL: BYTES TO WRITE
-; - 
-
-
-WRBLK           LD      DE,FCB
-                LD      C,_WRBLK
-                JP      BDOS
-
-
-; - FCLOSE -----------
-; - FCB CLOSE FILE
-; - 
-
-FCLOSE          LD      DE,FCB
-                LD      C,_FCLOSE
-                JP      BDOS
-
-
-; - SETDMA -----------
-; - DE: DMA
-; -
-
-SETDMA          LD      C,_SETDTA
-                JP      BDOS
-
-
-; - GETREM -----------
-; - GET REMAINING SIZE
-; - OPENED FCB
-; - OUTPUT:
-; -     DE:HL REM. SIZE
-; - 
-
-GETREM          LD      HL,(FCB + FFILSIZ)
-                LD      DE,(FCB + FRNDREC)
-                AND     A
-                SBC     HL,DE
-                EX      DE,HL
-                LD      HL,(FCB + FFILSIZ + 2)
-                LD      BC,(FCB + FRNDREC + 2)
-                SBC     HL,BC
-                EX      DE,HL
-                RET
-
-
-; - GETMAXSZ ------------
-; - HL: SIZE TO READ
-; - OUTPUT: MAX SIZE
-; - 
-
-GETMAXSZ        PUSH    HL
-                CALL    GETREM
-.GEN            LD      A,D
-                OR      E
-                EX      DE,HL
-                POP     HL
-                RET     NZ                      ; > 64K
-                
-                ; HL SIZE
-                ; DE LOW CURRENT
-
-                EX      DE,HL
-
-                ; HL CURRENT (LOW)
-                ; DE SIZE
-
-                CALL    CMPHLDE
-                RET     C                       ; SIZE > CURRENT 
-                                                ; RETURN CURRENT
-                EX      DE,HL                   ; ELSE RETURN SIZE                                                        
-                RET
-
-
-                ; -
-                ; - DOS 2
-                ; - 
-
-
 ; - DSEEK ------------
 ; - DOS 2 SEEK 
 ; - B: FILE HANDLE
@@ -336,7 +145,7 @@ DSEEK           XOR     A
                 JP      BDOS
 
 
-; - DOPEN ------------
+; - DOPEN / DSKOPEN --
 ; - DOS 2 OPEN FILE
 ; - HL: FILENAME (ASCIIZ)
 ; - OUTPUT: 
@@ -344,6 +153,7 @@ DSEEK           XOR     A
 ; -     DEHL: FILE SIZE
 ; -
 
+DSKOPEN
 DOPEN           EX      DE,HL
                 XOR     A
                 LD      C,_OPEN
@@ -373,6 +183,7 @@ DOPEN           EX      DE,HL
 ; - B: #F
 ; - 
 
+DSKCLOSE        LD      B,A
 DCLOSE          LD      C,_CLOSE
                 JP      BDOS
 
@@ -384,6 +195,7 @@ DCLOSE          LD      C,_CLOSE
 ; - DE: BUFFER ADDRESS
 ; - 
 
+DSKREAD         LD      B,A
 DREAD           LD      C,_READ
                 JP      BDOS
 
@@ -409,6 +221,8 @@ DWRITE          LD      C,_WRITE
 ; -     CY: 0 = SUCCESS, 1 = ERROR
 ; - 
 
+DSKCREAT        XOR     A
+                LD      (DSKWERR),A     ; NO WRITE TO THIS FILE HAS FAILED YET
 DCREATE         EX      DE,HL
                 XOR     A               ; A = 0: OPEN MODE READ/WRITE
                 LD      B, 0            ; B = 0: NORMAL FILE, OVERWRITE EXISTING (B7=0)
@@ -417,87 +231,6 @@ DCREATE         EX      DE,HL
                 RET     C               ; IF ERROR, RETURN CY=1
                 LD      A,B             ; A = FILE HANDLE
                 RET     
-                
-
-                ; -
-                ; - COMPATIBLE DOS 1 / DOS 2
-                ; - "HIGH" LEVEL ROUTINES
-                ; - 
-
-
-; - DSKCREAT ---------
-; - CREATE FILE
-; - HL: FILENAMEZ
-; - OUTPUT:
-; -     A: FILEHANDLE
-; -
-
-DSKCREAT       XOR     A
-                LD      (DSKWERR),A     ; NO WRITE TO THIS FILE HAS FAILED YET
-                LD      A,(DOS2)
-                AND     A
-                JP      NZ,DCREATE
-
-                ; DOS 1
-
-                CALL    BUILDFCB
-                CALL    FMAKE
-                RET     C
-                LD      A,1 ; FAKE #F
-                RET
-
-
-; - DSKOPEN ----------
-; - OPEN FILE
-; - HL: FILENAME (ASCIIZ)
-; - OUTPUT: 
-; -    A: FILEHANDLE
-; -    DEHL: FILE SIZE
-; - 
-
-DSKOPEN         LD      A,(DOS2)
-                AND     A
-                JP      NZ,DOPEN
-
-                ; DOS 1
-
-                CALL    BUILDFCB
-                CALL    FOPEN
-                RET     C
-                LD      A,1 ; FAKE #F
-                RET
-
-
-; - DSKCLOSE ---------
-; - FCB/#F FILE CLOSE
-; - A: #F
-; -
-
-DSKCLOSE        LD      B,A
-                LD      A,(DOS2)
-                AND     A
-                JP      NZ,DCLOSE
-                JP      FCLOSE
-
-
-; - DSKREAD -----------
-; - A: #F
-; - HL: BYTES TO READ
-; - DE: BUFFER ADDRESS
-; - (FROM LAST POINTER)
-; - OUTPUT:
-; -     HL: BYTES READ
-; - 
-
-DSKREAD         LD      B,A
-                LD      A,(DOS2)
-                AND     A
-                JP      NZ,DREAD
-                PUSH    HL
-                CALL    SETDMA
-                POP     HL
-                CALL    GETMAXSZ
-                JP      RDBLK
 
 
 ; - DSKSEEK -----------
@@ -507,24 +240,11 @@ DSKREAD         LD      B,A
 ; - OUTPUT:
 ; -     CY = 1 ERROR
 ; -
-; - DOS 2 USES _SEEK DIRECTLY. THE DOS 1 PATH WRITES THE FCB RANDOM
-; - RECORD FIELD: FOPEN FIXED THE RECORD SIZE AT 1 BYTE, SO THE RECORD
-; - NUMBER IS THE BYTE OFFSET. DOS 1 NEVER REACHES THIS TODAY (INIT
-; - REJECTS IT IN DOSVER), BUT THE PATH KEEPS DSKREAD'S CONTRACT ALIVE.
 
 DSKSEEK         LD      B,A
-                LD      A,(DOS2)
-                AND     A
-                JR      Z,.DOS1
                 LD      DE,0
                 XOR     A               ; A = 0: ABSOLUTE OFFSET FROM START
                 JP      DSEEK.GEN
-
-.DOS1           LD      (FCB + FRNDREC),HL
-                XOR     A
-                LD      (FCB + FRNDREC + 2),A
-                LD      (FCB + FRNDREC + 3),A
-                RET                     ; CY = 0
 
 
 ; - DSKWRITE -----------
@@ -535,17 +255,10 @@ DSKSEEK         LD      B,A
 ; -
 
 DSKWRITE        LD      B,A
-                LD      A,(DOS2)
-                AND     A
-                JR      Z,.DOS1
                 CALL    DWRITE
                 RET     NC
                 LD      (DSKWERR),A     ; REMEMBERED UNTIL DSKCLSW
                 RET                     ; CY = 1, A = THE DOS ERROR
-.DOS1           PUSH    HL
-                CALL    SETDMA
-                POP     HL
-                JP      WRBLK
 
 
 ; - DSKCLSW ------------
@@ -1071,6 +784,10 @@ EXTPARM         LD      A,(#80)
                 AND     A
                 SCF     
                 RET     Z
+                CP      #7F
+                JR      C, .LENOK
+                LD      A, #7E          ; #81 + #7E = #00FF, NEVER WRITES #0100
+.LENOK
 
                 ; IX COUNTER
 
@@ -1100,7 +817,10 @@ EXTPARM         LD      A,(#80)
                 INC     HL
                 JR      .COUNT
                 
-.ADDPAR         LD      (IX + 0),L
+.ADDPAR         LD      A, C
+                CP      #3F             ; AT MOST 63 TOKENS (1 + 126 <= 128 B)
+                JR      NC, .CNTEND
+                LD      (IX + 0),L
                 LD      (IX + 1),H
                 INC     IX
                 INC     IX

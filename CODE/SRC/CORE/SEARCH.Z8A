@@ -300,14 +300,8 @@ SRCHBWD         LD      A, (SRCHLEN)
                 ; 1. CHECK CURRENT LINE BEFORE CURRENT MATCH/CURSOR
                 LD      HL, (DOCLINE)
                 CALL    LINEREAD
-                LD      A, (CURX)
-                LD      B, A
-                LD      A, (SELACT)
-                OR      A
-                LD      A, B
-                JR      Z, .USECURX
-                LD      A, (SELSTRX)
-.USECURX        OR      A
+                CALL    SRCHFST
+                DEC     A
                 JR      Z, .PREVLN      ; AT COL 0: START ON PREVIOUS LINE
                 DEC     A
                 LD      C, A
@@ -354,17 +348,19 @@ SRCHBWD         LD      A, (SRCHLEN)
                 DEC     HL
                 JR      .BWRPLP
 
-.BLSTCHK        ; CHECK ORIGINAL DOCLINE STARTING AT MAXCOLS-1 DOWN TO CURX
+.BLSTCHK        ; CHECK THE ORIGINAL DOCLINE AT OR AFTER WHERE STEP 1 STOPPED
                 LD      HL, (DOCLINE)
                 CALL    LINEREAD
                 LD      C, MAXCOLS - 1
                 CALL    SCANLNB
                 RET     C
-                LD      A, (CURX)
+                CALL    SRCHFST         ; KEEPS C
+                DEC     A               ; FIRST COLUMN STEP 1 DID NOT SCAN
                 CP      C
-                JR      C, .BMATCUR     ; MATCH IS AFTER CURX: WRAP MATCH OK
+                JR      Z, .BMATCUR
+                JR      C, .BMATCUR     ; MATCH IS AT/AFTER IT: WRAP MATCH OK
                 SCF
-                RET                     ; MATCH IS AT OR BEFORE CURX (ALREADY CHECKED)
+                RET                     ; BEFORE IT (ALREADY CHECKED)
 
 .NOTFND         SCF
                 RET
@@ -485,6 +481,7 @@ DOREPL          LD      A, (SRCHLEN)
                 CALL    SPLICELN
                 LD      HL, (DOCLINE)
                 CALL    LINEWRT
+                RET     C               ; OOM: LINE UNCHANGED IN MAPPER
                 LD      A, #FF
                 LD      (MODIFIED), A
 
@@ -749,6 +746,8 @@ DORPLAL         LD      A, (SRCHLEN)
                 CALL    SPLICELN
                 LD      HL, (DOCLINE)
                 CALL    LINEWRT
+                POP     BC
+                JR      C, .NEXTLIN     ; OOM: LINE UNCHANGED IN MAPPER
                 LD      A, #FF
                 LD      (MODIFIED), A
 
@@ -758,7 +757,6 @@ DORPLAL         LD      A, (SRCHLEN)
                 LD      (RPLCNT), HL
 
                 ; ADVANCE COLUMN PAST REPLACEMENT
-                POP     BC
                 LD      A, (CURX)
                 LD      HL, RPLCLEN
                 ADD     A, (HL)

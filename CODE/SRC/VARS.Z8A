@@ -11,7 +11,6 @@ VARS
 DOS2            DEFB    0               ; FF = DOS2/NEXTOR PRESENT, 00 = DOS1
 DSKERR          DEFB    0               ; LAST DOS DISK ERROR CODE
 DSKDRV          DEFB    0               ; DRIVE OF LAST DISK ERROR
-UNAPISET        DEFB    0               ; BDOS.Z8A UNAPI FLAG (UNUSED IN S6ED)
 MAPRDY          DEFB    0               ; FF = MAPPER MANAGER FOUND
 SCRRDY          DEFB    0               ; FF = SCREEN 6 INITIALIZED
 SAVESP          DEFW    0               ; ORIGINAL STACK POINTER
@@ -297,7 +296,6 @@ LOADERR         DEFB    0               ; 1 = FILELOAD FAILED DUE TO CAPACITY/OO
                 ; CANNOT KEEP WHEN IT MOVES INTO A PAGE-2 SEGMENT.
 LINEOFF         DEFW    0               ; OFFSET OF THE NEXT FREE LINE RECORD
 CURLLEN         DEFB    0               ; LENGTH OF THE LINE BEING BUILT
-FCB             DEFS    SIZEFCB         ; FCB FOR DOS1 I/O
                 ; PARMTMP AND PARBUF (BOOT PARAMETERS) ARE IN THE PAGE 3
                 ; SCRATCH BLOCK (CONST_CORE): S2ED'S PAGE 1 IS FULL.
 
