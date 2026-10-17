@@ -652,6 +652,10 @@ EDOVRCHR        PUSH    AF
                 LD      (HL), C
                 LD      HL, (DOCLINE)
                 CALL    LINEWRT
+                ; THE LENGTH IS UNCHANGED, SO THE RECORD IS REWRITTEN IN PLACE
+                ; AND CANNOT FAIL TODAY: THE TEST KEEPS THE CONTRACT ALL OTHER
+                ; LINEWRT CALLERS HONOUR IF THAT EVER STOPS BEING TRUE
+                RET     C               ; OOM: LINE UNCHANGED IN MAPPER
                 JP      EDCHRDN         ; PAINT THE CELL, ADVANCE, MODIFIED
 
 

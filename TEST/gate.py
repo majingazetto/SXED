@@ -1082,6 +1082,31 @@ class H4FileSwitch(Case):
         ]
 
 
+class H4LongSwitch(Case):
+    name = 'H4L-long-switch'
+    desc = 'a switch longer than 40 characters does not lose the filename after it'
+    origin = ('2026-10-17 review: CHKFILE copied each token into a 40-byte '
+              'PARMTMP with no bound, so a longer one ran on into PARBUF -- '
+              'the pointer table the loop was still walking')
+    autoexec = 'S6ED /' + 'X' * 49 + ' DOC.TXT'
+
+    def fixture(self, ctx, variant=None):
+        return crlf(numbered(5))
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        return [
+            Check('H4L/file-loaded', run.var('boot', 'TOTLINES') == 5,
+                  'loaded 5 fixture lines (TOTLINES = %s)'
+                  % run.var('boot', 'TOTLINES')),
+        ]
+
+
 class H5Verbose(Case):
     name = 'H5-verbose'
     desc = '/V switch shows startup banner and memory statistics in text mode'
@@ -8206,7 +8231,12 @@ class X1ViLineBreak(Case):
     origin = ('2026-10-06, seen by hand: v$ then y and p left the cursor at the '
               'end of the line -- the break was painted as selected but never '
               'copied or cut')
-    variants = ('yank', 'cut')
+    # cut-last: on the LAST line SELEOL has no next line to move the end to,
+    # so the selection ends one past the length (SELENDX = LEN + 1) and
+    # WBDELN gets C > LENGTH -- the branch that cuts the length to the first
+    # deleted column. 2026-10-17: the B1 cleanup dropped the PUSH/POP that
+    # kept B/C for it and v$d from column 2 of CHARLIE left "C", not "CH".
+    variants = ('yank', 'cut', 'cut-last')
     LINES = ['ALPHA', 'BRAVO', 'CHARLIE']
 
     def config(self, ctx, variant=None):
@@ -8218,6 +8248,10 @@ class X1ViLineBreak(Case):
     def timeline(self, ctx, variant=None):
         t = Timeline()
         t.snap('boot')
+        if variant == 'cut-last':
+            for key in ('DOWN', 'DOWN', 'RIGHT', 'RIGHT'):
+                t.press(key)
+                t.wait(0.2)
         t.text('v$')
         t.wait(0.5)
         t.text('y' if variant == 'yank' else 'd')
@@ -8232,6 +8266,12 @@ class X1ViLineBreak(Case):
     def verify(self, ctx, runs):
         checks = []
         for variant, run in sorted(runs.items()):
+            if variant == 'cut-last':
+                want = crlf(self.LINES[:2] + ['CH'])
+                disk = run.session.extract(run.dsk, 'DOC.TXT')
+                checks.append(Check('X1/cut-last/content', disk == want,
+                                    disk_diff(disk, want)))
+                continue
             clip = run.snaps.get('done', {}).get('CLIPBUF')
             n = run.var('done', 'CLIPLEN')
             got = bytes(clip[:n]) if clip and n is not None else None
@@ -9692,7 +9732,7 @@ class X4FunctionKeys(Case):
 
 CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G6Hooks(),
          G7Selection(), G8Config(), G9Directory(), G10Autoalign(), G11Paste(),
-         G12ScreenRestore(), G13FeatureResidency(), H1Help(), H2HelpQuestion(), H3HelpFile(), H4FileSwitch(), H5Verbose(), H6DatMissing(), H7AboutDialog(),
+         G12ScreenRestore(), G13FeatureResidency(), H1Help(), H2HelpQuestion(), H3HelpFile(), H4FileSwitch(), H4LongSwitch(), H5Verbose(), H6DatMissing(), H7AboutDialog(),
          H8DatBadMagic(), H9DatBadVersion(), H10DatNoBlocks(),
          H11DatTruncHdr(), H12DatTruncTbl(), H13DatLenZero(), H14DatLenOver(),
          H15DatBadBlkID(), H16DatTruncPay(), H17DatPadded(), H18WindowRobustness(),

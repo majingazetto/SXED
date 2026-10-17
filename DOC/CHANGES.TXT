@@ -37,8 +37,6 @@ Improved
 - S2ED scroll: empty rows past the end of the file skip
   VRAM colour table dumps when their colours match the
   editor background.
-- Document reset and open: Page 2 workspace clears with a
-  fast block transfer, saving ~23 ms.
 
 Changed
 - TXT mode: BS at column 0 or DEL at the end of a line
@@ -64,7 +62,10 @@ Fixed
 - Markup styling (Ctrl+B / Ctrl+I) marks document modified
   when delimiters are applied to a selection.
 - Command line parameter parsing clamps buffer bounds to
-  prevent memory overflows.
+  prevent memory overflows; a switch longer than 40
+  characters no longer loses the file name after it.
+- Vi: v$ then d on the last line of the document cut the
+  line short (one character kept of "CH" in CHARLIE).
 - Ctrl+X on a selection larger than the clipboard deleted
   all of it but kept only the first part: the rest was lost.
 - Ctrl+Z after a BS / DEL join in TXT mode did nothing (the

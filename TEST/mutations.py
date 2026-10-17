@@ -58,6 +58,24 @@ MUTATIONS = [
         'expect': ['Q3/adjacent'],
     },
     {
+        # 2026-10-17: the B1 attribute cleanup removed this PUSH/POP with the
+        # attribute blank it used to wrap, and the length fix read B = 0,
+        # C = K: a selection ending past the length (Vi v$ on the last line)
+        # cut the line to 0 or LENGTH - K instead of the first column.
+        'name': 'x1-wbdeln-bc',
+        'why': 'WBDELN fixes the length with B/C clobbered by the blank loop',
+        'file': 'ACTION.Z8A',
+        'old': """                PUSH    BC              ; THE LENGTH FIX BELOW NEEDS B AND C
+                LD      A, (DWK)        ; BLANK THE LAST K COLUMNS""",
+        'new': """                LD      A, (DWK)        ; MUTATION: B AND C NOT KEPT""",
+        'also': [('ACTION.Z8A',
+                  """                POP     BC              ; B = FIRST, C = ONE PAST THE LAST
+                LD      HL, WORKBUF""",
+                  """                LD      HL, WORKBUF""")],
+        'filter': 'X1',
+        'expect': ['X1/cut-last/content'],
+    },
+    {
         'name': 'u9-wrapsel-mod',
         'why': 'WRAPSEL commits the wrapped line without setting MODIFIED',
         'file': 'MARKUP.Z8A',
@@ -3454,6 +3472,16 @@ SELTMPXB        EQU     SELTMPXB2""")],
                 JR      Z, .FOUND       ; MUTATION: ACCEPTS / SWITCH AS FILENAME""",
         'filter': 'H4',
         'expect': ['H4/file-loaded'],
+    },
+    {
+        'name': 'h4l-parmtmp',
+        'why': 'CHKFILE copies each token into a 40-byte buffer below PARBUF: '
+               'a longer switch overruns the pointer table it is walking',
+        'file': 'PARAMS.Z8A',
+        'old': """                LD      DE, 0           ; NO COPY: HL = TOKEN, C = LENGTH""",
+        'new': """                LD      DE, PARBUF - 40 ; MUTATION: THE OLD 40-BYTE PARMTMP""",
+        'filter': 'H4L',
+        'expect': ['H4L/file-loaded'],
     },
     {
         'name': 'h5-verbose',

@@ -2581,7 +2581,7 @@ SELNORM         LD      HL, (DOCLINE)
 
 
 ; - WBDELN -----------------------------
-; - DELETE COLUMNS B..C-1 OF THE RECORD IN WORKBUF: TEXT AND ATTRIBUTES
+; - DELETE COLUMNS B..C-1 OF THE RECORD IN WORKBUF: THE TEXT
 ; - SHIFTED LEFT, THE VACATED TAIL BLANKED, THE LENGTH FIXED
 ; - IN:  B = FIRST COLUMN, C = ONE PAST THE LAST (C > B)
 ; - OUT: WORKBUF; DWK = C - B
@@ -2599,6 +2599,7 @@ WBDELN          LD      A, C
                 CALL    .SHIFT          ; THE TEXT
                 POP     BC
 
+                PUSH    BC              ; THE LENGTH FIX BELOW NEEDS B AND C
                 LD      A, (DWK)        ; BLANK THE LAST K COLUMNS
                 LD      C, A
                 LD      A, MAXCOLS
@@ -2611,6 +2612,7 @@ WBDELN          LD      A, C
 .BLKTXT         LD      (HL), ' '
                 INC     HL
                 DJNZ    .BLKTXT
+                POP     BC              ; B = FIRST, C = ONE PAST THE LAST
                 LD      HL, WORKBUF
                 LD      A, (HL)         ; A = LENGTH
                 CP      B

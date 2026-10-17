@@ -169,20 +169,24 @@ FNDSWT          LD      D, A            ; D = LETTER TO MATCH
 
 ; - CHKFILE ----------
 ; - FIND FIRST PARAM NOT STARTING WITH '/'
-; - COPIES IT TO FILENAME (ASCIIZ)
+; - COPIES IT TO FILENAME (ASCIIZ), AT MOST FNAMLEN - 1 CHARACTERS
 ; - OUTPUT:
 ; -     CY = 0  FILENAME SET
 ; -     CY = 1  NOT FOUND
 ; -
+; - THE TOKEN IS COPIED STRAIGHT FROM THE COMMAND TAIL: IT USED TO GO
+; - THROUGH A 40-BYTE PARMTMP WITH NO BOUND, AND A LONGER TOKEN RAN ON
+; - INTO PARBUF -- THE POINTER TABLE THIS LOOP IS STILL WALKING.
+; -
 
-CHKFILE         LD      A, (PARBUF)     ; TOTAL PARAM COUNT
+CHKFILE         LD      A, (PARBUF)     ; TOTAL PARAM COUNT (EXTPARM: >= 1)
                 LD      B, A
                 LD      C, 0
 .LOOP           PUSH    BC
                 LD      HL, PARBUF
-                LD      DE, PARMTMP
+                LD      DE, 0           ; NO COPY: HL = TOKEN, C = LENGTH
                 LD      A, C
-                CALL    GETPARAM        ; → COPIES PARAM C TO PARMTMP, HL=PARMTMP
+                CALL    GETPARAM
                 LD      A, (HL)
                 CP      '/'
                 JR      NZ, .FOUND      ; NOT A SWITCH → FILENAME
@@ -192,18 +196,15 @@ CHKFILE         LD      A, (PARBUF)     ; TOTAL PARAM COUNT
                 SCF                     ; NOT FOUND
                 RET
 
-.FOUND          POP     BC
-                LD      HL, PARMTMP
+.FOUND          POP     DE              ; DROP THE LOOP COUNTERS, KEEP C
+                LD      A, C
+                CP      FNAMLEN
+                JR      C, .LENOK
+                LD      A, FNAMLEN - 1  ; TRUNCATED TO WHAT FILENAME HOLDS
+.LENOK          LD      C, A
+                LD      B, 0
                 LD      DE, FILENAME
-                LD      B, FNAMLEN - 1  ; THE COPY USED TO BE UNBOUNDED
-.COPY           LD      A, (HL)
+                LDIR                    ; C >= 1: A TOKEN IS NEVER EMPTY
+                XOR     A               ; CY=0
                 LD      (DE), A
-                AND     A
-                JR      Z, .DONE
-                INC     HL
-                INC     DE
-                DJNZ    .COPY
-                XOR     A
-                LD      (DE), A         ; TRUNCATED: TERMINATE
-.DONE           AND     A               ; CY=0
                 RET
