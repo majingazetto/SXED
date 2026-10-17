@@ -558,25 +558,11 @@ SPLICELN        ; 1. COMPUTE NEWLEN = OLDLEN - SRCHLEN + RPLCLEN
                 ADD     HL, DE
                 EX      DE, HL          ; DE = DEST END TEXT
                 POP     HL              ; HL = SRC END TEXT
-                PUSH    HL              ; [SRC_END, ...]
-                PUSH    DE              ; [DEST_END, SRC_END, ...]
                 EX      AF, AF'
                 LD      C, A
                 LD      B, 0
                 EX      AF, AF'
                 LDDR                    ; SHIFT TEXT TAIL RIGHT
-                POP     DE              ; DEST END TEXT
-                POP     HL              ; SRC END TEXT
-                LD      BC, WORKATTR
-                ADD     HL, BC          ; HL = SRC END ATTR
-                EX      DE, HL
-                ADD     HL, BC
-                EX      DE, HL          ; DE = DEST END ATTR
-                EX      AF, AF'
-                LD      C, A
-                LD      B, 0
-                EX      AF, AF'
-                LDDR                    ; SHIFT ATTR TAIL RIGHT
                 JR      .CPYRPL
 
 .SHFLFT         ; D < B: SHRINK (LDIR FORWARDS)
@@ -593,25 +579,11 @@ SPLICELN        ; 1. COMPUTE NEWLEN = OLDLEN - SRCHLEN + RPLCLEN
                 SBC     HL, DE
                 EX      DE, HL          ; DE = DEST START TEXT
                 POP     HL              ; HL = SRC START TEXT
-                PUSH    HL              ; [SRC_START, ...]
-                PUSH    DE              ; [DEST_START, SRC_START, ...]
                 EX      AF, AF'
                 LD      C, A
                 LD      B, 0
                 EX      AF, AF'
                 LDIR                    ; SHIFT TEXT TAIL LEFT
-                POP     DE              ; DEST START TEXT
-                POP     HL              ; SRC START TEXT
-                LD      BC, WORKATTR
-                ADD     HL, BC          ; HL = SRC START ATTR
-                EX      DE, HL
-                ADD     HL, BC
-                EX      DE, HL          ; DE = DEST START ATTR
-                EX      AF, AF'
-                LD      C, A
-                LD      B, 0
-                EX      AF, AF'
-                LDIR                    ; SHIFT ATTR TAIL LEFT
 
 .CPYRPL         ; 4. COPY REPLACEMENT PATTERN
                 POP     DE              ; D = RPLCLEN
@@ -622,26 +594,12 @@ SPLICELN        ; 1. COMPUTE NEWLEN = OLDLEN - SRCHLEN + RPLCLEN
                 LD      E, C
                 LD      B, 0
                 LD      C, D            ; BC = RPLCLEN
-                LD      HL, RPLCPAT
-                PUSH    DE              ; SAVE E = CURX, D = RPLCLEN
-                PUSH    BC              ; SAVE BC = RPLCLEN
                 LD      D, 0
                 LD      HL, WORKBUF + 1
                 ADD     HL, DE
                 EX      DE, HL          ; DE = WORKBUF + 1 + CURX
                 LD      HL, RPLCPAT
                 LDIR                    ; COPY REPLACEMENT TEXT
-                POP     BC              ; BC = RPLCLEN
-                POP     DE              ; E = CURX, D = RPLCLEN
-
-                ; ZERO REPLACEMENT ATTRIBUTES
-                LD      HL, WORKBUF + 1 + WORKATTR
-                LD      D, 0
-                ADD     HL, DE          ; HL = ATTR START
-                LD      B, C            ; B = RPLCLEN
-.ZATTR          LD      (HL), 0
-                INC     HL
-                DJNZ    .ZATTR
 
 .FINIS          ; 5. UPDATE LINE LENGTH AND BLANK UNUSED TAIL
                 POP     AF              ; A = NEWLEN

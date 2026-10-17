@@ -1780,21 +1780,15 @@ MUTATIONS = [
         # What guards against target literal geometry in shared CORE code is
         # the static target-params check.
         'name': 's2-attr-clear',
-        'why': 'FILELOAD clears the attribute half from the S6 offset (81 '
-               'instead of 1 + TEXTCOLS): an S6 literal in shared CORE code',
-        'file': 'FILEIO.Z8A',
+        'why': 'LINEREAD clears the attribute half from the S6 offset (81 '
+               'instead of 1 + WORKATTR): an S6 literal in shared CORE code',
+        'file': 'BUFFER.Z8A',
         'old': """                LD      HL, WORKBUF + 1 + WORKATTR
-                LD      (HL), 0
-                LD      D, H
-                LD      E, L
-                INC     DE
-                LD      BC, MAXCOLS - 1""",
+                XOR     A
+                JP      FILLB""",
         'new': """                LD      HL, WORKBUF + 81  ; MUTATION: THE S6 LITERAL
-                LD      (HL), 0
-                LD      D, H
-                LD      E, L
-                INC     DE
-                LD      BC, MAXCOLS - 1""",
+                XOR     A
+                JP      FILLB""",
         'filter': 'T0',
         'expect_static': ['target-params'],
     },
@@ -1855,22 +1849,12 @@ MUTATIONS = [
         # check: CORE may not spell record geometry as numbers.  The mutation
         # therefore runs on the S6ED context, where the static checks live.
         'name': 's2-delbk-79',
-        'why': 'EDDELBK walks its shift loop to a literal 79 and blanks '
-               'WORKBUF + 80: an S6 literal in shared CORE code',
+        'why': 'EDDELBK blanks WORKBUF + 80: an S6 literal in shared CORE code',
         'file': 'EDIT.Z8A',
-        # Re-anchored 2026-09-27: since Phase B, EDDELBK shifts by the line
-        # length and addresses the attribute half through WORKATTR.  The
-        # defect is the same one: an S6 geometry literal (the 81-byte
-        # attribute offset, the 80-column blank) in EDDELBK's shift and blank.
-        'old': """                LD      HL, WORKATTR
-                ADD     HL, DE          ; HL = DEST ATTR (DEST TEXT + WORKATTR)""",
-        'new': """                LD      HL, 81          ; MUTATION: THE S6 LITERAL
-                ADD     HL, DE          ; HL = DEST ATTR (DEST TEXT + WORKATTR)""",
-        'also': [('EDIT.Z8A',
-                  """                LD      BC, WORKATTR
-                ADD     HL, BC          ; HL = WORKBUF + L + WORKATTR""",
-                  """                LD      BC, 80          ; MUTATION: THE S6 LITERAL
-                ADD     HL, BC          ; HL = WORKBUF + L + WORKATTR""")],
+        'old': """                LD      HL, WORKBUF
+                ADD     HL, DE          ; HL = WORKBUF + L (LAST CHAR)""",
+        'new': """                LD      HL, WORKBUF + 80 ; MUTATION: THE S6 LITERAL
+                ADD     HL, DE          ; HL = WORKBUF + L (LAST CHAR)""",
         'filter': 'S2-6',
         'expect_static': ['target-params'],
     },
@@ -2801,9 +2785,13 @@ MUTATIONS = [
         # past the text on a 1+64+64 one.
         'name': 't0-layout-off',
         'why': 'CORE addresses the attribute half of a line record as + 81',
-        'file': 'ACTION.Z8A',
-        'old': 'LD      HL, WORKBUF + 1 + WORKATTR\n                CALL    .SHIFT          ; THE ATTRIBUTES',
-        'new': 'LD      HL, WORKBUF + 81\n                CALL    .SHIFT          ; THE ATTRIBUTES',
+        'file': 'MARKUP.Z8A',
+        'old': """                LD      HL, WORKBUF + 1 + WORKATTR
+                XOR     A
+                CALL    FILLB""",
+        'new': """                LD      HL, WORKBUF + 81  ; MUTATION: THE S6 LITERAL
+                XOR     A
+                CALL    FILLB""",
         'filter': 'T0',
         'expect_static': ['target-params'],
     },

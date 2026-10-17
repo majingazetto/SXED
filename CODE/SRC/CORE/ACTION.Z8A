@@ -2598,11 +2598,8 @@ WBDELN          LD      A, C
                 LD      HL, WORKBUF + 1
                 CALL    .SHIFT          ; THE TEXT
                 POP     BC
-                PUSH    BC
-                LD      HL, WORKBUF + 1 + WORKATTR
-                CALL    .SHIFT          ; THE ATTRIBUTES
 
-                LD      A, (DWK)        ; BLANK THE LAST K COLUMNS OF BOTH
+                LD      A, (DWK)        ; BLANK THE LAST K COLUMNS
                 LD      C, A
                 LD      A, MAXCOLS
                 SUB     C
@@ -2614,14 +2611,6 @@ WBDELN          LD      A, C
 .BLKTXT         LD      (HL), ' '
                 INC     HL
                 DJNZ    .BLKTXT
-                LD      HL, WORKBUF + 1 + WORKATTR
-                ADD     HL, DE
-                LD      B, C
-.BLKATR         LD      (HL), 0
-                INC     HL
-                DJNZ    .BLKATR
-
-                POP     BC              ; B = FIRST, C = ONE PAST THE LAST
                 LD      HL, WORKBUF
                 LD      A, (HL)         ; A = LENGTH
                 CP      B
@@ -3512,7 +3501,7 @@ ACTDLS          LD      A, (SELACT)
                 CALL    LINEREAD
                 LD      HL, WORKBUF
                 LD      DE, WORKBUF2
-                LD      BC, WORKSIZ
+                LD      BC, LNIMG
                 LDIR
 
                 ; 2. READ START LINE INTO WORKBUF
@@ -3548,29 +3537,10 @@ ACTDLS          LD      A, (SELACT)
                 ADD     HL, DE
                 EX      DE, HL          ; DE = DEST
                 POP     HL              ; HL = SRC
-                PUSH    BC              ; SAVE M IN C
+                PUSH    BC              ; SAVE C = M
                 LD      B, 0
                 LDIR
-
-                ; COPY ATTR TAIL
-                LD      A, (SELENDX)
-                LD      E, A
-                LD      D, 0
-                LD      HL, WORKBUF2 + 1 + WORKATTR
-                ADD     HL, DE          ; HL = SRC ATTR
-                PUSH    HL              ; SAVE SRC ATTR
-                LD      A, (SELSTRX)
-                LD      E, A
-                LD      D, 0
-                LD      HL, WORKBUF + 1 + WORKATTR
-                ADD     HL, DE
-                EX      DE, HL          ; DE = DEST ATTR
-                POP     HL              ; HL = SRC ATTR
-                POP     BC              ; RESTORE M IN C
-                PUSH    BC
-                LD      B, 0
-                LDIR
-                POP     BC              ; C = M
+                POP     BC              ; RESTORE C = M
                 LD      A, (SELSTRX)
                 ADD     A, C
                 LD      (WORKBUF), A
@@ -3587,24 +3557,10 @@ ACTDLS          LD      A, (SELACT)
                 ADD     HL, DE
                 LD      A, MAXCOLS
                 SUB     E
-                JR      Z, .NOTBLKT
-                LD      B, A
-.BLKTX3         LD      (HL), ' '
-                INC     HL
-                DJNZ    .BLKTX3
-
-.NOTBLKT        LD      A, (WORKBUF)
-                LD      E, A
-                LD      D, 0
-                LD      HL, WORKBUF + 1 + WORKATTR
-                ADD     HL, DE
-                LD      A, MAXCOLS
-                SUB     E
                 JR      Z, .WRTSTR
                 LD      B, A
-.BLKAT3         LD      (HL), 0
-                INC     HL
-                DJNZ    .BLKAT3
+                LD      A, ' '
+                CALL    FILLB
 
 .WRTSTR         ; WRITE UPDATED START LINE TO MAPPER
                 LD      HL, (SELSTRL)

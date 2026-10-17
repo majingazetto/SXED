@@ -469,24 +469,7 @@ WBINS           LD      (WBBASE), HL
                 LDDR
                 POP     BC
 
-                ; ATTRIBUTE HALF: SOURCE END = BASE + WORKATTR + L, DEST END = + 1
-                LD      HL, (WBBASE)
-                LD      DE, WORKATTR
-                ADD     HL, DE
-                LD      E, B
-                LD      D, 0
-                ADD     HL, DE          ; HL = BASE + WORKATTR + L
-                LD      D, H
-                LD      E, L
-                INC     DE              ; DE = BASE + WORKATTR + L + 1
-                LD      A, (WBCNT)
-                PUSH    BC
-                LD      C, A
-                LD      B, 0
-                LDDR
-                POP     BC
-
-.WBNOSH         ; PLACE THE CHARACTER AND ATTRIBUTE
+.WBNOSH         ; PLACE THE CHARACTER
                 LD      HL, (WBBASE)
                 LD      A, (WBCOL)
                 LD      E, A
@@ -494,10 +477,6 @@ WBINS           LD      (WBBASE), HL
                 INC     HL
                 ADD     HL, DE          ; HL = BASE + 1 + COLUMN
                 LD      (HL), C
-                LD      DE, WORKATTR
-                ADD     HL, DE          ; HL = BASE + 1 + WORKATTR + COLUMN
-                XOR     A               ; NO STYLE: SCANMKUP DERIVES IT
-                LD      (HL), A
 
                 ; UPDATE LENGTH
                 ; IF COLUMN < LENGTH: NEW LENGTH = LENGTH + 1 (UP TO MAXCOLS)
@@ -570,28 +549,6 @@ WBINSN          LD      (WBBASE), HL
                 LD      B, 0
                 LDDR
 
-                ; ATTRIBUTE HALF:
-                ; SOURCE END = BASE + WORKATTR + L
-                ; DEST END   = BASE + WORKATTR + L + N
-                LD      HL, (WBBASE)
-                LD      A, (HL)         ; A = L
-                LD      E, A
-                LD      D, 0
-                LD      BC, WORKATTR
-                ADD     HL, BC
-                ADD     HL, DE          ; HL = BASE + WORKATTR + L
-                LD      A, (WBRUN)
-                LD      E, A
-                LD      D, 0
-                PUSH    HL
-                ADD     HL, DE
-                EX      DE, HL          ; DE = BASE + WORKATTR + L + N
-                POP     HL
-                LD      A, (WBCNT)
-                LD      C, A
-                LD      B, 0
-                LDDR
-
 .WNFILL         ; TEXT: COPY THE RUN IN, TRANSLATING TAB TO A SPACE
                 LD      HL, (WBBASE)
                 INC     HL
@@ -611,21 +568,6 @@ WBINSN          LD      (WBBASE), HL
                 INC     HL
                 INC     DE
                 DJNZ    .WNCOPY
-
-                ; ATTRIBUTES: N PLAIN CELLS
-                LD      HL, (WBBASE)
-                LD      DE, 1 + WORKATTR
-                ADD     HL, DE          ; HL = BASE + 1 + WORKATTR
-                LD      A, (WBCOL)
-                LD      E, A
-                LD      D, 0
-                ADD     HL, DE          ; HL = BASE + 1 + WORKATTR + COLUMN
-                LD      A, (WBRUN)
-                LD      B, A
-                XOR     A
-.WNATTR         LD      (HL), A
-                INC     HL
-                DJNZ    .WNATTR
 
                 ; UPDATE LENGTH:
                 ; IF COLUMN < LENGTH: NEW LENGTH = LENGTH + N
@@ -708,10 +650,6 @@ EDOVRCHR        PUSH    AF
                 LD      HL, WORKBUF + 1
                 ADD     HL, DE          ; HL = THE CHARACTER UNDER THE CURSOR
                 LD      (HL), C
-                LD      DE, WORKATTR
-                ADD     HL, DE          ; HL = ITS ATTRIBUTE
-                XOR     A               ; NO STYLE: SCANMKUP DERIVES IT
-                LD      (HL), A
                 LD      HL, (DOCLINE)
                 CALL    LINEWRT
                 JP      EDCHRDN         ; PAINT THE CELL, ADVANCE, MODIFIED
@@ -1002,7 +940,7 @@ REWRAP          LD      (RWLINE), HL
                 JP      Z, .NEXT        ; EMPTY: THE PARAGRAPH ENDS
                 LD      HL, WORKBUF
                 LD      DE, WORKBUF2
-                LD      BC, WORKSIZ
+                LD      BC, LNIMG
                 LDIR                    ; WORKBUF2 = THE NEXT LINE
                 LD      HL, (RWLINE)
                 CALL    LINEREAD        ; WORKBUF = THIS ONE
@@ -1072,12 +1010,9 @@ REWRAP          LD      (RWLINE), HL
                 LD      HL, WORKBUF + 1
                 ADD     HL, DE
                 LD      (HL), ' '
-                LD      HL, WORKBUF + 1 + WORKATTR
-                ADD     HL, DE
-                LD      (HL), 0
                 LD      HL, WORKBUF
                 INC     (HL)
-.APPEND         LD      A, (WORKBUF)    ; TEXT AND ATTRIBUTES OF THE WORDS
+.APPEND         LD      A, (WORKBUF)    ; TEXT OF THE WORDS
                 LD      E, A
                 LD      D, 0
                 LD      HL, WORKBUF + 1
@@ -1090,18 +1025,6 @@ REWRAP          LD      (RWLINE), HL
                 ADD     HL, BC          ; HL = SOURCE TEXT
                 LD      A, (RWCNT)
                 LD      C, A
-                PUSH    BC
-                PUSH    HL
-                PUSH    DE
-                LDIR
-                POP     DE
-                POP     HL
-                LD      BC, WORKATTR
-                ADD     HL, BC
-                EX      DE, HL
-                ADD     HL, BC
-                EX      DE, HL
-                POP     BC
                 LDIR
                 LD      A, (WORKBUF)
                 LD      HL, RWCNT
@@ -1146,14 +1069,6 @@ REWRAP          LD      (RWLINE), HL
                 LD      HL, WORKBUF2 + 1
                 ADD     HL, DE
                 LD      DE, WORKBUF + 1
-                PUSH    BC
-                PUSH    HL
-                LDIR
-                POP     HL
-                LD      BC, WORKATTR
-                ADD     HL, BC
-                LD      DE, WORKBUF + 1 + WORKATTR
-                POP     BC
                 LDIR
                 CALL    RECBL80
                 LD      HL, (RWLINE)
@@ -1224,16 +1139,7 @@ RECBL80         LD      A, (WORKBUF)
 
                 LD      HL, WORKBUF + 1
                 ADD     HL, DE
-                PUSH    BC
-                PUSH    HL
                 LD      A, ' '
-                CALL    FILLB
-                POP     HL
-                POP     BC
-
-                LD      DE, WORKATTR
-                ADD     HL, DE
-                XOR     A
                 JP      FILLB
 
 
@@ -1258,7 +1164,7 @@ JOIN2L          LD      (JOINLA), HL
                 CALL    LINEREAD
                 LD      HL, WORKBUF
                 LD      DE, WORKBUF2
-                LD      BC, WORKSIZ
+                LD      BC, LNIMG
                 LDIR
 
                 ; READ LINE A (TARGET) INTO WORKBUF
@@ -1275,7 +1181,7 @@ JOIN2L          LD      (JOINLA), HL
                 ADD     A, B            ; A = LEN_A + LEN_B
                 JR      C, .JNBIG       ; 8-BIT OVERFLOW > 255: REJECT
 
-                ; APPEND LINE B TEXT & ATTRS IF LEN_B > 0
+                ; APPEND LINE B TEXT IF LEN_B > 0
                 LD      A, (WORKBUF2)
                 OR      A
                 JR      Z, .JNDEL
@@ -1291,18 +1197,6 @@ JOIN2L          LD      (JOINLA), HL
                 LD      A, (WORKBUF2)
                 LD      C, A
                 LD      B, 0
-                PUSH    BC
-                LDIR
-                POP     BC
-
-                ; APPEND ATTRIBUTES
-                LD      A, (JOINCOL)
-                LD      E, A
-                LD      D, 0
-                LD      HL, WORKBUF + 1 + WORKATTR
-                ADD     HL, DE
-                EX      DE, HL          ; DE = DEST ATTR
-                LD      HL, WORKBUF2 + 1 + WORKATTR ; HL = SRC ATTR
                 LDIR
 
                 ; UPDATE LINE A LENGTH
@@ -1521,17 +1415,6 @@ EDDELBK         LD      A, (CURX)
                 LD      D, H
                 LD      E, L            ; DE = DEST TEXT
                 INC     HL              ; HL = SRC TEXT (WORKBUF + 2 + CURX)
-                PUSH    BC              ; SAVE BC = COUNT
-                PUSH    DE              ; SAVE DE = DEST TEXT
-                LDIR
-
-                POP     DE              ; DE = DEST TEXT
-                POP     BC              ; BC = COUNT
-                LD      HL, WORKATTR
-                ADD     HL, DE          ; HL = DEST ATTR (DEST TEXT + WORKATTR)
-                LD      D, H
-                LD      E, L            ; DE = DEST ATTR
-                INC     HL              ; HL = SRC ATTR (DEST ATTR + 1)
                 LDIR
 
 .BKLAST         ; BLANK THE VACATED LAST CELL (AT FORMER LENGTH L - 1)
@@ -1541,9 +1424,6 @@ EDDELBK         LD      A, (CURX)
                 LD      HL, WORKBUF
                 ADD     HL, DE          ; HL = WORKBUF + L (LAST CHAR)
                 LD      (HL), ' '
-                LD      BC, WORKATTR
-                ADD     HL, BC          ; HL = WORKBUF + L + WORKATTR
-                LD      (HL), 0
 
                 ; DECREASE LINE LENGTH
                 LD      A, (WORKBUF)
@@ -1651,17 +1531,6 @@ EDDELCHR        LD      HL, (DOCLINE)
                 LD      D, H
                 LD      E, L            ; DE = DEST TEXT
                 INC     HL              ; HL = SRC TEXT (WORKBUF + 2 + CURX)
-                PUSH    BC              ; SAVE BC = COUNT
-                PUSH    DE              ; SAVE DE = DEST TEXT
-                LDIR
-
-                POP     DE              ; DE = DEST TEXT
-                POP     BC              ; BC = COUNT
-                LD      HL, WORKATTR
-                ADD     HL, DE          ; HL = DEST ATTR (DEST TEXT + WORKATTR)
-                LD      D, H
-                LD      E, L            ; DE = DEST ATTR
-                INC     HL              ; HL = SRC ATTR (DEST ATTR + 1)
                 LDIR
 
 .DCHLAST        ; BLANK THE VACATED LAST CELL (AT FORMER LENGTH L - 1)
@@ -1671,9 +1540,6 @@ EDDELCHR        LD      HL, (DOCLINE)
                 LD      HL, WORKBUF
                 ADD     HL, DE          ; HL = WORKBUF + L (LAST CHAR)
                 LD      (HL), ' '
-                LD      BC, WORKATTR
-                ADD     HL, BC
-                LD      (HL), 0
 
                 ; DECREASE LINE LENGTH
                 LD      A, (WORKBUF)
@@ -1738,31 +1604,14 @@ EDKILCHR        LD      HL, (DOCLINE)
                 LD      A, B
                 LD      HL, CURX
                 SUB     (HL)            ; A = COUNT
-                LD      C, A
-                LD      B, 0            ; BC = COUNT
+                LD      B, A            ; B = COUNT
                 LD      A, (CURX)
                 LD      E, A
                 LD      D, 0
                 LD      HL, WORKBUF + 1
                 ADD     HL, DE          ; HL = START OF DELETED TEXT
-                PUSH    HL
-                PUSH    BC
-.KILP           LD      (HL), ' '
-                INC     HL
-                DEC     BC
-                LD      A, B
-                OR      C
-                JR      NZ, .KILP
-                POP     BC
-                POP     HL
-                LD      DE, WORKATTR
-                ADD     HL, DE
-.KIAP           LD      (HL), 0
-                INC     HL
-                DEC     BC
-                LD      A, B
-                OR      C
-                JR      NZ, .KIAP
+                LD      A, ' '
+                CALL    FILLB
                 LD      A, (CURX)
                 LD      (WORKBUF), A
                 OR      A
@@ -2008,17 +1857,6 @@ SPLITLA         LD      (SPLCOL), A
                 LD      HL, WORKBUF + 1
                 ADD     HL, DE
                 LD      DE, WORKBUF2 + 1
-                PUSH    BC
-                LDIR
-                POP     BC
-
-                ; ATTRIBUTE HALF
-                LD      A, (SPLCOL)
-                LD      E, A
-                LD      D, 0
-                LD      HL, WORKBUF + 1 + WORKATTR
-                ADD     HL, DE
-                LD      DE, WORKBUF2 + 1 + WORKATTR
                 LDIR
 
 .TRUNC          ; HEAD KEEPS SPLCOL CHARACTERS; BLANK WHAT IS LEFT OF IT
@@ -2030,23 +1868,10 @@ SPLITLA         LD      (SPLCOL), A
                 SUB     E
                 RET     Z               ; THE SPLIT WAS AT THE RECORD END
                 LD      B, A
-
-                PUSH    BC
-                PUSH    DE
                 LD      HL, WORKBUF + 1
                 ADD     HL, DE
-.BLNKLP         LD      (HL), ' '
-                INC     HL
-                DJNZ    .BLNKLP
-                POP     DE
-                POP     BC
-
-                LD      HL, WORKBUF + 1 + WORKATTR
-                ADD     HL, DE
-.ZATTLP         LD      (HL), 0
-                INC     HL
-                DJNZ    .ZATTLP
-                RET
+                LD      A, ' '
+                JP      FILLB
 
 
 ; --- EDMOVCHR                  ----------------------------------------

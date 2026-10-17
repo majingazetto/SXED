@@ -118,16 +118,6 @@ RECBLNK         PUSH    HL
                 LD      BC, MAXCOLS - 1
                 LDIR                    ; SPACES ACROSS THE TEXT HALF
                 POP     HL
-                PUSH    HL
-                LD      DE, 1 + WORKATTR
-                ADD     HL, DE          ; HL NOW AT THE ATTR HALF
-                LD      (HL), 0
-                LD      D, H
-                LD      E, L
-                INC     DE
-                LD      BC, MAXCOLS - 1
-                LDIR                    ; ZERO ACROSS THE ATTR HALF
-                POP     HL
                 RET
 
 

@@ -578,7 +578,7 @@ UNDOSWP         ; 1. SET TARGET DOCLINE
                 ; 3. COPY CURRENT DOCUMENT LINE (WORKBUF) TO WORKBUF2
                 LD      HL, WORKBUF
                 LD      DE, WORKBUF2
-                LD      BC, WORKSIZ
+                LD      BC, LNIMG
                 LDIR                    ; WORKBUF2 NOW HOLDS CURRENT LINE
 
                 ; 4. UNPACK UNDO PAYLOAD (IX + 10) INTO WORKBUF
@@ -1244,7 +1244,8 @@ UNDOCAP         LD      A, (IX + 4)
 ; - CLOBBERS: AF, BC, DE, HL
 ; -
 
-UNDOPAK         ; 1. COPY LENGTH (1 BYTE)
+UNDOPAK
+UNDOUPK         ; 1. COPY LENGTH (1 BYTE)
                 LDI                     ; (DE)=(HL), HL++, DE++
 
                 ; 2. COPY TEXT (CAPACITY BYTES)
@@ -1252,35 +1253,3 @@ UNDOPAK         ; 1. COPY LENGTH (1 BYTE)
                 LD      B, 0
                 LDIR
                 RET
-
-
-; --- UNDOUPK                   ----------------------------------------
-
-
-; - UNDOUPK ----------------------------
-; - UNPACK UNDO RECORD PAYLOAD (1 + CAPACITY BYTES) INTO LINE BUFFER
-; - IN:  HL = SOURCE PAYLOAD IN UNDO RING BUFFER
-; -      DE = DESTINATION BUFFER (WORKBUF OR WORKBUF2)
-; -      A  = CAPACITY (TEXTCOLS OR MAXCOLS)
-; - OUT: NONE
-; - CLOBBERS: AF, BC, DE, HL
-; -
-
-UNDOUPK         ; 1. COPY LENGTH (1 BYTE)
-                LDI                     ; (DE)=(HL), HL++, DE++
-
-                ; 2. COPY TEXT (CAPACITY BYTES)
-                LD      C, A
-                LD      B, 0
-                PUSH    BC              ; SAVE BC = CAPACITY
-                PUSH    DE              ; SAVE DE = DEST BUFFER + 1
-                LDIR
-
-                ; 3. ZERO ATTRIBUTES IN DEST BUFFER (DEST BUFFER + 1 + WORKATTR)
-                POP     HL              ; HL = DEST BUFFER + 1
-                LD      BC, WORKATTR
-                ADD     HL, BC          ; HL = DEST BUFFER + 1 + WORKATTR
-                POP     BC              ; BC = CAPACITY
-                LD      B, C            ; B = CAPACITY (COUNT 1..255 FOR FILLB)
-                XOR     A
-                JP      FILLB

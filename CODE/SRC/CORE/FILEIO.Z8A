@@ -172,16 +172,6 @@ LOADDOC         XOR     A
                 LD      (TOTLINES), HL
                 LD      (LINEOFF), HL
 
-                ; THE LOADER NEVER WRITES AN ATTRIBUTE AND NOTHING ON ITS PATH
-                ; WRITES WORKBUF, SO STORLINE FINDS THEM ZERO FOR EVERY LINE:
-                ; CLEARED ONCE HERE, NOT 255 BYTES PER LINE (~1.5 MS EACH).
-                LD      HL, WORKBUF + 1 + WORKATTR
-                LD      (HL), 0
-                LD      D, H
-                LD      E, L
-                INC     DE
-                LD      BC, MAXCOLS - 1
-                LDIR
                 LD      HL, STRLDG
                 CALL    PRGBEG
                 LD      DE, WORKBUF + 1 ; DE = WHERE THE NEXT CHARACTER GOES
@@ -429,7 +419,7 @@ FNBASE          LD      HL, FILENAME
 
 ; - STORLINE ---------------------------
 ; - FINISH CURRENT LINE, ADD TO DIRECTORY, PREPARE NEXT
-; - IN:  NONE (USES CURLLEN, TOTLINES; WORKBUF'S ATTRIBUTES MUST BE ZERO)
+; - IN:  NONE (USES CURLLEN, TOTLINES)
 ; - OUT: CY = 1  NO ROOM LEFT (DIRECTORY FULL, OR NO MAPPER SEGMENT LEFT)
 ; - CLOBBERS: ALL
 ; -
@@ -442,8 +432,7 @@ STORLINE        ; 1. CHECK IF LINE DIRECTORY IS FULL
                 SCF
                 RET                     ; DIRECTORY FULL
 
-.HAVDIR         ; 2. SET LENGTH IN WORKBUF[0]. THE ATTRIBUTES ARE ALREADY
-                ; ZERO: LOADDOC CLEARS THEM ONCE AND NOTHING WRITES THEM
+.HAVDIR         ; 2. SET LENGTH IN WORKBUF[0]
                 LD      A, (CURLLEN)
                 LD      (WORKBUF), A
 
